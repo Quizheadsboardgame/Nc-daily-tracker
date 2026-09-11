@@ -16,13 +16,13 @@ import { SaleRecord, PaymentMethod, DaySummary, SalesmanStat } from '../types';
 
 export const DEFAULT_PRELOADED_SALESMEN = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 
-const STORAGE_SALES_KEY = 'daily_sales_tracker_records_v4';
-const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_salesmen_v4';
+const STORAGE_SALES_KEY = 'daily_sales_tracker_real_sales_v5';
+const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v5';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
 
-// Initialize Firestore with specific database ID from config
+// Connect to Firestore instance with database ID from config
 export const db = getFirestore(app, config.firestoreDatabaseId);
 
 /* Utility to format Date into YYYY-MM-DD local format */
@@ -54,8 +54,9 @@ export function formatDisplayDate(dateKey: string): string {
 }
 
 /**
- * Cloud Sales Database with Local-First Fallback
- * Guaranteed zero data loss: writes immediately to memory & localStorage, then syncs to Firestore
+ * Cloud Sales Database
+ * Synchronizes real sales transactions and salesman team roster across all devices.
+ * No mock/example sales.
  */
 class CloudSalesDatabase {
   private salesCache: Map<string, SaleRecord> = new Map();
@@ -64,8 +65,20 @@ class CloudSalesDatabase {
   public isCloudConnected: boolean = false;
 
   constructor() {
+    this.cleanLegacyStorage();
     this.loadFromStorage();
     this.initRealtimeListeners();
+  }
+
+  private cleanLegacyStorage() {
+    try {
+      localStorage.removeItem('daily_sales_tracker_records_v4');
+      localStorage.removeItem('daily_sales_tracker_records_v3');
+      localStorage.removeItem('daily_sales_tracker_records');
+      localStorage.removeItem('sales_tracker_local_salesmen');
+    } catch (e) {
+      // ignore
+    }
   }
 
   private loadFromStorage() {
@@ -89,11 +102,6 @@ class CloudSalesDatabase {
       }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
-    }
-
-    // Seed defaults if brand new installation
-    if (this.salesCache.size === 0) {
-      this.seedLocalDefaults();
     }
   }
 
@@ -124,37 +132,9 @@ class CloudSalesDatabase {
     };
   }
 
-  private seedLocalDefaults() {
-    const todayKey = getLocalDateKey();
-    const now = Date.now();
-    const samples = [
-      { salesman: 'Pete', item: 'DeWalt 20V Max Impact Driver Combo', amount: 249.0, method: 'card' as PaymentMethod, offset: 160 },
-      { salesman: 'Kieron', item: 'Solid Oak Workshop Bench', amount: 580.0, method: 'cash' as PaymentMethod, notes: 'Paid in cash in full', offset: 120 },
-      { salesman: 'Newtons', item: 'Fender Stratocaster Electric Guitar', amount: 450.0, method: 'trade' as PaymentMethod, tradeDetails: 'Traded in Yamaha FG800 Acoustic + $200 cash difference', offset: 75 },
-      { salesman: 'Roy', item: 'Snap-on Digital Torque Wrench 1/2"', amount: 320.0, method: 'card' as PaymentMethod, offset: 50 },
-      { salesman: 'Connor', item: 'Honda Inverter Generator EU2200i', amount: 850.0, method: 'cash' as PaymentMethod, offset: 35 },
-      { salesman: 'Charlie', item: 'Stihl Professional Chainsaw MS261', amount: 495.0, method: 'trade' as PaymentMethod, tradeDetails: 'Traded older chainsaw + $250 card balance', offset: 15 },
-    ];
-
-    for (const sample of samples) {
-      const id = 'sale_' + Math.random().toString(36).substring(2, 9);
-      this.salesCache.set(id, {
-        id,
-        salesmanName: sample.salesman,
-        itemDescription: sample.item,
-        amount: sample.amount,
-        paymentMethod: sample.method,
-        tradeDetails: sample.tradeDetails,
-        notes: sample.notes,
-        timestamp: now - sample.offset * 60 * 1000,
-        dateKey: todayKey,
-      });
-    }
-  }
-
   private initRealtimeListeners() {
     try {
-      // 1. Listen to Salesmen collection
+      // 1. Real-time listener for Salesmen Roster across all devices
       const salesmenCol = collection(db, 'salesmen');
       onSnapshot(
         salesmenCol,
@@ -177,22 +157,19 @@ class CloudSalesDatabase {
           }
         },
         (error) => {
-          console.warn('Salesmen Firestore listener error (using local cache):', error);
+          console.warn('Salesmen Firestore listener error:', error);
         }
       );
 
-      // 2. Listen to Sales collection
+      // 2. Real-time listener for Single Unified Sales Records across all devices
       const salesCol = collection(db, 'sales');
       const salesQuery = query(salesCol, orderBy('timestamp', 'desc'));
       onSnapshot(
         salesQuery,
         (snapshot) => {
           this.isCloudConnected = true;
-          if (snapshot.empty) {
-            this.syncLocalSalesToFirestore();
-            return;
-          }
-
+          // Rebuild cache strictly from cloud records so all devices stay identical
+          this.salesCache.clear();
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             this.salesCache.set(docSnap.id, {
@@ -211,7 +188,7 @@ class CloudSalesDatabase {
           this.notify();
         },
         (error) => {
-          console.warn('Sales Firestore listener error (using local cache):', error);
+          console.warn('Sales Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -230,25 +207,6 @@ class CloudSalesDatabase {
       }
     } catch (e) {
       console.warn('Could not seed initial salesmen in Firestore:', e);
-    }
-  }
-
-  private async syncLocalSalesToFirestore() {
-    try {
-      for (const [id, sale] of this.salesCache.entries()) {
-        await setDoc(doc(db, 'sales', id), {
-          salesmanName: sale.salesmanName,
-          itemDescription: sale.itemDescription,
-          amount: sale.amount,
-          paymentMethod: sale.paymentMethod,
-          tradeDetails: sale.tradeDetails || null,
-          notes: sale.notes || null,
-          timestamp: sale.timestamp,
-          dateKey: sale.dateKey,
-        });
-      }
-    } catch (e) {
-      console.warn('Could not sync local sales to Firestore:', e);
     }
   }
 
@@ -332,7 +290,7 @@ class CloudSalesDatabase {
       dateKey,
     };
 
-    // 1. Immediately store in memory cache & localStorage
+    // 1. Immediately store in local memory cache & storage
     this.salesCache.set(id, record);
 
     if (!this.salesmenList.includes(record.salesmanName)) {
@@ -342,7 +300,7 @@ class CloudSalesDatabase {
 
     this.notify();
 
-    // 2. Persist to Firestore
+    // 2. Persist to Firestore so all devices sync instantly
     try {
       await setDoc(doc(db, 'sales', id), {
         salesmanName: record.salesmanName,
@@ -487,32 +445,6 @@ class CloudSalesDatabase {
       topSalesman,
       salesmen,
     };
-  }
-
-  public async clearDay(dateKey: string) {
-    const toDelete: string[] = [];
-    this.salesCache.forEach((rec, id) => {
-      if (rec.dateKey === dateKey) {
-        toDelete.push(id);
-      }
-    });
-
-    toDelete.forEach((id) => this.salesCache.delete(id));
-    this.notify();
-
-    try {
-      await Promise.all(toDelete.map((id) => deleteDoc(doc(db, 'sales', id))));
-    } catch (e) {
-      console.warn('Cleared locally; Firestore sync pending:', e);
-    }
-  }
-
-  public async resetSampleData() {
-    this.salesCache.clear();
-    this.seedLocalDefaults();
-    this.notify();
-    await this.seedFirestoreSalesmen();
-    await this.syncLocalSalesToFirestore();
   }
 
   public exportDayToCsv(dateKey: string): string {

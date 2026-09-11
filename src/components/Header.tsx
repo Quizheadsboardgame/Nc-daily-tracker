@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Calendar, Download, RefreshCw, Trash2, Database, PlusCircle, Users, Cloud } from 'lucide-react';
-import { getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
+import React from 'react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud } from 'lucide-react';
+import { getLocalDateKey } from '../db/cloudDatabase';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -8,8 +8,6 @@ interface HeaderProps {
   availableDates: string[];
   totalSalesCount: number;
   onExportCsv: () => void;
-  onClearDay: () => void;
-  onResetSeed: () => void;
   onOpenNewSale: () => void;
   onOpenManageSalesmen: () => void;
 }
@@ -17,17 +15,14 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentDateKey,
   onDateChange,
-  availableDates,
+  availableDates: _availableDates,
   totalSalesCount,
   onExportCsv,
-  onClearDay,
-  onResetSeed,
   onOpenNewSale,
   onOpenManageSalesmen,
 }) => {
   const todayKey = getLocalDateKey();
   const isToday = currentDateKey === todayKey;
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
     <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 shadow-xs" id="app-header">
@@ -46,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
                   Cloud Synced
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">Salesman, item, price & payment ledger • Multi-device memory</p>
+              <p className="text-xs text-zinc-500">Salesman, item, price & payment ledger • Live sync across all devices</p>
             </div>
           </div>
 
@@ -57,7 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 id="btn-select-today"
                 onClick={() => onDateChange(todayKey)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                   isToday ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
@@ -103,19 +98,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">Export</span> CSV
             </button>
 
-            {totalSalesCount > 0 && (
-              <button
-                type="button"
-                id="btn-clear-day"
-                onClick={() => setShowClearConfirm(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors cursor-pointer"
-                title="Clear current day records"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Clear Day</span>
-              </button>
-            )}
-
             <button
               type="button"
               id="btn-header-new-sale"
@@ -128,38 +110,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Clear Confirmation Modal */}
-      {showClearConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-xl border border-zinc-200">
-            <h3 className="text-base font-bold text-zinc-900">Clear Records for {formatDisplayDate(currentDateKey)}?</h3>
-            <p className="text-sm text-zinc-600 mt-2">
-              This will remove all {totalSalesCount} recorded sales for this day from the in-memory database.
-            </p>
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                type="button"
-                onClick={() => setShowClearConfirm(false)}
-                className="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                id="btn-confirm-clear"
-                onClick={() => {
-                  onClearDay();
-                  setShowClearConfirm(false);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
-              >
-                Yes, Clear Day
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 };

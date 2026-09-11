@@ -84,14 +84,6 @@ export default function App() {
     cloudDb.deleteSale(id);
   };
 
-  const handleClearDay = () => {
-    cloudDb.clearDay(currentDateKey);
-  };
-
-  const handleResetSeed = () => {
-    cloudDb.resetSampleData();
-  };
-
   const handleExportCsv = () => {
     const csvContent = cloudDb.exportDayToCsv(currentDateKey);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -122,8 +114,6 @@ export default function App() {
         availableDates={availableDates}
         totalSalesCount={sales.length}
         onExportCsv={handleExportCsv}
-        onClearDay={handleClearDay}
-        onResetSeed={handleResetSeed}
         onOpenNewSale={scrollToNewSale}
         onOpenManageSalesmen={() => setIsManageSalesmenOpen(true)}
       />
