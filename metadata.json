@@ -1,0 +1,6 @@
+{
+  "name": "Daily Sales Tracker",
+  "description": "A daily sales tracking system recording salesman name, items sold, price, and payment method (cash, card, or trade) with cloud database persistence across devices.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
