@@ -34,9 +34,9 @@ export function getLocalDateKey(date: Date = new Date()): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-GB', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'GBP',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
@@ -449,7 +449,7 @@ class CloudSalesDatabase {
 
   public exportDayToCsv(dateKey: string): string {
     const sales = this.getSalesForDay(dateKey);
-    const headers = ['Sale ID', 'Date', 'Time', 'Salesman', 'Item Sold', 'Amount ($)', 'Payment Method', 'Trade Details', 'Notes'];
+    const headers = ['Sale ID', 'Date', 'Time', 'Salesman', 'Item Sold', 'Amount (£)', 'Payment Method', 'Trade Details', 'Notes'];
     const rows = sales.map((sale) => [
       sale.id,
       sale.dateKey,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Tag, DollarSign, Banknote, CreditCard, ArrowLeftRight, Save } from 'lucide-react';
+import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Save } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 
 interface EditSaleModalProps {
@@ -46,7 +46,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      setError('Amount must be greater than $0.');
+      setError('Amount must be greater than £0.');
       return;
     }
 
@@ -118,16 +118,16 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">Amount ($)</label>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">Amount (£)</label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400" />
+                <span className="absolute left-3 top-2 text-sm font-bold text-zinc-500">£</span>
                 <input
                   type="number"
                   step="0.01"
                   min="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm font-semibold rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
+                  className="w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
                   required
                 />
               </div>

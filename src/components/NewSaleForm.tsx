@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User, Tag, DollarSign, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X } from 'lucide-react';
+import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X } from 'lucide-react';
 import { PaymentMethod } from '../types';
 
 interface NewSaleFormProps {
@@ -53,7 +53,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
     const numAmount = parseFloat(amount);
     if (!amount || isNaN(numAmount) || numAmount <= 0) {
-      errs.amount = 'Valid sale amount greater than $0 is required';
+      errs.amount = 'Valid sale amount greater than £0 is required';
     }
 
     if (paymentMethod === 'trade' && !tradeDetails.trim()) {
@@ -78,7 +78,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       notes: notes.trim() || undefined,
     });
 
-    const recordedMsg = `$${numAmount.toFixed(2)} (${itemDescription.trim()}) by ${salesmanName.trim()}`;
+    const recordedMsg = `£${numAmount.toFixed(2)} (${itemDescription.trim()}) by ${salesmanName.trim()}`;
     setLastRecordedInfo(recordedMsg);
     setShowSuccessBadge(true);
     setTimeout(() => setShowSuccessBadge(false), 3500);
@@ -292,11 +292,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           {/* How much for */}
           <div className="md:col-span-5">
             <label htmlFor="input-sale-amount" className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-1.5">
-              Price / Amount ($) <span className="text-rose-500">*</span>
+              Price / Amount (£) <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 font-bold">
-                <DollarSign className="w-4 h-4" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 font-bold text-sm">
+                £
               </div>
               <input
                 type="number"
@@ -309,7 +309,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                   if (errors.amount) setErrors((prev) => ({ ...prev, amount: '' }));
                 }}
                 placeholder="0.00"
-                className={`w-full pl-9 pr-3 py-2 text-sm font-semibold rounded-lg border bg-white focus:outline-hidden focus:ring-2 transition-all ${
+                className={`w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border bg-white focus:outline-hidden focus:ring-2 transition-all ${
                   errors.amount
                     ? 'border-rose-400 focus:ring-rose-200 text-rose-900'
                     : 'border-zinc-300 focus:border-zinc-900 focus:ring-zinc-900/10 text-zinc-900'
@@ -328,7 +328,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                   onClick={() => handleQuickAddAmount(val)}
                   className="px-1.5 py-0.5 text-[11px] font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded border border-zinc-200 transition-colors"
                 >
-                  +${val}
+                  +£{val}
                 </button>
               ))}
             </div>
@@ -405,7 +405,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 setTradeDetails(e.target.value);
                 if (errors.trade) setErrors((prev) => ({ ...prev, trade: '' }));
               }}
-              placeholder="e.g. Traded in 2018 Yamaha Acoustic Guitar + $150 cash difference"
+              placeholder="e.g. Traded in 2018 Yamaha Acoustic Guitar + £150 cash difference"
               className={`w-full px-3 py-2 text-xs rounded-lg border bg-white focus:outline-hidden focus:ring-2 text-zinc-900 ${
                 errors.trade
                   ? 'border-rose-400 focus:ring-rose-200'
