@@ -55,6 +55,7 @@ export default function App() {
   const handleRecordSale = (newSale: {
     salesmanName: string;
     itemDescription: string;
+    isMiscellaneous?: boolean;
     amount: number;
     paymentMethod: PaymentMethod;
     tradeDetails?: string;
@@ -250,6 +251,17 @@ export default function App() {
               </div>
             </div>
 
+            {/* USER REQUIREMENT: Record New Sale box placed at the TOP of the page */}
+            <div id="section-new-sale-box-top">
+              <NewSaleForm
+                currentDateKey={currentDateKey}
+                knownVendors={knownVendors}
+                onSubmitSale={handleRecordSale}
+                onAddVendor={handleAddVendor}
+                onOpenManageVendors={() => setActiveTab('manage-vendors')}
+              />
+            </div>
+
             {/* Daily KPI & Payment Breakdown Cards */}
             <DailyStats
               summary={summary}
@@ -265,32 +277,18 @@ export default function App() {
               totalDayRevenue={summary.totalRevenue}
             />
 
-            {/* USER REQUIREMENT: Record New Sale box placed ABOVE the Sales Ledger */}
-            <div className="space-y-6" id="ledger-stacked-container">
-              {/* Record New Sale Form Box situated DIRECTLY ABOVE Sales Ledger */}
-              <div id="section-new-sale-box-above-ledger">
-                <NewSaleForm
-                  currentDateKey={currentDateKey}
-                  knownVendors={knownVendors}
-                  onSubmitSale={handleRecordSale}
-                  onAddVendor={handleAddVendor}
-                  onOpenManageVendors={() => setActiveTab('manage-vendors')}
-                />
-              </div>
-
-              {/* Sales Ledger Table / List */}
-              <div id="section-sales-ledger-list">
-                <SalesList
-                  sales={sales}
-                  allVendors={knownVendors}
-                  selectedPaymentFilter={selectedPaymentFilter}
-                  onSelectPaymentFilter={setSelectedPaymentFilter}
-                  selectedVendor={selectedVendor}
-                  onSelectVendor={setSelectedVendor}
-                  onEditSale={handleEditSale}
-                  onDeleteSale={handleDeleteSale}
-                />
-              </div>
+            {/* Sales Ledger Table / List */}
+            <div id="section-sales-ledger-list">
+              <SalesList
+                sales={sales}
+                allVendors={knownVendors}
+                selectedPaymentFilter={selectedPaymentFilter}
+                onSelectPaymentFilter={setSelectedPaymentFilter}
+                selectedVendor={selectedVendor}
+                onSelectVendor={setSelectedVendor}
+                onEditSale={handleEditSale}
+                onDeleteSale={handleDeleteSale}
+              />
             </div>
           </div>
         )}

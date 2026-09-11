@@ -904,8 +904,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <h4 className="text-sm font-semibold text-zinc-900">
-                          {sale.itemDescription}
+                        <h4 className="text-sm font-semibold text-zinc-900 flex items-center gap-1.5 flex-wrap">
+                          <span>{sale.itemDescription}</span>
+                          {(sale.isMiscellaneous || sale.itemDescription.trim().toLowerCase() === 'miscellaneous') && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              Misc
+                            </span>
+                          )}
                         </h4>
                         {sale.paymentMethod === 'trade' && (
                           <div className="text-xs text-amber-800 bg-amber-50/80 px-2.5 py-1 rounded-md border border-amber-200/60 inline-flex items-center gap-1.5">
@@ -1216,8 +1221,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <h4 className="text-sm font-semibold text-zinc-900">
-                          {sale.itemDescription}
+                        <h4 className="text-sm font-semibold text-zinc-900 flex items-center gap-1.5 flex-wrap">
+                          <span>{sale.itemDescription}</span>
+                          {(sale.isMiscellaneous || sale.itemDescription.trim().toLowerCase() === 'miscellaneous') && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              Misc
+                            </span>
+                          )}
                         </h4>
                         {sale.paymentMethod === 'trade' && (
                           <div className="text-xs text-amber-800 bg-amber-50/80 px-2.5 py-1 rounded-md border border-amber-200/60 inline-flex items-center gap-1.5">

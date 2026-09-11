@@ -19,6 +19,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 }) => {
   const [vendorName, setVendorName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
+  const [isMiscellaneous, setIsMiscellaneous] = useState(false);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
 
@@ -33,7 +34,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
   useEffect(() => {
     if (sale) {
       setVendorName(sale.salesmanName);
-      setItemDescription(sale.itemDescription);
+      const isMisc = Boolean(sale.isMiscellaneous) || sale.itemDescription?.trim().toLowerCase() === 'miscellaneous';
+      setIsMiscellaneous(isMisc);
+      setItemDescription(isMisc && !sale.itemDescription?.trim() ? 'Miscellaneous' : sale.itemDescription);
       setAmount(sale.amount.toString());
       setPaymentMethod(sale.paymentMethod);
       setTradeAcceptingVendor(sale.tradeAcceptingVendor || '');
@@ -48,8 +51,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vendorName.trim() || !itemDescription.trim() || !amount) {
-      setError('Please select a vendor and fill in item description and amount.');
+    if (!vendorName.trim() || (!isMiscellaneous && !itemDescription.trim()) || !amount) {
+      setError('Please select a vendor and fill in item description (or tick Miscellaneous) and amount.');
       return;
     }
 
@@ -83,9 +86,12 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
       compiledTradeDetails = parts.join(' • ');
     }
 
+    const finalItemDescription = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+
     onSave(sale.id, {
       salesmanName: vendorName.trim(),
-      itemDescription: itemDescription.trim(),
+      itemDescription: finalItemDescription,
+      isMiscellaneous,
       amount: numAmount,
       paymentMethod,
       tradeDetails: compiledTradeDetails,
@@ -145,17 +151,58 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">What We Sold</label>
+              <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                <label htmlFor="edit-input-item" className="block text-xs font-semibold text-zinc-700">
+                  What We Sold {!isMiscellaneous && <span className="text-rose-500">*</span>}
+                </label>
+                <label
+                  htmlFor="edit-checkbox-misc"
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold cursor-pointer select-none transition-all ${
+                    isMiscellaneous
+                      ? 'bg-amber-100 border border-amber-300 text-amber-950'
+                      : 'bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700'
+                  }`}
+                  title="Tick instead of typing an item description"
+                >
+                  <input
+                    type="checkbox"
+                    id="edit-checkbox-misc"
+                    checked={isMiscellaneous}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsMiscellaneous(checked);
+                      if (checked) {
+                        setItemDescription('Miscellaneous');
+                      } else if (itemDescription === 'Miscellaneous') {
+                        setItemDescription('');
+                      }
+                    }}
+                    className="w-3.5 h-3.5 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                  />
+                  <span>Miscellaneous</span>
+                </label>
+              </div>
               <div className="relative">
                 <Tag className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400" />
                 <input
+                  id="edit-input-item"
                   type="text"
-                  value={itemDescription}
+                  value={isMiscellaneous ? 'Miscellaneous' : itemDescription}
+                  disabled={isMiscellaneous}
                   onChange={(e) => setItemDescription(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
-                  required
+                  className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border transition-all ${
+                    isMiscellaneous
+                      ? 'bg-amber-50/70 border-amber-300 text-amber-950 font-semibold cursor-not-allowed italic'
+                      : 'border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 bg-white'
+                  }`}
+                  required={!isMiscellaneous}
                 />
               </div>
+              {isMiscellaneous && (
+                <p className="text-[11px] text-amber-800 font-medium mt-1">
+                  Miscellaneous ticked — recorded as general sale
+                </p>
+              )}
             </div>
 
             <div>

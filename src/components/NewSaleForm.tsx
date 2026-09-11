@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X } from 'lucide-react';
 import { PaymentMethod } from '../types';
+import { cloudDb } from '../db/cloudDatabase';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -9,6 +10,7 @@ interface NewSaleFormProps {
   onSubmitSale: (sale: {
     salesmanName: string;
     itemDescription: string;
+    isMiscellaneous?: boolean;
     amount: number;
     paymentMethod: PaymentMethod;
     tradeDetails?: string;
@@ -39,6 +41,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   const [vendorName, setVendorName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
+  const [isMiscellaneous, setIsMiscellaneous] = useState(false);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
 
@@ -57,6 +60,26 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const [inlineVendorName, setInlineVendorName] = useState('');
 
   const itemInputRef = useRef<HTMLInputElement>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
+  const handleToggleMisc = (checked: boolean) => {
+    setIsMiscellaneous(checked);
+    if (checked) {
+      setItemDescription('Miscellaneous');
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      // Conveniently focus the price input since item is filled
+      setTimeout(() => {
+        amountInputRef.current?.focus();
+      }, 50);
+    } else {
+      if (itemDescription === 'Miscellaneous') {
+        setItemDescription('');
+      }
+      setTimeout(() => {
+        itemInputRef.current?.focus();
+      }, 50);
+    }
+  };
 
   const validate = (): boolean => {
     const errs: { [key: string]: string } = {};
@@ -65,8 +88,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       errs.vendor = 'Please select a vendor from the dropdown';
     }
 
-    if (!itemDescription.trim()) {
-      errs.item = 'Item description is required';
+    if (!isMiscellaneous && !itemDescription.trim()) {
+      errs.item = 'Item description is required (or tick Miscellaneous)';
     }
 
     const numAmount = parseFloat(amount);
@@ -94,6 +117,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
     const numAmount = parseFloat(amount);
     const numTradeValue = paymentMethod === 'trade' ? parseFloat(tradeValue) || 0 : undefined;
+    const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
 
     // Build human-readable trade details string
     let compiledTradeDetails: string | undefined = undefined;
@@ -110,7 +134,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
     onSubmitSale({
       salesmanName: vendorName.trim(),
-      itemDescription: itemDescription.trim(),
+      itemDescription: finalItemDesc,
+      isMiscellaneous,
       amount: numAmount,
       paymentMethod,
       tradeDetails: compiledTradeDetails,
@@ -120,12 +145,13 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       notes: notes.trim() || undefined,
     });
 
-    const recordedMsg = `£${numAmount.toFixed(2)} (${itemDescription.trim()}) by ${vendorName.trim()}`;
+    const recordedMsg = `£${numAmount.toFixed(2)} (${finalItemDesc}) by ${vendorName.trim()}`;
     setLastRecordedInfo(recordedMsg);
     setShowSuccessBadge(true);
     setTimeout(() => setShowSuccessBadge(false), 3500);
 
     // Reset item, amount, and trade fields while keeping vendor name for fast consecutive entries
+    setIsMiscellaneous(false);
     setItemDescription('');
     setAmount('');
     setTradeAcceptingVendor('');
@@ -148,17 +174,69 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     }
   };
 
+  const selectedVendorColor = vendorName.trim() ? cloudDb.getVendorColor(vendorName.trim()) : null;
+
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-sm overflow-hidden" id="card-new-sale-form">
+    <div
+      className="bg-white rounded-2xl border transition-all duration-300 overflow-hidden shadow-sm"
+      id="card-new-sale-form"
+      style={
+        selectedVendorColor
+          ? {
+              borderColor: selectedVendorColor,
+              borderWidth: '2px',
+              boxShadow: `0 0 0 1px ${selectedVendorColor}33, 0 8px 24px -4px ${selectedVendorColor}25`,
+            }
+          : {
+              borderColor: '#e4e4e7',
+              borderWidth: '1px',
+            }
+      }
+    >
       {/* Form Header */}
-      <div className="px-5 py-4 border-b border-zinc-100 bg-linear-to-r from-zinc-50 to-white flex items-center justify-between">
+      <div
+        className="px-5 py-4 border-b transition-all duration-300 flex items-center justify-between flex-wrap gap-2"
+        style={
+          selectedVendorColor
+            ? {
+                background: `linear-gradient(135deg, ${selectedVendorColor}18 0%, ${selectedVendorColor}08 100%)`,
+                borderBottomColor: `${selectedVendorColor}35`,
+              }
+            : {
+                background: 'linear-gradient(to right, #fafafa, #ffffff)',
+                borderBottomColor: '#f4f4f5',
+              }
+        }
+      >
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800">
+          <div
+            className="p-2 rounded-lg transition-all duration-300 shadow-2xs"
+            style={
+              selectedVendorColor
+                ? { backgroundColor: selectedVendorColor, color: '#ffffff' }
+                : { backgroundColor: '#d1fae5', color: '#065f46' }
+            }
+          >
             <Plus className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-zinc-900">Record New Sale</h2>
-            <p className="text-xs text-zinc-500">Add transaction into today's memory ledger</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-zinc-900">Record New Sale</h2>
+              {selectedVendorColor && vendorName && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-2xs animate-fade-in"
+                  style={{ backgroundColor: selectedVendorColor }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  <span>{vendorName}</span>
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500">
+              {vendorName
+                ? `Recording sale for ${vendorName} — box matched to vendor's color`
+                : "Add transaction into today's memory ledger"}
+            </p>
           </div>
         </div>
 
@@ -170,7 +248,18 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-4.5" id="form-record-sale">
+      <form
+        onSubmit={handleSubmit}
+        className="p-5 space-y-4.5 transition-all duration-300"
+        id="form-record-sale"
+        style={
+          selectedVendorColor
+            ? {
+                background: `linear-gradient(180deg, ${selectedVendorColor}08 0%, transparent 60%)`,
+              }
+            : undefined
+        }
+      >
         {/* Vendor Name - Drop Down Box */}
         <div>
           <label htmlFor="select-vendor-name" className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-1.5">
@@ -178,8 +267,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </label>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
-                <User className="w-4 h-4" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                {selectedVendorColor ? (
+                  <span
+                    className="w-3.5 h-3.5 rounded-full inline-block border border-white shadow-2xs"
+                    style={{ backgroundColor: selectedVendorColor }}
+                  />
+                ) : (
+                  <User className="w-4 h-4 text-zinc-400" />
+                )}
               </div>
               <select
                 id="select-vendor-name"
@@ -188,9 +284,20 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                   setVendorName(e.target.value);
                   if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
                 }}
+                style={
+                  selectedVendorColor
+                    ? {
+                        borderColor: selectedVendorColor,
+                        borderWidth: '2px',
+                        boxShadow: `0 0 0 1px ${selectedVendorColor}40`,
+                      }
+                    : undefined
+                }
                 className={`w-full pl-9 pr-8 py-2 text-sm rounded-lg border bg-white focus:outline-hidden focus:ring-2 transition-all cursor-pointer ${
                   errors.vendor
                     ? 'border-rose-400 focus:ring-rose-200 text-rose-900'
+                    : selectedVendorColor
+                    ? 'font-bold text-zinc-900'
                     : 'border-zinc-300 focus:border-zinc-900 focus:ring-zinc-900/10 text-zinc-900 font-medium'
                 }`}
               >
@@ -294,9 +401,36 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
           {/* What we sold */}
           <div className="md:col-span-7">
-            <label htmlFor="input-item-sold" className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-1.5">
-              What We Sold (Item / Description) <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
+              <label htmlFor="input-item-sold" className="block text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                What We Sold {!isMiscellaneous && <span className="text-rose-500">*</span>}
+              </label>
+
+              {/* Miscellaneous tick box */}
+              <label
+                htmlFor="checkbox-misc-item"
+                id="label-checkbox-misc"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border text-xs font-bold cursor-pointer select-none transition-all ${
+                  isMiscellaneous
+                    ? 'bg-amber-100 border-amber-300 text-amber-950 shadow-2xs'
+                    : 'bg-zinc-100 hover:bg-zinc-200/80 border-zinc-200 text-zinc-700'
+                }`}
+                title="Tick to record a miscellaneous sale instead of typing an item description"
+              >
+                <input
+                  type="checkbox"
+                  id="checkbox-misc-item"
+                  checked={isMiscellaneous}
+                  onChange={(e) => handleToggleMisc(e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                />
+                <span className="flex items-center gap-1">
+                  Miscellaneous
+                  {isMiscellaneous && <span className="text-[10px] text-amber-800 font-extrabold uppercase">(Ticked)</span>}
+                </span>
+              </label>
+            </div>
+
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
                 <Tag className="w-4 h-4" />
@@ -305,20 +439,30 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 ref={itemInputRef}
                 type="text"
                 id="input-item-sold"
-                value={itemDescription}
+                value={isMiscellaneous ? 'Miscellaneous' : itemDescription}
+                disabled={isMiscellaneous}
                 onChange={(e) => {
                   setItemDescription(e.target.value);
                   if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
                 }}
-                placeholder="e.g. 18V Milwaukee Drill Kit, Gold Chain, etc."
-                className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border bg-white focus:outline-hidden focus:ring-2 transition-all ${
-                  errors.item
-                    ? 'border-rose-400 focus:ring-rose-200 text-rose-900'
-                    : 'border-zinc-300 focus:border-zinc-900 focus:ring-zinc-900/10 text-zinc-900'
+                placeholder={isMiscellaneous ? 'Miscellaneous item selected' : 'e.g. 18V Milwaukee Drill Kit, Gold Chain, etc.'}
+                className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border transition-all ${
+                  isMiscellaneous
+                    ? 'bg-amber-50/70 border-amber-300 text-amber-950 font-semibold cursor-not-allowed italic shadow-inner'
+                    : errors.item
+                    ? 'border-rose-400 focus:ring-rose-200 text-rose-900 bg-white focus:outline-hidden focus:ring-2'
+                    : 'border-zinc-300 focus:border-zinc-900 focus:ring-zinc-900/10 text-zinc-900 bg-white focus:outline-hidden focus:ring-2'
                 }`}
               />
             </div>
-            {errors.item && <p className="text-xs text-rose-600 mt-1 font-medium">{errors.item}</p>}
+            {isMiscellaneous ? (
+              <p className="text-[11px] text-amber-800 font-medium mt-1 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Miscellaneous ticked instead of an item — enter price to record</span>
+              </p>
+            ) : errors.item ? (
+              <p className="text-xs text-rose-600 mt-1 font-medium">{errors.item}</p>
+            ) : null}
           </div>
 
           {/* How much for */}
@@ -331,6 +475,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 £
               </div>
               <input
+                ref={amountInputRef}
                 type="number"
                 id="input-sale-amount"
                 step="0.01"
@@ -545,10 +690,27 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           <button
             type="submit"
             id="btn-submit-record-sale"
-            className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white text-sm font-semibold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            style={
+              selectedVendorColor
+                ? {
+                    backgroundColor: selectedVendorColor,
+                    color: '#ffffff',
+                    boxShadow: `0 4px 14px -2px ${selectedVendorColor}66`,
+                  }
+                : undefined
+            }
+            className={`w-full py-2.5 px-4 text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] ${
+              selectedVendorColor
+                ? 'hover:brightness-95'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-white'
+            }`}
           >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Record Sale to Today's Database</span>
+            <Plus className={`w-4 h-4 ${selectedVendorColor ? 'text-white' : 'text-emerald-400'}`} />
+            <span>
+              {vendorName.trim()
+                ? `Record Sale for ${vendorName.trim()}`
+                : "Record Sale to Today's Database"}
+            </span>
           </button>
         </div>
       </form>

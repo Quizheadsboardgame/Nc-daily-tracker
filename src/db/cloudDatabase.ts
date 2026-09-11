@@ -327,7 +327,8 @@ class CloudSalesDatabase {
             this.salesCache.set(docSnap.id, {
               id: docSnap.id,
               salesmanName: data.salesmanName || '',
-              itemDescription: data.itemDescription || '',
+              itemDescription: data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : ''),
+              isMiscellaneous: Boolean(data.isMiscellaneous) || data.itemDescription?.trim().toLowerCase() === 'miscellaneous',
               amount: Number(data.amount) || 0,
               paymentMethod: data.paymentMethod || 'card',
               tradeDetails: data.tradeDetails || undefined,
@@ -496,6 +497,7 @@ class CloudSalesDatabase {
   public async insertSale(input: {
     salesmanName: string;
     itemDescription: string;
+    isMiscellaneous?: boolean;
     amount: number;
     paymentMethod: PaymentMethod;
     tradeDetails?: string;
@@ -509,11 +511,14 @@ class CloudSalesDatabase {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
     const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+    const isMiscellaneous = Boolean(input.isMiscellaneous) || input.itemDescription.trim().toLowerCase() === 'miscellaneous';
+    const finalDescription = isMiscellaneous && !input.itemDescription.trim() ? 'Miscellaneous' : input.itemDescription.trim();
 
     const record: SaleRecord = {
       id,
       salesmanName: input.salesmanName.trim(),
-      itemDescription: input.itemDescription.trim(),
+      itemDescription: finalDescription,
+      isMiscellaneous: isMiscellaneous ? true : undefined,
       amount: Math.round(Number(input.amount) * 100) / 100,
       paymentMethod: input.paymentMethod,
       tradeDetails: input.tradeDetails?.trim() || undefined,
@@ -540,6 +545,7 @@ class CloudSalesDatabase {
       await setDoc(doc(db, 'sales', id), {
         salesmanName: record.salesmanName,
         itemDescription: record.itemDescription,
+        isMiscellaneous: record.isMiscellaneous || false,
         amount: record.amount,
         paymentMethod: record.paymentMethod,
         tradeDetails: record.tradeDetails || null,
@@ -561,11 +567,16 @@ class CloudSalesDatabase {
     const existing = this.salesCache.get(id);
     if (!existing) return;
 
+    const isMisc = updates.isMiscellaneous !== undefined
+      ? updates.isMiscellaneous
+      : (updates.itemDescription !== undefined ? updates.itemDescription.trim().toLowerCase() === 'miscellaneous' : existing.isMiscellaneous);
+
     const updated: SaleRecord = {
       ...existing,
       ...updates,
       salesmanName: updates.salesmanName !== undefined ? updates.salesmanName.trim() : existing.salesmanName,
       itemDescription: updates.itemDescription !== undefined ? updates.itemDescription.trim() : existing.itemDescription,
+      isMiscellaneous: isMisc,
       amount: updates.amount !== undefined ? Math.round(Number(updates.amount) * 100) / 100 : existing.amount,
       tradeDetails: updates.tradeDetails !== undefined ? (updates.tradeDetails ? updates.tradeDetails.trim() : undefined) : existing.tradeDetails,
       tradeAcceptingVendor: updates.tradeAcceptingVendor !== undefined ? (updates.tradeAcceptingVendor ? updates.tradeAcceptingVendor.trim() : undefined) : existing.tradeAcceptingVendor,
@@ -580,6 +591,7 @@ class CloudSalesDatabase {
       const firestoreUpdates: Record<string, any> = {};
       if (updates.salesmanName !== undefined) firestoreUpdates.salesmanName = updates.salesmanName.trim();
       if (updates.itemDescription !== undefined) firestoreUpdates.itemDescription = updates.itemDescription.trim();
+      if (updates.isMiscellaneous !== undefined) firestoreUpdates.isMiscellaneous = updates.isMiscellaneous;
       if (updates.amount !== undefined) firestoreUpdates.amount = Math.round(Number(updates.amount) * 100) / 100;
       if (updates.paymentMethod !== undefined) firestoreUpdates.paymentMethod = updates.paymentMethod;
       if (updates.tradeDetails !== undefined) firestoreUpdates.tradeDetails = updates.tradeDetails ? updates.tradeDetails.trim() : null;

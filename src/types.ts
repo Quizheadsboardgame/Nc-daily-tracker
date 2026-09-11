@@ -4,6 +4,7 @@ export interface SaleRecord {
   id: string;
   salesmanName: string;
   itemDescription: string;
+  isMiscellaneous?: boolean;
   amount: number;
   paymentMethod: PaymentMethod;
   tradeDetails?: string;

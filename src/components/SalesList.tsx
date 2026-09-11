@@ -323,9 +323,16 @@ export const SalesList: React.FC<SalesListProps> = ({
 
                 {/* Item Sold and Trade Details */}
                 <div className="md:col-span-4 space-y-1">
-                  <span className="text-sm font-semibold text-zinc-900 block leading-snug">
-                    {sale.itemDescription}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-semibold text-zinc-900 leading-snug">
+                      {sale.itemDescription}
+                    </span>
+                    {(sale.isMiscellaneous || sale.itemDescription.trim().toLowerCase() === 'miscellaneous') && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        Misc
+                      </span>
+                    )}
+                  </div>
 
                   {sale.paymentMethod === 'trade' && (
                     <div className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/90 text-amber-950 text-[11px] space-y-0.5">
