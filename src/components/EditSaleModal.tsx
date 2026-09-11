@@ -5,6 +5,7 @@ import { SaleRecord, PaymentMethod } from '../types';
 interface EditSaleModalProps {
   sale: SaleRecord | null;
   isOpen: boolean;
+  vendors?: string[];
   onClose: () => void;
   onSave: (id: string, updates: Partial<SaleRecord>) => void;
 }
@@ -12,24 +13,32 @@ interface EditSaleModalProps {
 export const EditSaleModal: React.FC<EditSaleModalProps> = ({
   sale,
   isOpen,
+  vendors = [],
   onClose,
   onSave,
 }) => {
-  const [salesmanName, setSalesmanName] = useState('');
+  const [vendorName, setVendorName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
-  const [tradeDetails, setTradeDetails] = useState('');
+
+  // Trade-in specific state
+  const [tradeAcceptingVendor, setTradeAcceptingVendor] = useState('');
+  const [tradeValue, setTradeValue] = useState('');
+  const [tradeItemDescription, setTradeItemDescription] = useState('');
+
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (sale) {
-      setSalesmanName(sale.salesmanName);
+      setVendorName(sale.salesmanName);
       setItemDescription(sale.itemDescription);
       setAmount(sale.amount.toString());
       setPaymentMethod(sale.paymentMethod);
-      setTradeDetails(sale.tradeDetails || '');
+      setTradeAcceptingVendor(sale.tradeAcceptingVendor || '');
+      setTradeValue(sale.tradeValue !== undefined ? sale.tradeValue.toString() : '');
+      setTradeItemDescription(sale.tradeItemDescription || '');
       setNotes(sale.notes || '');
       setError('');
     }
@@ -39,8 +48,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!salesmanName.trim() || !itemDescription.trim() || !amount) {
-      setError('Please fill in salesman, item description, and amount.');
+    if (!vendorName.trim() || !itemDescription.trim() || !amount) {
+      setError('Please select a vendor and fill in item description and amount.');
       return;
     }
 
@@ -50,17 +59,39 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
       return;
     }
 
-    if (paymentMethod === 'trade' && !tradeDetails.trim()) {
-      setError('Please enter trade-in details.');
-      return;
+    let numTradeValue: number | undefined = undefined;
+    let compiledTradeDetails: string | undefined = undefined;
+
+    if (paymentMethod === 'trade') {
+      if (!tradeAcceptingVendor.trim()) {
+        setError('Please select the vendor accepting the trade.');
+        return;
+      }
+      numTradeValue = parseFloat(tradeValue);
+      if (!tradeValue || isNaN(numTradeValue) || numTradeValue < 0) {
+        setError('Please enter a valid trade-in value (£).');
+        return;
+      }
+
+      const parts = [
+        `Accepted by: ${tradeAcceptingVendor.trim()}`,
+        `Value: £${numTradeValue.toFixed(2)}`,
+      ];
+      if (tradeItemDescription.trim()) {
+        parts.push(`Item: ${tradeItemDescription.trim()}`);
+      }
+      compiledTradeDetails = parts.join(' • ');
     }
 
     onSave(sale.id, {
-      salesmanName: salesmanName.trim(),
+      salesmanName: vendorName.trim(),
       itemDescription: itemDescription.trim(),
       amount: numAmount,
       paymentMethod,
-      tradeDetails: paymentMethod === 'trade' ? tradeDetails.trim() : undefined,
+      tradeDetails: compiledTradeDetails,
+      tradeAcceptingVendor: paymentMethod === 'trade' ? tradeAcceptingVendor.trim() : undefined,
+      tradeValue: paymentMethod === 'trade' ? numTradeValue : undefined,
+      tradeItemDescription: paymentMethod === 'trade' && tradeItemDescription.trim() ? tradeItemDescription.trim() : undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -89,16 +120,26 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-700 mb-1">Salesman's Name</label>
+            <label className="block text-xs font-semibold text-zinc-700 mb-1">Vendor's Name</label>
             <div className="relative">
-              <User className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400" />
-              <input
-                type="text"
-                value={salesmanName}
-                onChange={(e) => setSalesmanName(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
+              <User className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 pointer-events-none" />
+              <select
+                id="edit-select-vendor"
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-sm rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 bg-white cursor-pointer font-medium text-zinc-900"
                 required
-              />
+              >
+                <option value="">-- Select Vendor --</option>
+                {vendors.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+                {vendorName && !vendors.includes(vendorName) && (
+                  <option value={vendorName}>{vendorName}</option>
+                )}
+              </select>
             </div>
           </div>
 
@@ -176,16 +217,79 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           </div>
 
           {paymentMethod === 'trade' && (
-            <div>
-              <label className="block text-xs font-semibold text-amber-900 mb-1">Trade Details</label>
-              <input
-                type="text"
-                value={tradeDetails}
-                onChange={(e) => setTradeDetails(e.target.value)}
-                placeholder="What was traded in?"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500/20"
-                required
-              />
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-amber-900">
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Trade-in Details</span>
+                </div>
+                {vendorName && (
+                  <button
+                    type="button"
+                    onClick={() => setTradeAcceptingVendor(vendorName)}
+                    className="text-[11px] font-medium text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                  >
+                    Same as vendor ({vendorName})
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="edit-select-trade-vendor" className="block text-xs font-semibold text-amber-950 mb-1">
+                  Vendor Accepting the Trade <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  id="edit-select-trade-vendor"
+                  value={tradeAcceptingVendor}
+                  onChange={(e) => setTradeAcceptingVendor(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500/20 text-zinc-900 cursor-pointer"
+                  required
+                >
+                  <option value="">-- Select Vendor Accepting Trade --</option>
+                  {vendors.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                  {tradeAcceptingVendor && !vendors.includes(tradeAcceptingVendor) && (
+                    <option value={tradeAcceptingVendor}>{tradeAcceptingVendor}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="edit-input-trade-value" className="block text-xs font-semibold text-amber-950 mb-1">
+                  Trade-in Value (£) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">£</span>
+                  <input
+                    type="number"
+                    id="edit-input-trade-value"
+                    step="0.01"
+                    min="0"
+                    value={tradeValue}
+                    onChange={(e) => setTradeValue(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500/20 text-zinc-900"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="edit-input-trade-item" className="block text-xs font-semibold text-amber-950 mb-1">
+                  Item Traded In <span className="text-zinc-400 font-normal">(Optional description)</span>
+                </label>
+                <input
+                  type="text"
+                  id="edit-input-trade-item"
+                  value={tradeItemDescription}
+                  onChange={(e) => setTradeItemDescription(e.target.value)}
+                  placeholder="e.g. 2018 Yamaha Acoustic Guitar"
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-300/80 bg-white focus:ring-2 focus:ring-amber-500/20 text-zinc-900"
+                />
+              </div>
             </div>
           )}
 

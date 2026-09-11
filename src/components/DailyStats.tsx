@@ -140,14 +140,14 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
           </div>
         </div>
 
-        {summary.topSalesman && (
+        {(summary.topVendor || summary.topSalesman) && (
           <div className="flex items-center gap-2 bg-amber-50/80 border border-amber-200/80 px-3 py-1.5 rounded-xl">
             <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
             <div className="text-xs">
-              <span className="text-zinc-600">Leading Salesman Today:</span>{' '}
-              <span className="font-bold text-zinc-900">{summary.topSalesman.name}</span>{' '}
+              <span className="text-zinc-600">Leading Vendor Today:</span>{' '}
+              <span className="font-bold text-zinc-900">{(summary.topVendor || summary.topSalesman)!.name}</span>{' '}
               <span className="text-amber-800 font-semibold">
-                ({formatCurrency(summary.topSalesman.totalAmount)} • {summary.topSalesman.count} {summary.topSalesman.count === 1 ? 'sale' : 'sales'})
+                ({formatCurrency((summary.topVendor || summary.topSalesman)!.totalAmount)} • {(summary.topVendor || summary.topSalesman)!.count} {(summary.topVendor || summary.topSalesman)!.count === 1 ? 'sale' : 'sales'})
               </span>
             </div>
           </div>

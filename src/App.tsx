@@ -1,42 +1,45 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Header } from './components/Header';
+import { Header, AppTab } from './components/Header';
 import { NewSaleForm } from './components/NewSaleForm';
 import { DailyStats } from './components/DailyStats';
-import { SalesmanBreakdown } from './components/SalesmanBreakdown';
+import { VendorBreakdown } from './components/SalesmanBreakdown';
 import { SalesList } from './components/SalesList';
+import { VendorDayCheck } from './components/VendorDayCheck';
+import { ManageVendorsTab } from './components/ManageVendorsTab';
 import { EditSaleModal } from './components/EditSaleModal';
-import { ManageSalesmenModal } from './components/ManageSalesmenModal';
+import { ManageVendorsModal } from './components/ManageSalesmenModal';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
+  const [activeTab, setActiveTab] = useState<AppTab>('ledger');
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [summary, setSummary] = useState<DaySummary>(() => cloudDb.getDailySummary(getLocalDateKey()));
   const [availableDates, setAvailableDates] = useState<string[]>([]);
-  const [knownSalesmen, setKnownSalesmen] = useState<string[]>(() => cloudDb.getKnownSalesmen());
+  const [knownVendors, setKnownVendors] = useState<string[]>(() => cloudDb.getKnownVendors());
 
   // Filter states
   const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card' | 'trade'>('all');
-  const [selectedSalesman, setSelectedSalesman] = useState<string>('all');
+  const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   // Modal states
   const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isManageSalesmenOpen, setIsManageSalesmenOpen] = useState(false);
+  const [isManageVendorsOpen, setIsManageVendorsOpen] = useState(false);
 
   // Sync state with cloud database
   const refreshFromDb = useCallback(() => {
     const daySales = cloudDb.getSalesForDay(currentDateKey);
     const daySummary = cloudDb.getDailySummary(currentDateKey);
     const dates = cloudDb.getAvailableDateKeys();
-    const salesmen = cloudDb.getKnownSalesmen();
+    const vendors = cloudDb.getKnownVendors();
 
     setSales(daySales);
     setSummary(daySummary);
     setAvailableDates(dates);
-    setKnownSalesmen(salesmen);
+    setKnownVendors(vendors);
   }, [currentDateKey]);
 
   useEffect(() => {
@@ -55,20 +58,31 @@ export default function App() {
     amount: number;
     paymentMethod: PaymentMethod;
     tradeDetails?: string;
+    tradeAcceptingVendor?: string;
+    tradeValue?: number;
+    tradeItemDescription?: string;
     notes?: string;
   }) => {
     cloudDb.insertSale({
       ...newSale,
       dateKey: currentDateKey,
     });
+    refreshFromDb();
   };
 
-  const handleAddSalesman = (name: string) => {
-    cloudDb.addSalesman(name);
+  const handleAddVendor = (name: string, color?: string) => {
+    cloudDb.addVendor(name, color);
+    refreshFromDb();
   };
 
-  const handleRemoveSalesman = (name: string) => {
-    cloudDb.removeSalesman(name);
+  const handleRemoveVendor = (name: string) => {
+    cloudDb.removeVendor(name);
+    refreshFromDb();
+  };
+
+  const handleUpdateVendorColor = (name: string, color: string) => {
+    cloudDb.updateVendorColor(name, color);
+    refreshFromDb();
   };
 
   const handleEditSale = (sale: SaleRecord) => {
@@ -78,10 +92,12 @@ export default function App() {
 
   const handleSaveEdit = (id: string, updates: Partial<SaleRecord>) => {
     cloudDb.updateSale(id, updates);
+    refreshFromDb();
   };
 
   const handleDeleteSale = (id: string) => {
     cloudDb.deleteSale(id);
+    refreshFromDb();
   };
 
   const handleExportCsv = () => {
@@ -97,12 +113,15 @@ export default function App() {
   };
 
   const scrollToNewSale = () => {
-    const formEl = document.getElementById('card-new-sale-form');
-    if (formEl) {
-      formEl.scrollIntoView({ behavior: 'smooth' });
-      const inputEl = document.getElementById('input-salesman-name');
-      inputEl?.focus();
-    }
+    setActiveTab('ledger');
+    setTimeout(() => {
+      const formEl = document.getElementById('card-new-sale-form');
+      if (formEl) {
+        formEl.scrollIntoView({ behavior: 'smooth' });
+        const inputEl = document.getElementById('select-vendor-name') || document.getElementById('input-item-sold');
+        inputEl?.focus();
+      }
+    }, 100);
   };
 
   return (
@@ -115,111 +134,197 @@ export default function App() {
         totalSalesCount={sales.length}
         onExportCsv={handleExportCsv}
         onOpenNewSale={scrollToNewSale}
-        onOpenManageSalesmen={() => setIsManageSalesmenOpen(true)}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onOpenManageVendors={() => setActiveTab('manage-vendors')}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Day Headline & Filter Warning */}
-        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold tracking-tight text-zinc-900">
-                Sales Ledger for {formatDisplayDate(currentDateKey)}
-              </h2>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <Cloud className="w-3 h-3 text-emerald-600" />
-                Live Cloud Sync
-              </span>
-            </div>
-            <p className="text-xs text-zinc-500">
-              Changes sync in real-time across all your devices and browser sessions
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+        {/* Navigation Tabs Bar for easy switching */}
+        <div className="flex items-center justify-between border-b border-zinc-200/80 pb-3 gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-zinc-200/70 p-1 rounded-xl">
             <button
               type="button"
-              id="btn-manage-team-pill"
-              onClick={() => setIsManageSalesmenOpen(true)}
-              className="text-xs font-semibold text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              id="tab-btn-ledger"
+              onClick={() => setActiveTab('ledger')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'ledger'
+                  ? 'bg-white text-zinc-900 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
             >
-              <Users className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Team: {knownSalesmen.length} salesmen</span>
+              <FileSpreadsheet className="w-4 h-4 text-zinc-600" />
+              <span>Sales Ledger</span>
             </button>
 
-            {(selectedPaymentFilter !== 'all' || selectedSalesman !== 'all') && (
-              <div className="text-xs text-zinc-600 bg-zinc-200/80 px-2.5 py-1 rounded-md flex items-center gap-1.5">
-                <span>Filtered:</span>
-                {selectedPaymentFilter !== 'all' && (
-                  <span className="font-bold uppercase text-zinc-900">{selectedPaymentFilter}</span>
-                )}
-                {selectedSalesman !== 'all' && (
-                  <span className="font-bold text-zinc-900">{selectedSalesman}</span>
-                )}
+            <button
+              type="button"
+              id="tab-btn-vendor-check"
+              onClick={() => setActiveTab('vendor-check')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'vendor-check'
+                  ? 'bg-white text-zinc-900 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <ArrowLeftRight className="w-4 h-4 text-amber-600" />
+              <span>Vendor Portal</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold">
+                Weekly & Daily (Sun–Sat)
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-manage-vendors"
+              onClick={() => setActiveTab('manage-vendors')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'manage-vendors'
+                  ? 'bg-white text-zinc-900 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <Users className="w-4 h-4 text-emerald-600" />
+              <span>Manage Vendors</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">
+                Assign Colors
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <Cloud className="w-3 h-3 text-emerald-600" />
+              Live Cloud Sync Active
+            </span>
+          </div>
+        </div>
+
+        {/* TAB 1: Main Sales Ledger View */}
+        {activeTab === 'ledger' && (
+          <div className="space-y-6 animate-fade-in" id="tab-content-ledger">
+            {/* Day Headline & Filter Warning */}
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight text-zinc-900">
+                  Sales Ledger for {formatDisplayDate(currentDateKey)}
+                </h2>
+                <p className="text-xs text-zinc-500">
+                  Total gross sales, payment breakdown, and vendor performance summary
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedPaymentFilter('all');
-                    setSelectedSalesman('all');
-                  }}
-                  className="ml-1 text-zinc-700 hover:text-zinc-900 underline cursor-pointer"
+                  id="btn-switch-to-vendor-check"
+                  onClick={() => setActiveTab('vendor-check')}
+                  className="text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                 >
-                  Reset
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
+                  <span>View Vendor Weekly (Sun–Sat) & Daily</span>
                 </button>
+
+                {(selectedPaymentFilter !== 'all' || selectedVendor !== 'all') && (
+                  <div className="text-xs text-zinc-600 bg-zinc-200/80 px-2.5 py-1 rounded-md flex items-center gap-1.5">
+                    <span>Filtered:</span>
+                    {selectedPaymentFilter !== 'all' && (
+                      <span className="font-bold uppercase text-zinc-900">{selectedPaymentFilter}</span>
+                    )}
+                    {selectedVendor !== 'all' && (
+                      <span className="font-bold text-zinc-900">{selectedVendor}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPaymentFilter('all');
+                        setSelectedVendor('all');
+                      }}
+                      className="ml-1 text-zinc-700 hover:text-zinc-900 underline cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Daily KPI & Payment Breakdown Cards */}
-        <DailyStats
-          summary={summary}
-          selectedPaymentFilter={selectedPaymentFilter}
-          onSelectPaymentFilter={setSelectedPaymentFilter}
-        />
-
-        {/* 2-Column Responsive Layout: New Sale Form (Left) & Ledger Records (Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Form to Track Sale */}
-          <div className="lg:col-span-5 space-y-6">
-            <NewSaleForm
-              currentDateKey={currentDateKey}
-              knownSalesmen={knownSalesmen}
-              onSubmitSale={handleRecordSale}
-              onAddSalesman={handleAddSalesman}
-              onOpenManageSalesmen={() => setIsManageSalesmenOpen(true)}
-            />
-
-            {/* Salesman Performance Leaderboard */}
-            <SalesmanBreakdown
-              salesmen={summary.salesmen}
-              selectedSalesman={selectedSalesman}
-              onSelectSalesman={setSelectedSalesman}
-              totalDayRevenue={summary.totalRevenue}
-            />
-          </div>
-
-          {/* Right Column: Live Cloud Ledger */}
-          <div className="lg:col-span-7 space-y-6">
-            <SalesList
-              sales={sales}
-              allSalesmen={knownSalesmen}
+            {/* Daily KPI & Payment Breakdown Cards */}
+            <DailyStats
+              summary={summary}
               selectedPaymentFilter={selectedPaymentFilter}
               onSelectPaymentFilter={setSelectedPaymentFilter}
-              selectedSalesman={selectedSalesman}
-              onSelectSalesman={setSelectedSalesman}
-              onEditSale={handleEditSale}
-              onDeleteSale={handleDeleteSale}
+            />
+
+            {/* Vendor Performance Leaderboard with Assigned Colors & Trade Taken In */}
+            <VendorBreakdown
+              vendors={summary.vendors}
+              selectedVendor={selectedVendor}
+              onSelectVendor={setSelectedVendor}
+              totalDayRevenue={summary.totalRevenue}
+            />
+
+            {/* USER REQUIREMENT: Record New Sale box placed ABOVE the Sales Ledger */}
+            <div className="space-y-6" id="ledger-stacked-container">
+              {/* Record New Sale Form Box situated DIRECTLY ABOVE Sales Ledger */}
+              <div id="section-new-sale-box-above-ledger">
+                <NewSaleForm
+                  currentDateKey={currentDateKey}
+                  knownVendors={knownVendors}
+                  onSubmitSale={handleRecordSale}
+                  onAddVendor={handleAddVendor}
+                  onOpenManageVendors={() => setActiveTab('manage-vendors')}
+                />
+              </div>
+
+              {/* Sales Ledger Table / List */}
+              <div id="section-sales-ledger-list">
+                <SalesList
+                  sales={sales}
+                  allVendors={knownVendors}
+                  selectedPaymentFilter={selectedPaymentFilter}
+                  onSelectPaymentFilter={setSelectedPaymentFilter}
+                  selectedVendor={selectedVendor}
+                  onSelectVendor={setSelectedVendor}
+                  onEditSale={handleEditSale}
+                  onDeleteSale={handleDeleteSale}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Vendor Daily Check Tab (Sales & How much Trade taken in) */}
+        {activeTab === 'vendor-check' && (
+          <div className="animate-fade-in" id="tab-content-vendor-check">
+            <VendorDayCheck
+              currentDateKey={currentDateKey}
+              allVendors={knownVendors}
+              sales={sales}
+              summary={summary}
             />
           </div>
-        </div>
+        )}
+
+        {/* TAB 3: Manage Vendors Tab (Assign a colour to each vendor) */}
+        {activeTab === 'manage-vendors' && (
+          <div className="animate-fade-in" id="tab-content-manage-vendors">
+            <ManageVendorsTab
+              vendors={knownVendors}
+              onAddVendor={handleAddVendor}
+              onRemoveVendor={handleRemoveVendor}
+              onUpdateVendorColor={handleUpdateVendorColor}
+            />
+          </div>
+        )}
       </main>
 
       {/* Edit Sale Modal */}
       <EditSaleModal
         sale={editingSale}
         isOpen={isEditModalOpen}
+        vendors={knownVendors}
         onClose={() => {
           setIsEditModalOpen(false);
           setEditingSale(null);
@@ -227,13 +332,13 @@ export default function App() {
         onSave={handleSaveEdit}
       />
 
-      {/* Manage Salesmen Modal (Add/Remove Salesmen) */}
-      <ManageSalesmenModal
-        isOpen={isManageSalesmenOpen}
-        onClose={() => setIsManageSalesmenOpen(false)}
-        salesmen={knownSalesmen}
-        onAddSalesman={handleAddSalesman}
-        onRemoveSalesman={handleRemoveSalesman}
+      {/* Manage Vendors Modal (Accessible from any quick-button) */}
+      <ManageVendorsModal
+        isOpen={isManageVendorsOpen}
+        onClose={() => setIsManageVendorsOpen(false)}
+        vendors={knownVendors}
+        onAddVendor={handleAddVendor}
+        onRemoveVendor={handleRemoveVendor}
       />
 
       {/* Footer */}
@@ -244,7 +349,7 @@ export default function App() {
             <span>Daily Sales Tracker • Active Record Date: <strong className="text-zinc-700">{currentDateKey}</strong></span>
           </div>
           <div className="flex items-center gap-3">
-            <span>Payment channels: Cash • Card • Trade</span>
+            <span>Channels: Cash • Card • Trade</span>
             <span>•</span>
             <span className="text-emerald-700 font-medium">Cloud Database Connected (Multi-device)</span>
           </div>
@@ -253,3 +358,4 @@ export default function App() {
     </div>
   );
 }
+
