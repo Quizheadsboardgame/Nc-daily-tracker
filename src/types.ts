@@ -55,6 +55,39 @@ export interface DaySummary {
   salesmen: VendorStat[];
 }
 
+export interface TradeRecord {
+  id: string;
+  vendorName: string; // Vendor who accepted / is holding the trade
+  itemDescription: string; // Item traded in description
+  tradeValue: number; // Valuation in GBP (£)
+  dateKey: string; // YYYY-MM-DD
+  timestamp: number; // Milliseconds epoch
+  isStandalone?: boolean; // True if logged directly without a sale
+  soldItemDescription?: string; // If against a sale, what was sold
+  saleAmount?: number; // If against a sale, the sale price
+  associatedSaleId?: string; // Link to SaleRecord if against a sale
+  customerName?: string;
+  notes?: string;
+}
+
+export interface TradeVendorStat {
+  vendorName: string;
+  color: string;
+  totalTradeValue: number;
+  tradeCount: number;
+}
+
+export interface TradeDaySummary {
+  dateKey: string;
+  totalTradeValue: number;
+  totalCount: number;
+  standaloneCount: number;
+  againstSaleCount: number;
+  averageTradeValue: number;
+  topVendor?: TradeVendorStat;
+  vendorStats: TradeVendorStat[];
+}
+
 export interface FilterOptions {
   searchQuery: string;
   paymentMethod: 'all' | PaymentMethod;

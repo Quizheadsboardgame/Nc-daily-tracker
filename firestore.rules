@@ -9,5 +9,9 @@ service cloud.firestore {
     match /salesmen/{salesmanId} {
       allow read, write: if true;
     }
+    // Trade records and trade-in items synced across all terminals
+    match /trades/{tradeId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -6,11 +6,12 @@ import { VendorBreakdown } from './components/SalesmanBreakdown';
 import { SalesList } from './components/SalesList';
 import { VendorDayCheck } from './components/VendorDayCheck';
 import { ManageVendorsTab } from './components/ManageVendorsTab';
+import { TradesTab } from './components/TradesTab';
 import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2 } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -143,36 +144,63 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Navigation Tabs Bar for easy switching */}
-        <div className="flex items-center justify-between border-b border-zinc-200/80 pb-3 gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-zinc-200/70 p-1 rounded-xl">
+        <div className="flex items-center justify-between border-b border-zinc-250 pb-3.5 gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs">
             <button
               type="button"
               id="tab-btn-ledger"
               onClick={() => setActiveTab('ledger')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'ledger'
-                  ? 'bg-white text-zinc-900 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <FileSpreadsheet className="w-4 h-4 text-zinc-600" />
+              <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'ledger' ? 'text-emerald-400' : 'text-zinc-500'}`} />
               <span>Sales Ledger</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-trades"
+              onClick={() => setActiveTab('trades')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'trades'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span>Trades</span>
+              {cloudDb.getTradesForDay(currentDateKey).length > 0 && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                  activeTab === 'trades'
+                    ? 'bg-amber-400 text-zinc-950'
+                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                }`}>
+                  {cloudDb.getTradesForDay(currentDateKey).length}
+                </span>
+              )}
             </button>
 
             <button
               type="button"
               id="tab-btn-vendor-check"
               onClick={() => setActiveTab('vendor-check')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'vendor-check'
-                  ? 'bg-white text-zinc-900 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <ArrowLeftRight className="w-4 h-4 text-amber-600" />
+              <Building2 className={`w-4 h-4 ${activeTab === 'vendor-check' ? 'text-amber-400' : 'text-amber-600'}`} />
               <span>Vendor Portal</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold">
-                Weekly & Daily (Sun–Sat)
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeTab === 'vendor-check'
+                  ? 'bg-amber-400 text-zinc-950'
+                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+              }`}>
+                Weekly (Sun–Sat)
               </span>
             </button>
 
@@ -180,23 +208,28 @@ export default function App() {
               type="button"
               id="tab-btn-manage-vendors"
               onClick={() => setActiveTab('manage-vendors')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'manage-vendors'
-                  ? 'bg-white text-zinc-900 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <Users className="w-4 h-4 text-emerald-600" />
+              <Users className={`w-4 h-4 ${activeTab === 'manage-vendors' ? 'text-emerald-400' : 'text-emerald-700'}`} />
               <span>Manage Vendors</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">
-                Assign Colors
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeTab === 'manage-vendors'
+                  ? 'bg-emerald-400 text-zinc-950'
+                  : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+              }`}>
+                Colors
               </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Cloud className="w-3 h-3 text-emerald-600" />
+          <div className="flex items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <Cloud className="w-3.5 h-3.5 text-emerald-600" />
               Live Cloud Sync Active
             </span>
           </div>
@@ -206,13 +239,13 @@ export default function App() {
         {activeTab === 'ledger' && (
           <div className="space-y-6 animate-fade-in" id="tab-content-ledger">
             {/* Day Headline & Filter Warning */}
-            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold tracking-tight text-zinc-900">
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-950">
                   Sales Ledger for {formatDisplayDate(currentDateKey)}
                 </h2>
-                <p className="text-xs text-zinc-500">
-                  Total gross sales, payment breakdown, and vendor performance summary
+                <p className="text-xs font-medium text-zinc-500 mt-1">
+                  Live gross sales, payment breakdown, and vendor performance summary
                 </p>
               </div>
 
@@ -221,20 +254,24 @@ export default function App() {
                   type="button"
                   id="btn-switch-to-vendor-check"
                   onClick={() => setActiveTab('vendor-check')}
-                  className="text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  className="text-xs font-bold text-amber-950 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
                 >
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
-                  <span>View Vendor Weekly (Sun–Sat) & Daily</span>
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Vendor Weekly (Sun–Sat) & Daily</span>
                 </button>
 
                 {(selectedPaymentFilter !== 'all' || selectedVendor !== 'all') && (
-                  <div className="text-xs text-zinc-600 bg-zinc-200/80 px-2.5 py-1 rounded-md flex items-center gap-1.5">
-                    <span>Filtered:</span>
+                  <div className="text-xs font-semibold text-zinc-700 bg-white border border-zinc-300 px-3 py-1.5 rounded-xl shadow-2xs flex items-center gap-2">
+                    <span className="text-zinc-400 uppercase text-[10px] tracking-wider font-bold">Filtered:</span>
                     {selectedPaymentFilter !== 'all' && (
-                      <span className="font-bold uppercase text-zinc-900">{selectedPaymentFilter}</span>
+                      <span className="font-extrabold uppercase text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200">
+                        {selectedPaymentFilter}
+                      </span>
                     )}
                     {selectedVendor !== 'all' && (
-                      <span className="font-bold text-zinc-900">{selectedVendor}</span>
+                      <span className="font-extrabold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200">
+                        {selectedVendor}
+                      </span>
                     )}
                     <button
                       type="button"
@@ -242,7 +279,7 @@ export default function App() {
                         setSelectedPaymentFilter('all');
                         setSelectedVendor('all');
                       }}
-                      className="ml-1 text-zinc-700 hover:text-zinc-900 underline cursor-pointer"
+                      className="ml-1 text-zinc-900 hover:text-rose-600 font-bold underline cursor-pointer"
                     >
                       Reset
                     </button>
@@ -259,6 +296,7 @@ export default function App() {
                 onSubmitSale={handleRecordSale}
                 onAddVendor={handleAddVendor}
                 onOpenManageVendors={() => setActiveTab('manage-vendors')}
+                onNavigateToTrades={() => setActiveTab('trades')}
               />
             </div>
 
@@ -293,7 +331,19 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Vendor Daily Check Tab (Sales & How much Trade taken in) */}
+        {/* TAB 2: Dedicated Trades Tab (Independent trade entries & valuations) */}
+        {activeTab === 'trades' && (
+          <div className="animate-fade-in" id="tab-content-trades">
+            <TradesTab
+              currentDateKey={currentDateKey}
+              onDateChange={setCurrentDateKey}
+              knownVendors={knownVendors}
+              onSwitchToLedger={() => setActiveTab('ledger')}
+            />
+          </div>
+        )}
+
+        {/* TAB 3: Vendor Daily Check Tab (Sales & How much Trade taken in) */}
         {activeTab === 'vendor-check' && (
           <div className="animate-fade-in" id="tab-content-vendor-check">
             <VendorDayCheck

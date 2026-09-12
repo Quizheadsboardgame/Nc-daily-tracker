@@ -318,62 +318,64 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             </div>
 
             {/* Sunday-to-Saturday 7-Day Filter & Status Strip */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {currentWeek.days.map((day) => {
-                const dayStat = weekData?.dayBreakdown.find((d) => d.dateKey === day.dateKey);
-                const isDaySelected = weekFilterDayKey === day.dateKey;
-                const hasSales = (dayStat?.totalRevenue || 0) > 0;
-                const hasTrade = (dayStat?.tradeTakenInAmount || 0) > 0;
+            <div className="overflow-x-auto pb-1.5 -mx-1 px-1">
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 min-w-[580px] sm:min-w-0">
+                {currentWeek.days.map((day) => {
+                  const dayStat = weekData?.dayBreakdown.find((d) => d.dateKey === day.dateKey);
+                  const isDaySelected = weekFilterDayKey === day.dateKey;
+                  const hasSales = (dayStat?.totalRevenue || 0) > 0;
+                  const hasTrade = (dayStat?.tradeTakenInAmount || 0) > 0;
 
-                return (
-                  <button
-                    key={day.dateKey}
-                    type="button"
-                    onClick={() => setWeekFilterDayKey(isDaySelected ? 'all' : day.dateKey)}
-                    className={`p-2 rounded-xl text-center transition-all cursor-pointer border ${
-                      isDaySelected
-                        ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-500/30 shadow-xs'
-                        : day.isToday
-                        ? 'bg-blue-50/80 border-blue-300 text-blue-950 font-bold'
-                        : 'bg-zinc-50/80 hover:bg-zinc-100/80 border-zinc-200 text-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      <span className={`text-[11px] font-extrabold uppercase ${isDaySelected ? 'text-white' : 'text-zinc-600'}`}>
-                        {day.dayName}
-                      </span>
-                      {day.isToday && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Today" />
-                      )}
-                    </div>
-                    <span className={`text-[10px] block font-medium ${isDaySelected ? 'text-blue-200' : 'text-zinc-500'}`}>
-                      {day.formattedDate}
-                    </span>
-
-                    <div className="mt-1">
-                      <span className={`text-xs font-black block leading-tight ${
-                        isDaySelected 
-                          ? 'text-white' 
-                          : hasSales 
-                          ? 'text-emerald-700' 
-                          : 'text-zinc-400'
-                      }`}>
-                        {hasSales ? formatCurrency(dayStat!.totalRevenue) : '—'}
-                      </span>
-
-                      {hasTrade && (
-                        <span className={`text-[9px] font-extrabold px-1 rounded block mt-0.5 ${
-                          isDaySelected
-                            ? 'bg-amber-400 text-zinc-900'
-                            : 'bg-amber-100 text-amber-900'
-                        }`} title={`Trade taken in: ${formatCurrency(dayStat!.tradeTakenInAmount)}`}>
-                          Trade: {formatCurrency(dayStat!.tradeTakenInAmount)}
+                  return (
+                    <button
+                      key={day.dateKey}
+                      type="button"
+                      onClick={() => setWeekFilterDayKey(isDaySelected ? 'all' : day.dateKey)}
+                      className={`p-2 rounded-xl text-center transition-all cursor-pointer border ${
+                        isDaySelected
+                          ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-500/30 shadow-xs'
+                          : day.isToday
+                          ? 'bg-blue-50/80 border-blue-300 text-blue-950 font-bold'
+                          : 'bg-zinc-50/80 hover:bg-zinc-100/80 border-zinc-200 text-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span className={`text-[11px] font-extrabold uppercase ${isDaySelected ? 'text-white' : 'text-zinc-600'}`}>
+                          {day.dayName}
                         </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+                        {day.isToday && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Today" />
+                        )}
+                      </div>
+                      <span className={`text-[10px] block font-medium ${isDaySelected ? 'text-blue-200' : 'text-zinc-500'}`}>
+                        {day.formattedDate}
+                      </span>
+
+                      <div className="mt-1">
+                        <span className={`text-xs font-black block leading-tight ${
+                          isDaySelected 
+                            ? 'text-white' 
+                            : hasSales 
+                            ? 'text-emerald-700' 
+                            : 'text-zinc-400'
+                        }`}>
+                          {hasSales ? formatCurrency(dayStat!.totalRevenue) : '—'}
+                        </span>
+
+                        {hasTrade && (
+                          <span className={`text-[9px] font-extrabold px-1 rounded block mt-0.5 ${
+                            isDaySelected
+                              ? 'bg-amber-400 text-zinc-900'
+                              : 'bg-amber-100 text-amber-900'
+                          }`} title={`Trade taken in: ${formatCurrency(dayStat!.tradeTakenInAmount)}`}>
+                            Trade: {formatCurrency(dayStat!.tradeTakenInAmount)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {weekFilterDayKey !== 'all' && (

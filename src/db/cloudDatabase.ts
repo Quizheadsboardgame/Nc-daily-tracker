@@ -12,7 +12,7 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
-import { SaleRecord, PaymentMethod, DaySummary, SalesmanStat } from '../types';
+import { SaleRecord, PaymentMethod, DaySummary, SalesmanStat, TradeRecord, TradeDaySummary, TradeVendorStat } from '../types';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 export const DEFAULT_PRELOADED_SALESMEN = DEFAULT_PRELOADED_VENDORS;
@@ -42,6 +42,7 @@ export const PRESET_VENDOR_PALETTE = [
 ];
 
 const STORAGE_SALES_KEY = 'daily_sales_tracker_real_sales_v5';
+const STORAGE_TRADES_KEY = 'daily_sales_tracker_real_trades_v5';
 const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v5';
 const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v5';
 
@@ -189,6 +190,7 @@ export function shiftWeek(startDateKey: string, weekDelta: number): WeekRangeInf
  */
 class CloudSalesDatabase {
   private salesCache: Map<string, SaleRecord> = new Map();
+  private tradesCache: Map<string, TradeRecord> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private listeners: Set<() => void> = new Set();
@@ -242,6 +244,16 @@ class CloudSalesDatabase {
           }
         }
       }
+
+      const storedTrades = localStorage.getItem(STORAGE_TRADES_KEY);
+      if (storedTrades) {
+        const parsedTrades = JSON.parse(storedTrades);
+        if (Array.isArray(parsedTrades) && parsedTrades.length > 0) {
+          for (const item of parsedTrades) {
+            this.tradesCache.set(item.id, item);
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -256,6 +268,7 @@ class CloudSalesDatabase {
       });
       localStorage.setItem(STORAGE_VENDOR_COLORS_KEY, JSON.stringify(colorsObj));
       localStorage.setItem(STORAGE_SALES_KEY, JSON.stringify(Array.from(this.salesCache.values())));
+      localStorage.setItem(STORAGE_TRADES_KEY, JSON.stringify(Array.from(this.tradesCache.values())));
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
     }
@@ -345,6 +358,39 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Sales Firestore listener error:', error);
+        }
+      );
+
+      // 3. Real-time listener for Trades collection across all devices
+      const tradesCol = collection(db, 'trades');
+      const tradesQuery = query(tradesCol, orderBy('timestamp', 'desc'));
+      onSnapshot(
+        tradesQuery,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.tradesCache.clear();
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            this.tradesCache.set(docSnap.id, {
+              id: docSnap.id,
+              vendorName: data.vendorName || '',
+              itemDescription: data.itemDescription || '',
+              tradeValue: Number(data.tradeValue) || 0,
+              dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+              timestamp: data.timestamp || Date.now(),
+              isStandalone: data.isStandalone !== undefined ? Boolean(data.isStandalone) : true,
+              soldItemDescription: data.soldItemDescription || undefined,
+              saleAmount: data.saleAmount !== undefined && data.saleAmount !== null ? Number(data.saleAmount) : undefined,
+              associatedSaleId: data.associatedSaleId || undefined,
+              customerName: data.customerName || undefined,
+              notes: data.notes || undefined,
+            });
+          });
+
+          this.notify();
+        },
+        (error) => {
+          console.warn('Trades Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -556,6 +602,24 @@ class CloudSalesDatabase {
         timestamp: record.timestamp,
         dateKey: record.dateKey,
       });
+
+      // If this sale was transacted with trade, automatically record the trade item
+      if (record.paymentMethod === 'trade') {
+        const tradeVal = record.tradeValue !== undefined ? record.tradeValue : record.amount;
+        const tradeItem = record.tradeItemDescription?.trim() || record.tradeDetails?.trim() || `Trade against ${record.itemDescription}`;
+        const tradeVendor = record.tradeAcceptingVendor?.trim() || record.salesmanName;
+        await this.insertTrade({
+          vendorName: tradeVendor,
+          itemDescription: tradeItem,
+          tradeValue: tradeVal,
+          dateKey: record.dateKey,
+          isStandalone: false,
+          soldItemDescription: record.itemDescription,
+          saleAmount: record.amount,
+          associatedSaleId: record.id,
+          notes: record.notes,
+        });
+      }
     } catch (e) {
       console.warn('Sale saved to memory/localStorage; Firestore sync pending:', e);
     }
@@ -618,6 +682,260 @@ class CloudSalesDatabase {
     }
   }
 
+  // --- Dedicated Trades CRUD & Methods ---
+
+  public async insertTrade(input: {
+    vendorName: string;
+    itemDescription: string;
+    tradeValue: number;
+    dateKey?: string;
+    isStandalone?: boolean;
+    soldItemDescription?: string;
+    saleAmount?: number;
+    associatedSaleId?: string;
+    customerName?: string;
+    notes?: string;
+  }): Promise<TradeRecord> {
+    const timestamp = Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
+    const cleanVendor = input.vendorName.trim();
+    const cleanItem = input.itemDescription.trim();
+    const val = Math.round(Number(input.tradeValue) * 100) / 100;
+    const isStandalone = input.isStandalone !== undefined ? input.isStandalone : !input.associatedSaleId;
+
+    // Check if duplicate for same sale
+    if (input.associatedSaleId) {
+      for (const existing of this.tradesCache.values()) {
+        if (existing.associatedSaleId === input.associatedSaleId) {
+          return existing;
+        }
+      }
+    }
+
+    const id = `trade_${timestamp}_${Math.random().toString(36).slice(2, 7)}`;
+    const record: TradeRecord = {
+      id,
+      vendorName: cleanVendor,
+      itemDescription: cleanItem,
+      tradeValue: isNaN(val) ? 0 : val,
+      dateKey,
+      timestamp,
+      isStandalone,
+      soldItemDescription: input.soldItemDescription?.trim() || undefined,
+      saleAmount: input.saleAmount !== undefined && !isNaN(Number(input.saleAmount)) ? Math.round(Number(input.saleAmount) * 100) / 100 : undefined,
+      associatedSaleId: input.associatedSaleId || undefined,
+      customerName: input.customerName?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+    };
+
+    this.tradesCache.set(id, record);
+
+    if (cleanVendor && !this.salesmenList.includes(cleanVendor)) {
+      this.salesmenList.push(cleanVendor);
+      this.salesmenList.sort();
+    }
+
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'trades', id), {
+        vendorName: record.vendorName,
+        itemDescription: record.itemDescription,
+        tradeValue: record.tradeValue,
+        dateKey: record.dateKey,
+        timestamp: record.timestamp,
+        isStandalone: record.isStandalone ?? true,
+        soldItemDescription: record.soldItemDescription || null,
+        saleAmount: record.saleAmount ?? null,
+        associatedSaleId: record.associatedSaleId || null,
+        customerName: record.customerName || null,
+        notes: record.notes || null,
+      });
+    } catch (e) {
+      console.warn('Trade saved to memory/localStorage; Firestore sync pending:', e);
+    }
+
+    return record;
+  }
+
+  public async updateTrade(id: string, updates: Partial<Omit<TradeRecord, 'id'>>) {
+    const existing = this.tradesCache.get(id);
+    if (!existing) return;
+
+    const updated: TradeRecord = {
+      ...existing,
+      ...updates,
+      vendorName: updates.vendorName !== undefined ? updates.vendorName.trim() : existing.vendorName,
+      itemDescription: updates.itemDescription !== undefined ? updates.itemDescription.trim() : existing.itemDescription,
+      tradeValue: updates.tradeValue !== undefined ? Math.round(Number(updates.tradeValue) * 100) / 100 : existing.tradeValue,
+      customerName: updates.customerName !== undefined ? (updates.customerName ? updates.customerName.trim() : undefined) : existing.customerName,
+      notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
+    };
+
+    this.tradesCache.set(id, updated);
+    this.notify();
+
+    try {
+      const firestoreUpdates: Record<string, any> = {};
+      if (updates.vendorName !== undefined) firestoreUpdates.vendorName = updates.vendorName.trim();
+      if (updates.itemDescription !== undefined) firestoreUpdates.itemDescription = updates.itemDescription.trim();
+      if (updates.tradeValue !== undefined) firestoreUpdates.tradeValue = Math.round(Number(updates.tradeValue) * 100) / 100;
+      if (updates.customerName !== undefined) firestoreUpdates.customerName = updates.customerName ? updates.customerName.trim() : null;
+      if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
+      if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
+      if (updates.isStandalone !== undefined) firestoreUpdates.isStandalone = updates.isStandalone;
+
+      await updateDoc(doc(db, 'trades', id), firestoreUpdates);
+    } catch (e) {
+      console.warn('Trade updated locally; Firestore sync pending:', e);
+    }
+  }
+
+  public async deleteTrade(id: string) {
+    this.tradesCache.delete(id);
+    this.notify();
+
+    try {
+      await deleteDoc(doc(db, 'trades', id));
+    } catch (e) {
+      console.warn('Trade deleted locally; Firestore sync pending:', e);
+    }
+  }
+
+  public getTradesForDay(dateKey: string): TradeRecord[] {
+    const list: TradeRecord[] = [];
+    const seenSaleIds = new Set<string>();
+
+    this.tradesCache.forEach((trade) => {
+      if (trade.dateKey === dateKey) {
+        list.push(trade);
+        if (trade.associatedSaleId) {
+          seenSaleIds.add(trade.associatedSaleId);
+        }
+      }
+    });
+
+    // Also include any sales with paymentMethod === 'trade' not already in tradesCache
+    this.salesCache.forEach((sale) => {
+      if (sale.dateKey === dateKey && sale.paymentMethod === 'trade') {
+        if (!seenSaleIds.has(sale.id)) {
+          const tradeVal = sale.tradeValue !== undefined ? sale.tradeValue : sale.amount;
+          const tradeItem = sale.tradeItemDescription?.trim() || sale.tradeDetails?.trim() || `Trade against ${sale.itemDescription}`;
+          const tradeVendor = sale.tradeAcceptingVendor?.trim() || sale.salesmanName;
+          list.push({
+            id: `synthetic_${sale.id}`,
+            vendorName: tradeVendor,
+            itemDescription: tradeItem,
+            tradeValue: tradeVal,
+            dateKey: sale.dateKey,
+            timestamp: sale.timestamp,
+            isStandalone: false,
+            soldItemDescription: sale.itemDescription,
+            saleAmount: sale.amount,
+            associatedSaleId: sale.id,
+            notes: sale.notes,
+          });
+        }
+      }
+    });
+
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public getDailyTradeSummary(dateKey: string): TradeDaySummary {
+    const trades = this.getTradesForDay(dateKey);
+    let totalTradeValue = 0;
+    let standaloneCount = 0;
+    let againstSaleCount = 0;
+    const vendorMap = new Map<string, { totalVal: number; count: number }>();
+
+    for (const t of trades) {
+      totalTradeValue += t.tradeValue;
+      if (t.isStandalone) {
+        standaloneCount++;
+      } else {
+        againstSaleCount++;
+      }
+
+      const existing = vendorMap.get(t.vendorName) || { totalVal: 0, count: 0 };
+      existing.totalVal += t.tradeValue;
+      existing.count += 1;
+      vendorMap.set(t.vendorName, existing);
+    }
+
+    const vendorStats: TradeVendorStat[] = Array.from(vendorMap.entries()).map(([vendorName, data]) => ({
+      vendorName,
+      color: this.getVendorColor(vendorName),
+      totalTradeValue: Math.round(data.totalVal * 100) / 100,
+      tradeCount: data.count,
+    })).sort((a, b) => b.totalTradeValue - a.totalTradeValue);
+
+    const totalCount = trades.length;
+    const averageTradeValue = totalCount > 0 ? Math.round((totalTradeValue / totalCount) * 100) / 100 : 0;
+
+    return {
+      dateKey,
+      totalTradeValue: Math.round(totalTradeValue * 100) / 100,
+      totalCount,
+      standaloneCount,
+      againstSaleCount,
+      averageTradeValue,
+      topVendor: vendorStats[0],
+      vendorStats,
+    };
+  }
+
+  public exportTradesToCsv(dateKey: string, vendorName?: string): string {
+    const list = this.getTradesForDay(dateKey);
+    const filterVendor = vendorName?.trim().toLowerCase();
+    const filtered = filterVendor ? list.filter((t) => t.vendorName.toLowerCase() === filterVendor) : list;
+
+    const headers = [
+      'Trade ID',
+      'Date',
+      'Time',
+      'Vendor Taking In',
+      'Item Traded In',
+      'Trade Valuation (£)',
+      'Trade Category',
+      'Sold Item (If Against Sale)',
+      'Sale Value (£)',
+      'Customer',
+      'Notes',
+    ];
+
+    const rows = filtered.map((t) => {
+      const time = new Date(t.timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+
+      const escape = (val: string | number | undefined | null) => {
+        if (val === undefined || val === null) return '""';
+        const s = String(val).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+
+      return [
+        escape(t.id),
+        escape(t.dateKey),
+        escape(time),
+        escape(t.vendorName),
+        escape(t.itemDescription),
+        t.tradeValue.toFixed(2),
+        escape(t.isStandalone ? 'Standalone Trade' : 'Against Sale'),
+        escape(t.soldItemDescription || ''),
+        t.saleAmount !== undefined ? t.saleAmount.toFixed(2) : '',
+        escape(t.customerName || ''),
+        escape(t.notes || ''),
+      ].join(',');
+    });
+
+    return [headers.join(','), ...rows].join('\n');
+  }
+
   public getSalesForDay(dateKey: string): SaleRecord[] {
     const list: SaleRecord[] = [];
     this.salesCache.forEach((rec) => {
@@ -633,6 +951,9 @@ class CloudSalesDatabase {
     const set = new Set<string>();
     set.add(today);
     this.salesCache.forEach((rec) => {
+      set.add(rec.dateKey);
+    });
+    this.tradesCache.forEach((rec) => {
       set.add(rec.dateKey);
     });
     return Array.from(set).sort((a, b) => b.localeCompare(a));

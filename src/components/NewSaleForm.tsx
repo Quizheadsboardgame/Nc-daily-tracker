@@ -23,6 +23,7 @@ interface NewSaleFormProps {
   onAddSalesman?: (name: string) => void;
   onOpenManageVendors?: () => void;
   onOpenManageSalesmen?: () => void;
+  onNavigateToTrades?: () => void;
 }
 
 export const NewSaleForm: React.FC<NewSaleFormProps> = ({
@@ -34,6 +35,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   onAddSalesman,
   onOpenManageVendors,
   onOpenManageSalesmen,
+  onNavigateToTrades,
 }) => {
   const knownVendors = propKnownVendors || propKnownSalesmen || [];
   const handleAddVendor = onAddVendor || onAddSalesman;
@@ -97,16 +99,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       errs.amount = 'Valid sale amount greater than £0 is required';
     }
 
-    if (paymentMethod === 'trade') {
-      if (!tradeAcceptingVendor.trim()) {
-        errs.tradeAcceptingVendor = 'Please select the vendor accepting the trade';
-      }
-      const numTradeValue = parseFloat(tradeValue);
-      if (!tradeValue || isNaN(numTradeValue) || numTradeValue < 0) {
-        errs.tradeValue = 'Please enter a valid trade-in value (£)';
-      }
-    }
-
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -116,15 +108,16 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     if (!validate()) return;
 
     const numAmount = parseFloat(amount);
-    const numTradeValue = paymentMethod === 'trade' ? parseFloat(tradeValue) || 0 : undefined;
+    const finalTradeVal = parseFloat(tradeValue) || numAmount;
+    const finalTradeVendor = tradeAcceptingVendor.trim() || vendorName.trim();
     const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
 
-    // Build human-readable trade details string
+    // Build human-readable trade details string if trade method
     let compiledTradeDetails: string | undefined = undefined;
     if (paymentMethod === 'trade') {
       const parts = [
-        `Accepted by: ${tradeAcceptingVendor.trim()}`,
-        `Value: £${numTradeValue !== undefined ? numTradeValue.toFixed(2) : '0.00'}`,
+        `Accepted by: ${finalTradeVendor}`,
+        `Valuation: £${finalTradeVal.toFixed(2)}`,
       ];
       if (tradeItemDescription.trim()) {
         parts.push(`Item: ${tradeItemDescription.trim()}`);
@@ -139,8 +132,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       amount: numAmount,
       paymentMethod,
       tradeDetails: compiledTradeDetails,
-      tradeAcceptingVendor: paymentMethod === 'trade' ? tradeAcceptingVendor.trim() : undefined,
-      tradeValue: numTradeValue,
+      tradeAcceptingVendor: paymentMethod === 'trade' ? finalTradeVendor : undefined,
+      tradeValue: paymentMethod === 'trade' ? finalTradeVal : undefined,
       tradeItemDescription: paymentMethod === 'trade' && tradeItemDescription.trim() ? tradeItemDescription.trim() : undefined,
       notes: notes.trim() || undefined,
     });
@@ -178,7 +171,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   return (
     <div
-      className="bg-white rounded-2xl border transition-all duration-300 overflow-hidden shadow-sm"
+      className="bg-white rounded-2xl border transition-all duration-300 overflow-hidden shadow-xs"
       id="card-new-sale-form"
       style={
         selectedVendorColor
@@ -188,14 +181,14 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               boxShadow: `0 0 0 1px ${selectedVendorColor}33, 0 8px 24px -4px ${selectedVendorColor}25`,
             }
           : {
-              borderColor: '#e4e4e7',
+              borderColor: '#d4d4d8',
               borderWidth: '1px',
             }
       }
     >
       {/* Form Header */}
       <div
-        className="px-5 py-4 border-b transition-all duration-300 flex items-center justify-between flex-wrap gap-2"
+        className="px-5 py-4 border-b transition-all duration-300 flex items-center justify-between flex-wrap gap-2.5"
         style={
           selectedVendorColor
             ? {
@@ -203,28 +196,28 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 borderBottomColor: `${selectedVendorColor}35`,
               }
             : {
-                background: 'linear-gradient(to right, #fafafa, #ffffff)',
-                borderBottomColor: '#f4f4f5',
+                background: 'linear-gradient(to right, #f4f4f5, #ffffff)',
+                borderBottomColor: '#e4e4e7',
               }
         }
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <div
-            className="p-2 rounded-lg transition-all duration-300 shadow-2xs"
+            className="p-2.5 rounded-xl transition-all duration-300 shadow-2xs font-bold"
             style={
               selectedVendorColor
                 ? { backgroundColor: selectedVendorColor, color: '#ffffff' }
-                : { backgroundColor: '#d1fae5', color: '#065f46' }
+                : { backgroundColor: '#18181b', color: '#34d399' }
             }
           >
             <Plus className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-bold text-zinc-900">Record New Sale</h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-base sm:text-lg font-black text-zinc-950 tracking-tight">Record New Sale</h2>
               {selectedVendorColor && vendorName && (
                 <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-2xs animate-fade-in"
+                  className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black text-white shadow-2xs animate-fade-in"
                   style={{ backgroundColor: selectedVendorColor }}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -232,7 +225,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500 font-medium mt-0.5">
               {vendorName
                 ? `Recording sale for ${vendorName} — box matched to vendor's color`
                 : "Add transaction into today's memory ledger"}
@@ -241,8 +234,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         </div>
 
         {showSuccessBadge && (
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium rounded-full animate-fade-in">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+          <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-black rounded-full shadow-2xs animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>Recorded: {lastRecordedInfo}</span>
           </div>
         )}
@@ -514,24 +507,24 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
         {/* Payment Method Selector: Cash, Card, Trade */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">
+          <label className="block text-xs font-black uppercase tracking-wider text-zinc-700 mb-2">
             Payment Method <span className="text-rose-500">*</span>
           </label>
-          <div className="grid grid-cols-3 gap-2.5" id="group-payment-methods">
+          <div className="grid grid-cols-3 gap-3" id="group-payment-methods">
             {/* Cash Option */}
             <button
               type="button"
               id="option-payment-cash"
               onClick={() => setPaymentMethod('cash')}
-              className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+              className={`flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
                 paymentMethod === 'cash'
-                  ? 'border-emerald-600 bg-emerald-50/80 text-emerald-900 ring-2 ring-emerald-500/20 shadow-xs'
-                  : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100/70 text-zinc-600'
+                  ? 'border-emerald-600 bg-emerald-600 text-white ring-2 ring-emerald-600/30 shadow-sm font-black'
+                  : 'border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-emerald-400 font-bold'
               }`}
             >
-              <Banknote className={`w-5 h-5 mb-1 ${paymentMethod === 'cash' ? 'text-emerald-700' : 'text-zinc-500'}`} />
-              <span className="text-xs font-bold">Cash</span>
-              <span className="text-[10px] text-zinc-500">Bills / Coins</span>
+              <Banknote className={`w-5 h-5 mb-1.5 ${paymentMethod === 'cash' ? 'text-white' : 'text-emerald-700'}`} />
+              <span className="text-xs font-black">Cash</span>
+              <span className={`text-[10px] ${paymentMethod === 'cash' ? 'text-emerald-100 font-semibold' : 'text-zinc-500'}`}>Bills / Coins</span>
             </button>
 
             {/* Card Option */}
@@ -539,15 +532,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="option-payment-card"
               onClick={() => setPaymentMethod('card')}
-              className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+              className={`flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
                 paymentMethod === 'card'
-                  ? 'border-blue-600 bg-blue-50/80 text-blue-900 ring-2 ring-blue-500/20 shadow-xs'
-                  : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100/70 text-zinc-600'
+                  ? 'border-blue-600 bg-blue-600 text-white ring-2 ring-blue-600/30 shadow-sm font-black'
+                  : 'border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-blue-400 font-bold'
               }`}
             >
-              <CreditCard className={`w-5 h-5 mb-1 ${paymentMethod === 'card' ? 'text-blue-700' : 'text-zinc-500'}`} />
-              <span className="text-xs font-bold">Card</span>
-              <span className="text-[10px] text-zinc-500">Credit / Debit</span>
+              <CreditCard className={`w-5 h-5 mb-1.5 ${paymentMethod === 'card' ? 'text-white' : 'text-blue-700'}`} />
+              <span className="text-xs font-black">Card</span>
+              <span className={`text-[10px] ${paymentMethod === 'card' ? 'text-blue-100 font-semibold' : 'text-zinc-500'}`}>Credit / Debit</span>
             </button>
 
             {/* Trade Option */}
@@ -555,116 +548,57 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="option-payment-trade"
               onClick={() => setPaymentMethod('trade')}
-              className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+              className={`flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
                 paymentMethod === 'trade'
-                  ? 'border-amber-600 bg-amber-50/80 text-amber-900 ring-2 ring-amber-500/20 shadow-xs'
-                  : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100/70 text-zinc-600'
+                  ? 'border-amber-600 bg-amber-600 text-white ring-2 ring-amber-600/30 shadow-sm font-black'
+                  : 'border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-amber-400 font-bold'
               }`}
             >
-              <ArrowLeftRight className={`w-5 h-5 mb-1 ${paymentMethod === 'trade' ? 'text-amber-700' : 'text-zinc-500'}`} />
-              <span className="text-xs font-bold">Trade</span>
-              <span className="text-[10px] text-zinc-500">Item Exchange</span>
+              <ArrowLeftRight className={`w-5 h-5 mb-1.5 ${paymentMethod === 'trade' ? 'text-white' : 'text-amber-700'}`} />
+              <span className="text-xs font-black">Trade</span>
+              <span className={`text-[10px] ${paymentMethod === 'trade' ? 'text-amber-100 font-semibold' : 'text-zinc-500'}`}>Item Exchange</span>
             </button>
           </div>
         </div>
 
-        {/* Conditional Trade Details Field */}
+        {/* Conditional Trade Notice & Link */}
         {paymentMethod === 'trade' && (
-          <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-3 animate-fade-in" id="panel-trade-in-details">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-amber-900">
-                <ArrowLeftRight className="w-4 h-4 text-amber-700" />
-                <span className="text-xs font-bold uppercase tracking-wider">Trade-in Details</span>
+          <div className="p-4 bg-amber-50/90 border border-amber-200 rounded-xl space-y-2.5 animate-fade-in" id="panel-trade-in-details">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2 text-amber-950">
+                <ArrowLeftRight className="w-4 h-4 text-amber-700 shrink-0" />
+                <span className="text-xs font-black uppercase tracking-wider">Trade Payment Selected</span>
               </div>
-              {vendorName && (
+
+              {onNavigateToTrades && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setTradeAcceptingVendor(vendorName);
-                    if (errors.tradeAcceptingVendor) setErrors((prev) => ({ ...prev, tradeAcceptingVendor: '' }));
-                  }}
-                  className="text-[11px] font-medium text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                  id="btn-link-to-trades-tab"
+                  onClick={onNavigateToTrades}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-950 bg-amber-200 hover:bg-amber-300 px-3 py-1 rounded-lg transition-colors cursor-pointer self-start sm:self-auto shadow-2xs"
                 >
-                  Same as vendor ({vendorName})
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-800" />
+                  <span>Open Trades Tab</span>
                 </button>
               )}
             </div>
 
-            {/* Vendor accepting trade - Drop Down Box */}
-            <div>
-              <label htmlFor="select-trade-accepting-vendor" className="block text-xs font-semibold text-amber-950 mb-1">
-                Vendor Accepting the Trade <span className="text-rose-500">*</span>
-              </label>
-              <select
-                id="select-trade-accepting-vendor"
-                value={tradeAcceptingVendor}
-                onChange={(e) => {
-                  setTradeAcceptingVendor(e.target.value);
-                  if (errors.tradeAcceptingVendor) setErrors((prev) => ({ ...prev, tradeAcceptingVendor: '' }));
-                }}
-                className={`w-full px-3 py-2 text-xs font-medium rounded-lg border bg-white focus:outline-hidden focus:ring-2 text-zinc-900 cursor-pointer ${
-                  errors.tradeAcceptingVendor
-                    ? 'border-rose-400 focus:ring-rose-200 text-rose-900'
-                    : 'border-amber-300 focus:border-amber-500 focus:ring-amber-500/20'
-                }`}
-              >
-                <option value="">-- Select Vendor Accepting Trade --</option>
-                {knownVendors.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-                {tradeAcceptingVendor && !knownVendors.includes(tradeAcceptingVendor) && (
-                  <option value={tradeAcceptingVendor}>{tradeAcceptingVendor}</option>
-                )}
-              </select>
-              {errors.tradeAcceptingVendor && (
-                <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.tradeAcceptingVendor}</p>
-              )}
-            </div>
+            <p className="text-xs text-amber-900 font-medium leading-relaxed">
+              This sale will be logged as a <strong>Trade</strong>. Full trade-in valuations, customer records, and standalone trades are managed on the dedicated <strong>Trades</strong> page.
+            </p>
 
-            {/* Trade-in Value */}
-            <div>
-              <label htmlFor="input-trade-value" className="block text-xs font-semibold text-amber-950 mb-1">
-                Trade-in Value (£) <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">£</span>
-                <input
-                  type="number"
-                  id="input-trade-value"
-                  step="0.01"
-                  min="0"
-                  value={tradeValue}
-                  onChange={(e) => {
-                    setTradeValue(e.target.value);
-                    if (errors.tradeValue) setErrors((prev) => ({ ...prev, tradeValue: '' }));
-                  }}
-                  placeholder="0.00"
-                  className={`w-full pl-7 pr-3 py-1.5 text-xs font-semibold rounded-lg border bg-white focus:outline-hidden focus:ring-2 text-zinc-900 ${
-                    errors.tradeValue
-                      ? 'border-rose-400 focus:ring-rose-200'
-                      : 'border-amber-300 focus:border-amber-500 focus:ring-amber-500/20'
-                  }`}
-                />
-              </div>
-              {errors.tradeValue && (
-                <p className="text-[11px] text-rose-600 font-medium mt-1">{errors.tradeValue}</p>
-              )}
-            </div>
-
-            {/* Traded In Item Description */}
+            {/* Quick Traded In Item Memo (Optional) */}
             <div>
               <label htmlFor="input-trade-item" className="block text-xs font-semibold text-amber-950 mb-1">
-                Item Traded In <span className="text-zinc-400 font-normal">(Optional description)</span>
+                Traded Item Memo <span className="text-zinc-500 font-normal">(Optional — full details managed on Trades tab)</span>
               </label>
               <input
                 type="text"
                 id="input-trade-item"
                 value={tradeItemDescription}
                 onChange={(e) => setTradeItemDescription(e.target.value)}
-                placeholder="e.g. 2018 Yamaha Acoustic Guitar, Serial #..."
-                className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-300/80 bg-white focus:outline-hidden focus:ring-2 focus:border-amber-500 focus:ring-amber-500/20 text-zinc-900"
+                placeholder="e.g. 2018 Yamaha Acoustic Guitar, iPhone 12, Gold Ring..."
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-300 bg-white focus:outline-hidden focus:ring-2 focus:border-amber-500 focus:ring-amber-500/20 text-zinc-900"
               />
             </div>
           </div>
