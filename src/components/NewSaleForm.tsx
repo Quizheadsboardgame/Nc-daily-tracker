@@ -179,11 +179,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             <h2 className="text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2">
               <span>Record New Sale</span>
               <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                Cash or Card
+                Cash • Card • Traded Out
               </span>
             </h2>
             <p className="text-[11px] text-zinc-500">
-              Till gross transactions • For traded-in cards, visit the independent{' '}
+              Till gross transactions • For customer cards traded in (cash payout / credit), use the independent{' '}
               <button
                 type="button"
                 onClick={onNavigateToTrades}
@@ -408,19 +408,24 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             {errors.amount && <p className="text-[11px] font-semibold text-rose-600">{errors.amount}</p>}
           </div>
 
-          {/* Payment Method Selector (Cash or Card strictly for Sales Ledger) */}
+          {/* Payment Method Selector (Cash, Card, or Traded Out) */}
           <div className="md:col-span-7 space-y-1.5">
-            <label className="block text-xs font-bold text-zinc-800">
-              Payment Method (Sales in Cash or Card) <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-zinc-800">
+                Payment / Settlement Method <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">
+                Traded Out = item leaving stock in deal
+              </span>
+            </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {/* Cash Button */}
               <button
                 type="button"
                 id="btn-payment-cash"
                 onClick={() => setPaymentMethod('cash')}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'cash'
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
@@ -435,7 +440,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-card"
                 onClick={() => setPaymentMethod('card')}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'card'
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
@@ -444,7 +449,30 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 <CreditCard className="w-4 h-4 shrink-0" />
                 <span>Card</span>
               </button>
+
+              {/* Traded Out Button */}
+              <button
+                type="button"
+                id="btn-payment-traded-out"
+                onClick={() => setPaymentMethod('traded_out')}
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  paymentMethod === 'traded_out'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-600/25 font-black'
+                    : 'bg-amber-50/60 hover:bg-amber-100 text-amber-900 border-amber-300'
+                }`}
+                title="Item traded out from vendor's inventory/till"
+              >
+                <ArrowLeftRight className="w-4 h-4 shrink-0 text-amber-200" />
+                <span>Traded Out</span>
+              </button>
             </div>
+
+            {paymentMethod === 'traded_out' && (
+              <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5 animate-fade-in">
+                <span className="font-bold">Notice:</span>
+                <span>This item is recorded as traded out from stock. (Cards traded in to store are logged separately on Trades page).</span>
+              </div>
+            )}
           </div>
         </div>
 

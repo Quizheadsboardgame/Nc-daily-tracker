@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Banknote, CreditCard } from 'lucide-react';
+import { Users, Banknote, CreditCard, ArrowLeftRight } from 'lucide-react';
 import { VendorStat } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
 
@@ -104,26 +104,36 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                 />
               </div>
 
-              {/* Cash & Card breakdown */}
-              <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 text-[11px]">
+              {/* Cash, Card & Traded Out breakdown */}
+              <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-zinc-200/60 text-[10px]">
                 <span
-                  className={`inline-flex items-center gap-1 font-semibold ${
+                  className={`inline-flex items-center gap-1 font-semibold truncate ${
                     isSelected ? 'text-emerald-300' : 'text-emerald-700'
                   }`}
                   title={`Cash: ${formatCurrency(vendor.cashAmount)}`}
                 >
-                  <Banknote className="w-3 h-3" />
-                  Cash: {formatCurrency(vendor.cashAmount)}
+                  <Banknote className="w-3 h-3 shrink-0" />
+                  <span>{formatCurrency(vendor.cashAmount)}</span>
                 </span>
 
                 <span
-                  className={`inline-flex items-center gap-1 font-semibold ${
+                  className={`inline-flex items-center gap-1 font-semibold truncate ${
                     isSelected ? 'text-blue-300' : 'text-blue-700'
                   }`}
                   title={`Card: ${formatCurrency(vendor.cardAmount)}`}
                 >
-                  <CreditCard className="w-3 h-3" />
-                  Card: {formatCurrency(vendor.cardAmount)}
+                  <CreditCard className="w-3 h-3 shrink-0" />
+                  <span>{formatCurrency(vendor.cardAmount)}</span>
+                </span>
+
+                <span
+                  className={`inline-flex items-center gap-1 font-semibold truncate ${
+                    isSelected ? 'text-amber-300' : 'text-amber-700'
+                  }`}
+                  title={`Traded Out: ${formatCurrency(vendor.tradedOutAmount || 0)}`}
+                >
+                  <ArrowLeftRight className="w-3 h-3 shrink-0" />
+                  <span>{formatCurrency(vendor.tradedOutAmount || 0)}</span>
                 </span>
               </div>
             </button>

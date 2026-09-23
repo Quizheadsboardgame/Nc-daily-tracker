@@ -552,14 +552,14 @@ class CloudSalesDatabase {
     return this.removeVendor(name);
   }
 
-  // --- Sales Ledger Transactions (Cash or Card) ---
+  // --- Sales Ledger Transactions (Cash, Card, or Traded Out) ---
 
   public async insertSale(input: {
     salesmanName: string;
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
-    paymentMethod: PaymentMethod; // cash or card
+    paymentMethod: PaymentMethod; // cash, card, or traded_out
     notes?: string;
     dateKey?: string;
     timestamp?: number;
@@ -570,13 +570,19 @@ class CloudSalesDatabase {
     const isMiscellaneous = Boolean(input.isMiscellaneous) || input.itemDescription.trim().toLowerCase() === 'miscellaneous';
     const finalDescription = isMiscellaneous && !input.itemDescription.trim() ? 'Miscellaneous' : input.itemDescription.trim();
 
+    const paymentMethod: PaymentMethod = input.paymentMethod === 'cash'
+      ? 'cash'
+      : input.paymentMethod === 'traded_out'
+      ? 'traded_out'
+      : 'card';
+
     const record: SaleRecord = {
       id,
       salesmanName: input.salesmanName.trim(),
       itemDescription: finalDescription,
       isMiscellaneous: isMiscellaneous ? true : undefined,
       amount: Math.round(Number(input.amount) * 100) / 100,
-      paymentMethod: input.paymentMethod === 'cash' ? 'cash' : 'card',
+      paymentMethod,
       notes: input.notes?.trim() || undefined,
       timestamp,
       dateKey,
@@ -619,6 +625,15 @@ class CloudSalesDatabase {
       ? updates.isMiscellaneous
       : (updates.itemDescription !== undefined ? updates.itemDescription.trim().toLowerCase() === 'miscellaneous' : existing.isMiscellaneous);
 
+    let updatedPaymentMethod = existing.paymentMethod;
+    if (updates.paymentMethod !== undefined) {
+      updatedPaymentMethod = updates.paymentMethod === 'cash'
+        ? 'cash'
+        : updates.paymentMethod === 'traded_out'
+        ? 'traded_out'
+        : 'card';
+    }
+
     const updated: SaleRecord = {
       ...existing,
       ...updates,
@@ -626,7 +641,7 @@ class CloudSalesDatabase {
       itemDescription: updates.itemDescription !== undefined ? updates.itemDescription.trim() : existing.itemDescription,
       isMiscellaneous: isMisc,
       amount: updates.amount !== undefined ? Math.round(Number(updates.amount) * 100) / 100 : existing.amount,
-      paymentMethod: updates.paymentMethod ? (updates.paymentMethod === 'cash' ? 'cash' : 'card') : existing.paymentMethod,
+      paymentMethod: updatedPaymentMethod,
       notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
     };
 
@@ -639,7 +654,7 @@ class CloudSalesDatabase {
       if (updates.itemDescription !== undefined) firestoreUpdates.itemDescription = updates.itemDescription.trim();
       if (updates.isMiscellaneous !== undefined) firestoreUpdates.isMiscellaneous = updates.isMiscellaneous;
       if (updates.amount !== undefined) firestoreUpdates.amount = Math.round(Number(updates.amount) * 100) / 100;
-      if (updates.paymentMethod !== undefined) firestoreUpdates.paymentMethod = updates.paymentMethod;
+      if (updates.paymentMethod !== undefined) firestoreUpdates.paymentMethod = updatedPaymentMethod;
       if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
       if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
 
@@ -940,6 +955,8 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let tradedOutRevenue = 0;
+    let tradedOutCount = 0;
 
     const salesmanMap = new Map<string, SalesmanStat>();
 
@@ -949,6 +966,9 @@ class CloudSalesDatabase {
       if (sale.paymentMethod === 'cash') {
         cashRevenue += sale.amount;
         cashCount++;
+      } else if (sale.paymentMethod === 'traded_out') {
+        tradedOutRevenue += sale.amount;
+        tradedOutCount++;
       } else {
         cardRevenue += sale.amount;
         cardCount++;
@@ -964,6 +984,8 @@ class CloudSalesDatabase {
           cashCount: 0,
           cardAmount: 0,
           cardCount: 0,
+          tradedOutAmount: 0,
+          tradedOutCount: 0,
           color: this.getVendorColor(sale.salesmanName),
         };
         salesmanMap.set(sale.salesmanName, stat);
@@ -974,6 +996,9 @@ class CloudSalesDatabase {
       if (sale.paymentMethod === 'cash') {
         stat.cashAmount += sale.amount;
         stat.cashCount = (stat.cashCount || 0) + 1;
+      } else if (sale.paymentMethod === 'traded_out') {
+        stat.tradedOutAmount = (stat.tradedOutAmount || 0) + sale.amount;
+        stat.tradedOutCount = (stat.tradedOutCount || 0) + 1;
       } else {
         stat.cardAmount += sale.amount;
         stat.cardCount = (stat.cardCount || 0) + 1;
@@ -992,6 +1017,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
+      tradedOutCount,
       averageTicket: sales.length > 0 ? Math.round((totalRevenue / sales.length) * 100) / 100 : 0,
       topVendor,
       topSalesman: topVendor,
@@ -1014,12 +1041,17 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let tradedOutRevenue = 0;
+    let tradedOutCount = 0;
 
     for (const s of vendorSales) {
       totalRevenue += s.amount;
       if (s.paymentMethod === 'cash') {
         cashRevenue += s.amount;
         cashCount++;
+      } else if (s.paymentMethod === 'traded_out') {
+        tradedOutRevenue += s.amount;
+        tradedOutCount++;
       } else {
         cardRevenue += s.amount;
         cardCount++;
@@ -1060,6 +1092,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
+      tradedOutCount,
       averageTicket: vendorSales.length > 0 ? Math.round((totalRevenue / vendorSales.length) * 100) / 100 : 0,
       sales: vendorSales,
       tradesTakenIn,
@@ -1103,12 +1137,17 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let tradedOutRevenue = 0;
+    let tradedOutCount = 0;
 
     for (const s of weekSales) {
       totalRevenue += s.amount;
       if (s.paymentMethod === 'cash') {
         cashRevenue += s.amount;
         cashCount++;
+      } else if (s.paymentMethod === 'traded_out') {
+        tradedOutRevenue += s.amount;
+        tradedOutCount++;
       } else {
         cardRevenue += s.amount;
         cardCount++;
@@ -1140,11 +1179,19 @@ class CloudSalesDatabase {
       let dayTotal = 0;
       let dayCash = 0;
       let dayCard = 0;
+      let dayTradedOut = 0;
+      let dayTradedOutCount = 0;
 
       for (const s of daySales) {
         dayTotal += s.amount;
-        if (s.paymentMethod === 'cash') dayCash += s.amount;
-        else dayCard += s.amount;
+        if (s.paymentMethod === 'cash') {
+          dayCash += s.amount;
+        } else if (s.paymentMethod === 'traded_out') {
+          dayTradedOut += s.amount;
+          dayTradedOutCount++;
+        } else {
+          dayCard += s.amount;
+        }
       }
 
       let dayTradeVal = 0;
@@ -1167,6 +1214,8 @@ class CloudSalesDatabase {
         totalRevenue: Math.round(dayTotal * 100) / 100,
         cashRevenue: Math.round(dayCash * 100) / 100,
         cardRevenue: Math.round(dayCard * 100) / 100,
+        tradedOutRevenue: Math.round(dayTradedOut * 100) / 100,
+        tradedOutCount: dayTradedOutCount,
         tradeTakenInAmount: Math.round(dayTradeVal * 100) / 100,
         tradeTakenInCount: dayTrades.length,
         cashTradeValue: Math.round(dayCashTradeVal * 100) / 100,
@@ -1184,6 +1233,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
+      tradedOutCount,
       averageTicket: weekSales.length > 0 ? Math.round((totalRevenue / weekSales.length) * 100) / 100 : 0,
       totalTradeTakenInAmount: Math.round(totalTradeTakenInAmount * 100) / 100,
       tradeTakenInCount: weekTradesTakenIn.length,
@@ -1281,6 +1332,8 @@ export interface DayBreakdownItem {
   totalRevenue: number;
   cashRevenue: number;
   cardRevenue: number;
+  tradedOutRevenue: number;
+  tradedOutCount: number;
   tradeTakenInAmount: number;
   tradeTakenInCount: number;
   cashTradeValue: number;
@@ -1298,6 +1351,8 @@ export interface VendorDayDetails {
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  tradedOutRevenue: number;
+  tradedOutCount: number;
   averageTicket: number;
   sales: SaleRecord[];
   tradesTakenIn: TradeRecord[];
@@ -1319,6 +1374,8 @@ export interface VendorWeekDetails {
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  tradedOutRevenue: number;
+  tradedOutCount: number;
   averageTicket: number;
   totalTradeTakenInAmount: number;
   tradeTakenInCount: number;

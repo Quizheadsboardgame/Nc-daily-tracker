@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Tag, Banknote, CreditCard, Save } from 'lucide-react';
+import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Save } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 
 interface EditSaleModalProps {
@@ -32,7 +32,13 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
       setIsMiscellaneous(isMisc);
       setItemDescription(isMisc && !sale.itemDescription?.trim() ? 'Miscellaneous' : sale.itemDescription);
       setAmount(sale.amount.toString());
-      setPaymentMethod(sale.paymentMethod === 'cash' ? 'cash' : 'card');
+      setPaymentMethod(
+        sale.paymentMethod === 'cash'
+          ? 'cash'
+          : sale.paymentMethod === 'traded_out'
+          ? 'traded_out'
+          : 'card'
+      );
       setNotes(sale.notes || '');
       setError('');
     }
@@ -73,7 +79,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-zinc-900">Edit Sales Record</h3>
-            <p className="text-xs text-zinc-500">Update till gross transaction</p>
+            <p className="text-xs text-zinc-500">Update till transaction (Cash, Card, or Traded Out)</p>
           </div>
           <button
             type="button"
@@ -150,8 +156,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-5">
               <label className="block text-xs font-semibold text-zinc-700 mb-1">Gross Price (£)</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-sm font-bold text-zinc-400">£</span>
@@ -168,34 +174,48 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">Payment Method</label>
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            <div className="sm:col-span-7">
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">Method / Settlement</label>
+              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
                 <button
                   type="button"
                   id="edit-btn-payment-cash"
                   onClick={() => setPaymentMethod('cash')}
-                  className={`py-2 px-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     paymentMethod === 'cash'
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
-                  <Banknote className="w-3.5 h-3.5" />
+                  <Banknote className="w-3.5 h-3.5 shrink-0" />
                   <span>Cash</span>
                 </button>
                 <button
                   type="button"
                   id="edit-btn-payment-card"
                   onClick={() => setPaymentMethod('card')}
-                  className={`py-2 px-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     paymentMethod === 'card'
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
+                  <CreditCard className="w-3.5 h-3.5 shrink-0" />
                   <span>Card</span>
+                </button>
+                <button
+                  type="button"
+                  id="edit-btn-payment-traded-out"
+                  onClick={() => setPaymentMethod('traded_out')}
+                  className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    paymentMethod === 'traded_out'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                  }`}
+                  title="Item traded out from vendor's inventory"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
+                  <span>Traded Out</span>
                 </button>
               </div>
             </div>

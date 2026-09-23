@@ -3,13 +3,11 @@ import {
   Search,
   Banknote,
   CreditCard,
+  ArrowLeftRight,
   Edit2,
   Trash2,
   Clock,
-  User,
   SlidersHorizontal,
-  ArrowUpDown,
-  FileText,
 } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
@@ -19,7 +17,7 @@ interface SalesListProps {
   allVendors?: string[];
   allSalesmen?: string[];
   selectedPaymentFilter: string;
-  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card') => void;
+  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'traded_out') => void;
   selectedVendor?: string;
   selectedSalesman?: string;
   onSelectVendor?: (name: string) => void;
@@ -93,14 +91,22 @@ export const SalesList: React.FC<SalesListProps> = ({
   const renderPaymentBadge = (method: PaymentMethod | string) => {
     if (method === 'cash') {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
           <Banknote className="w-3.5 h-3.5 text-emerald-600" />
           Cash
         </span>
       );
     }
+    if (method === 'traded_out') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
+          <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
+          Traded Out
+        </span>
+      );
+    }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
         <CreditCard className="w-3.5 h-3.5 text-blue-600" />
         Card
       </span>
@@ -115,7 +121,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           <div>
             <h2 className="text-base font-bold text-zinc-900">Today's Sales Records</h2>
             <p className="text-xs text-zinc-500">
-              Showing {filteredSales.length} of {sales.length} cash & card transactions
+              Showing {filteredSales.length} of {sales.length} transactions (Cash, Card & Traded Out)
             </p>
           </div>
 
@@ -149,8 +155,8 @@ export const SalesList: React.FC<SalesListProps> = ({
             )}
           </div>
 
-          {/* Payment Filter Pills (Cash or Card) */}
-          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs">
+          {/* Payment Filter Pills (Cash, Card, or Traded Out) */}
+          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs flex-wrap sm:flex-nowrap">
             <button
               type="button"
               id="filter-payment-all"
@@ -186,6 +192,18 @@ export const SalesList: React.FC<SalesListProps> = ({
               }`}
             >
               <CreditCard className="w-3 h-3" /> Card
+            </button>
+            <button
+              type="button"
+              id="filter-payment-traded-out"
+              onClick={() => onSelectPaymentFilter('traded_out')}
+              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                selectedPaymentFilter === 'traded_out'
+                  ? 'bg-amber-600 text-white shadow-xs font-bold'
+                  : 'text-amber-800 hover:text-amber-900'
+              }`}
+            >
+              <ArrowLeftRight className="w-3 h-3" /> Traded Out
             </button>
           </div>
 
@@ -241,7 +259,7 @@ export const SalesList: React.FC<SalesListProps> = ({
                 <th scope="col" className="py-3 px-4">Vendor</th>
                 <th scope="col" className="py-3 px-4">Item Sold</th>
                 <th scope="col" className="py-3 px-4 text-right">Gross Price</th>
-                <th scope="col" className="py-3 px-4 text-center">Payment</th>
+                <th scope="col" className="py-3 px-4 text-center">Payment / Settlement</th>
                 <th scope="col" className="py-3 px-4">Notes</th>
                 <th scope="col" className="py-3 px-4 text-right">Actions</th>
               </tr>

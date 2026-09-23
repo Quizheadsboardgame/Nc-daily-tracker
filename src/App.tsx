@@ -22,7 +22,7 @@ export default function App() {
   const [knownVendors, setKnownVendors] = useState<string[]>(() => cloudDb.getKnownVendors());
 
   // Filter states
-  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card'>('all');
+  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card' | 'traded_out'>('all');
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   // Modal states
@@ -265,7 +265,7 @@ export default function App() {
                     <span className="text-zinc-400 uppercase text-[10px] tracking-wider font-bold">Filtered:</span>
                     {selectedPaymentFilter !== 'all' && (
                       <span className="font-extrabold uppercase text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200">
-                        {selectedPaymentFilter}
+                        {selectedPaymentFilter === 'traded_out' ? 'Traded Out' : selectedPaymentFilter}
                       </span>
                     )}
                     {selectedVendor !== 'all' && (

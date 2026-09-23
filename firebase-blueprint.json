@@ -19,8 +19,8 @@
         },
         "paymentMethod": {
           "type": "string",
-          "enum": ["cash", "card"],
-          "description": "Payment method used for sales ledger transaction (cash or card)"
+          "enum": ["cash", "card", "traded_out"],
+          "description": "Payment method used for sales ledger transaction (cash, card, or traded out)"
         },
         "isMiscellaneous": {
           "type": "boolean",

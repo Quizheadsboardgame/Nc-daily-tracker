@@ -1,4 +1,4 @@
-export type PaymentMethod = 'cash' | 'card';
+export type PaymentMethod = 'cash' | 'card' | 'traded_out';
 
 export type TradeType = 'cash' | 'credit'; // Cards traded in for cash OR for credit (vendors credit)
 
@@ -7,8 +7,8 @@ export interface SaleRecord {
   salesmanName: string; // Vendor name
   itemDescription: string;
   isMiscellaneous?: boolean;
-  amount: number; // Gross sale price in GBP (£)
-  paymentMethod: PaymentMethod; // cash or card
+  amount: number; // Gross sale price / valuation in GBP (£)
+  paymentMethod: PaymentMethod; // cash, card, or traded_out
   notes?: string;
   timestamp: number; // Unix timestamp in milliseconds
   dateKey: string; // YYYY-MM-DD format
@@ -21,13 +21,15 @@ export interface SaleRecord {
 
 export interface VendorStat {
   name: string;
-  totalAmount: number; // Gross cash + card revenue
+  totalAmount: number; // Gross cash + card + traded out revenue
   count: number;
   cashAmount: number;
   cashCount?: number;
   cardAmount: number;
   cardCount?: number;
-  tradeAmount?: number;
+  tradedOutAmount: number;
+  tradedOutCount?: number;
+  tradeAmount?: number; // legacy alias
   color?: string;
 }
 
@@ -44,11 +46,13 @@ export interface DaySummary {
   dateKey: string;
   formattedDate: string;
   totalCount: number;
-  totalRevenue: number; // Gross cash + card revenue
+  totalRevenue: number; // Gross cash + card + traded out revenue
   cashRevenue: number;
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  tradedOutRevenue: number;
+  tradedOutCount: number;
   averageTicket: number;
   topVendor?: VendorStat;
   topSalesman?: VendorStat;

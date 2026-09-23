@@ -37,6 +37,28 @@ interface VendorDayCheckProps {
 
 type PeriodViewMode = 'weekly' | 'daily';
 
+const renderSalePaymentBadge = (method: string) => {
+  if (method === 'cash') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+        <Banknote className="w-3 h-3 text-emerald-600" /> Cash
+      </span>
+    );
+  }
+  if (method === 'traded_out') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+        <ArrowLeftRight className="w-3 h-3 text-amber-600" /> Traded Out
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+      <CreditCard className="w-3 h-3 text-blue-600" /> Card
+    </span>
+  );
+};
+
 export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   currentDateKey,
   allVendors,
@@ -547,7 +569,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               </div>
             </div>
 
-            {/* KPI 2: Cash & Card Sales Split */}
+            {/* KPI 2: Cash, Card & Traded Out Sales Split */}
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
@@ -570,9 +592,15 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   </span>
                   <span className="font-black text-zinc-900">{formatCurrency(weekData.cardRevenue)}</span>
                 </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-amber-700 font-bold flex items-center gap-1">
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> Traded Out:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.tradedOutRevenue || 0)}</span>
+                </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {weekData.cashCount} cash • {weekData.cardCount} card
+                {weekData.cashCount} cash • {weekData.cardCount} card • {weekData.tradedOutCount || 0} traded out
               </div>
             </div>
 
@@ -659,14 +687,15 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-4">Day</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Sales Count</th>
-                    <th className="py-3 px-4 text-right">Gross Sales</th>
-                    <th className="py-3 px-4 text-right">Cash Sales</th>
-                    <th className="py-3 px-4 text-right">Card Sales</th>
-                    <th className="py-3 px-4 text-right text-amber-800">Cards Traded In</th>
-                    <th className="py-3 px-4 text-center">Filter Day</th>
+                    <th className="py-3 px-3">Day</th>
+                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Sales</th>
+                    <th className="py-3 px-3 text-right">Gross Sales</th>
+                    <th className="py-3 px-3 text-right">Cash</th>
+                    <th className="py-3 px-3 text-right">Card</th>
+                    <th className="py-3 px-3 text-right text-amber-700">Traded Out</th>
+                    <th className="py-3 px-3 text-right text-amber-800">Cards Traded In</th>
+                    <th className="py-3 px-3 text-center">Filter Day</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
@@ -685,7 +714,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             : 'hover:bg-zinc-50/70'
                         }`}
                       >
-                        <td className="py-3 px-4 font-bold text-zinc-900">
+                        <td className="py-3 px-3 font-bold text-zinc-900">
                           <div className="flex items-center gap-1.5">
                             <span>{day.fullDayName}</span>
                             {day.isToday && (
@@ -695,26 +724,29 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-zinc-600">
+                        <td className="py-3 px-3 text-zinc-600">
                           {day.formattedDate}
                         </td>
-                        <td className="py-3 px-4 text-zinc-700">
+                        <td className="py-3 px-3 text-zinc-700">
                           {day.salesCount > 0 ? (
                             <span className="font-semibold">{day.salesCount} {day.salesCount === 1 ? 'sale' : 'sales'}</span>
                           ) : (
                             <span className="text-zinc-400">0</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-zinc-900">
+                        <td className="py-3 px-3 text-right font-black text-zinc-900">
                           {day.totalRevenue > 0 ? formatCurrency(day.totalRevenue) : <span className="text-zinc-400 font-normal">£0.00</span>}
                         </td>
-                        <td className="py-3 px-4 text-right text-emerald-700 font-semibold">
+                        <td className="py-3 px-3 text-right text-emerald-700 font-semibold">
                           {day.cashRevenue > 0 ? formatCurrency(day.cashRevenue) : <span className="text-zinc-400 font-normal">—</span>}
                         </td>
-                        <td className="py-3 px-4 text-right text-blue-700 font-semibold">
+                        <td className="py-3 px-3 text-right text-blue-700 font-semibold">
                           {day.cardRevenue > 0 ? formatCurrency(day.cardRevenue) : <span className="text-zinc-400 font-normal">—</span>}
                         </td>
-                        <td className="py-3 px-4 text-right text-amber-800 font-bold">
+                        <td className="py-3 px-3 text-right text-amber-700 font-semibold">
+                          {(day.tradedOutRevenue || 0) > 0 ? formatCurrency(day.tradedOutRevenue) : <span className="text-zinc-400 font-normal">—</span>}
+                        </td>
+                        <td className="py-3 px-3 text-right text-amber-800 font-bold">
                           {day.tradeTakenInAmount > 0 ? (
                             <div>
                               <span>{formatCurrency(day.tradeTakenInAmount)}</span>
@@ -726,7 +758,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             <span className="text-zinc-400 font-normal">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-3 text-center">
                           {hasActivity ? (
                             <button
                               type="button"
@@ -749,14 +781,15 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-zinc-200 bg-zinc-100/70 font-black text-zinc-900">
-                    <td className="py-3 px-4">Week {currentWeek.weekNumber} Total</td>
-                    <td className="py-3 px-4 text-zinc-500 font-semibold text-[11px]">Sun – Sat</td>
-                    <td className="py-3 px-4">{weekData.salesCount}</td>
-                    <td className="py-3 px-4 text-right text-sm">{formatCurrency(weekData.totalRevenue)}</td>
-                    <td className="py-3 px-4 text-right text-emerald-700">{formatCurrency(weekData.cashRevenue)}</td>
-                    <td className="py-3 px-4 text-right text-blue-700">{formatCurrency(weekData.cardRevenue)}</td>
-                    <td className="py-3 px-4 text-right text-amber-800">{formatCurrency(weekData.totalTradeTakenInAmount)}</td>
-                    <td className="py-3 px-4 text-center text-[10px] font-bold text-amber-800">
+                    <td className="py-3 px-3">Week {currentWeek.weekNumber} Total</td>
+                    <td className="py-3 px-3 text-zinc-500 font-semibold text-[11px]">Sun – Sat</td>
+                    <td className="py-3 px-3">{weekData.salesCount}</td>
+                    <td className="py-3 px-3 text-right text-sm">{formatCurrency(weekData.totalRevenue)}</td>
+                    <td className="py-3 px-3 text-right text-emerald-700">{formatCurrency(weekData.cashRevenue)}</td>
+                    <td className="py-3 px-3 text-right text-blue-700">{formatCurrency(weekData.cardRevenue)}</td>
+                    <td className="py-3 px-3 text-right text-amber-700">{formatCurrency(weekData.tradedOutRevenue || 0)}</td>
+                    <td className="py-3 px-3 text-right text-amber-800">{formatCurrency(weekData.totalTradeTakenInAmount)}</td>
+                    <td className="py-3 px-3 text-center text-[10px] font-bold text-amber-800">
                       Gross Total
                     </td>
                   </tr>
@@ -912,21 +945,11 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             ) : (
               <div className="divide-y divide-zinc-100">
                 {displayedWeekSales.map((sale) => {
-                  const isCash = sale.paymentMethod === 'cash';
-
                   return (
                     <div key={sale.id} className="p-4 hover:bg-zinc-50/60 transition-colors flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {isCash ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Banknote className="w-3 h-3 text-emerald-600" /> Cash
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                              <CreditCard className="w-3 h-3 text-blue-600" /> Card
-                            </span>
-                          )}
+                          {renderSalePaymentBadge(sale.paymentMethod)}
                           <span className="text-xs font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">
                             {formatDisplayDate(sale.dateKey)}
                           </span>
@@ -1046,6 +1069,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               </div>
             </div>
 
+            {/* Daily KPI 2: Cash, Card & Traded Out Sales Split */}
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
@@ -1068,9 +1092,15 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   </span>
                   <span className="font-black text-zinc-900">{formatCurrency(dayData.cardRevenue)}</span>
                 </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-amber-700 font-bold flex items-center gap-1">
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> Traded Out:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.tradedOutRevenue || 0)}</span>
+                </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {dayData.cashCount} cash • {dayData.cardCount} card
+                {dayData.cashCount} cash • {dayData.cardCount} card • {dayData.tradedOutCount || 0} traded out
               </div>
             </div>
 
@@ -1249,21 +1279,11 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             ) : (
               <div className="divide-y divide-zinc-100">
                 {dayData.sales.map((sale) => {
-                  const isCash = sale.paymentMethod === 'cash';
-
                   return (
                     <div key={sale.id} className="p-4 hover:bg-zinc-50/60 transition-colors flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          {isCash ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Banknote className="w-3 h-3 text-emerald-600" /> Cash
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                              <CreditCard className="w-3 h-3 text-blue-600" /> Card
-                            </span>
-                          )}
+                          {renderSalePaymentBadge(sale.paymentMethod)}
                           <span className="text-xs text-zinc-400">
                             {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
