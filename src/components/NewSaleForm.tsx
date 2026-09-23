@@ -189,7 +189,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 onClick={onNavigateToTrades}
                 className="text-amber-700 hover:text-amber-900 font-bold underline cursor-pointer"
               >
-                Trades page
+                Trade In page
               </button>
             </p>
           </div>
@@ -470,7 +470,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             {paymentMethod === 'traded_out' && (
               <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5 animate-fade-in">
                 <span className="font-bold">Notice:</span>
-                <span>This item is recorded as traded out from stock. (Cards traded in to store are logged separately on Trades page).</span>
+                <span>This item is recorded as traded out from stock. (Cards traded in to store are logged separately on Trade In page).</span>
               </div>
             )}
           </div>

@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
-                <span>Trades</span>
+                <span>Trade In</span>
               </button>
 
               <button

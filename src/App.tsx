@@ -171,7 +171,7 @@ export default function App() {
               }`}
             >
               <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
-              <span>Trades</span>
+              <span>Trade In</span>
               {cloudDb.getTradesForDay(currentDateKey).length > 0 && (
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
                   activeTab === 'trades'

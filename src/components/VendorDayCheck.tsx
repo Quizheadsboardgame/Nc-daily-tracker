@@ -841,7 +841,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   No cards trade-ins recorded for {weekData.vendorName} {weekFilterDayKey === 'all' ? 'this week' : 'on this date'}
                 </p>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Cards logged on the Trades page for {weekData.vendorName} will automatically appear here.
+                  Cards logged on the Trade In page for {weekData.vendorName} will automatically appear here.
                 </p>
               </div>
             ) : (

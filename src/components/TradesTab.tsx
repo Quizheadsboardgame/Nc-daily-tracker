@@ -209,7 +209,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-zinc-900 tracking-tight">
-                Cards Trade-In Ledger
+                Trade In Ledger
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
                 Independent page for cards traded in for <strong>cash</strong> or for <strong>credit (vendor's credit)</strong>
