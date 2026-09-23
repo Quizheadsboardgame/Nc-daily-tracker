@@ -22,7 +22,7 @@ export default function App() {
   const [knownVendors, setKnownVendors] = useState<string[]>(() => cloudDb.getKnownVendors());
 
   // Filter states
-  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card' | 'trade'>('all');
+  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card'>('all');
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   // Modal states
@@ -397,7 +397,7 @@ export default function App() {
             <span>Daily Sales Tracker • Active Record Date: <strong className="text-zinc-700">{currentDateKey}</strong></span>
           </div>
           <div className="flex items-center gap-3">
-            <span>Channels: Cash • Card • Trade</span>
+            <span>Channels: Cash & Card Sales • Cards Trade-In (Cash / Credit)</span>
             <span>•</span>
             <span className="text-emerald-700 font-medium">Cloud Database Connected (Multi-device)</span>
           </div>

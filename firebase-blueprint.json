@@ -2,7 +2,7 @@
   "entities": {
     "Sale": {
       "title": "Sale",
-      "description": "Recorded sales transaction item in the ledger",
+      "description": "Recorded sales transaction item in the sales ledger (cash or card)",
       "type": "object",
       "properties": {
         "salesmanName": {
@@ -19,24 +19,12 @@
         },
         "paymentMethod": {
           "type": "string",
-          "enum": ["cash", "card", "trade"],
-          "description": "Payment method used for transaction"
+          "enum": ["cash", "card"],
+          "description": "Payment method used for sales ledger transaction (cash or card)"
         },
-        "tradeDetails": {
-          "type": "string",
-          "description": "Combined trade-in exchange summary and terms"
-        },
-        "tradeAcceptingVendor": {
-          "type": "string",
-          "description": "Vendor accepting the trade-in item"
-        },
-        "tradeValue": {
-          "type": "number",
-          "description": "Valuation in GBP of the traded-in item"
-        },
-        "tradeItemDescription": {
-          "type": "string",
-          "description": "Description of the traded-in item"
+        "isMiscellaneous": {
+          "type": "boolean",
+          "description": "Whether item is a miscellaneous sale"
         },
         "notes": {
           "type": "string",
@@ -75,44 +63,33 @@
     },
     "Trade": {
       "title": "Trade",
-      "description": "Recorded trade-in transaction or exchange item",
+      "description": "Recorded trade-in transaction: cards traded in for cash or for credit (vendors credit)",
       "type": "object",
       "properties": {
         "vendorName": {
           "type": "string",
-          "description": "Vendor accepting or taking in the trade"
+          "description": "Vendor taking in the cards"
         },
         "itemDescription": {
           "type": "string",
-          "description": "Description of the traded-in item"
+          "description": "Description of the cards or items traded in"
         },
         "tradeValue": {
           "type": "number",
-          "description": "Valuation in GBP of the traded item"
+          "description": "Agreed valuation in GBP of the traded cards"
         },
-        "isStandalone": {
-          "type": "boolean",
-          "description": "Whether the trade is standalone or against a sale"
-        },
-        "soldItemDescription": {
+        "tradeType": {
           "type": "string",
-          "description": "Description of item sold against this trade if applicable"
-        },
-        "saleAmount": {
-          "type": "number",
-          "description": "Sale amount if applicable"
-        },
-        "associatedSaleId": {
-          "type": "string",
-          "description": "ID of associated sale transaction if applicable"
+          "enum": ["cash", "credit"],
+          "description": "Compensation method: cards traded in for cash or for credit (vendors credit)"
         },
         "customerName": {
           "type": "string",
-          "description": "Optional customer name or details"
+          "description": "Optional customer name trading in cards"
         },
         "notes": {
           "type": "string",
-          "description": "Optional notes or terms"
+          "description": "Optional notes or terms regarding the trade"
         },
         "timestamp": {
           "type": "number",
@@ -123,13 +100,13 @@
           "description": "Date string YYYY-MM-DD"
         }
       },
-      "required": ["vendorName", "itemDescription", "tradeValue", "timestamp", "dateKey"]
+      "required": ["vendorName", "itemDescription", "tradeValue", "tradeType", "timestamp", "dateKey"]
     }
   },
   "firestore": {
     "/sales/{saleId}": {
       "schema": "Sale",
-      "description": "Collection of all sales ledger records across terminals"
+      "description": "Collection of all sales ledger records (cash or card) across terminals"
     },
     "/salesmen/{salesmanId}": {
       "schema": "Vendor",
@@ -137,7 +114,7 @@
     },
     "/trades/{tradeId}": {
       "schema": "Trade",
-      "description": "Collection of trade records and trade-in items"
+      "description": "Collection of trade-in records (cards traded in for cash or credit) across terminals"
     }
   }
 }

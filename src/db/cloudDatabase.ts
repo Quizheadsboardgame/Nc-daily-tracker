@@ -12,7 +12,16 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
-import { SaleRecord, PaymentMethod, DaySummary, SalesmanStat, TradeRecord, TradeDaySummary, TradeVendorStat } from '../types';
+import {
+  SaleRecord,
+  PaymentMethod,
+  DaySummary,
+  SalesmanStat,
+  TradeRecord,
+  TradeType,
+  TradeDaySummary,
+  TradeVendorStat,
+} from '../types';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 export const DEFAULT_PRELOADED_SALESMEN = DEFAULT_PRELOADED_VENDORS;
@@ -41,10 +50,10 @@ export const PRESET_VENDOR_PALETTE = [
   { name: 'Teal', hex: '#0d9488' },
 ];
 
-const STORAGE_SALES_KEY = 'daily_sales_tracker_real_sales_v5';
-const STORAGE_TRADES_KEY = 'daily_sales_tracker_real_trades_v5';
-const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v5';
-const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v5';
+const STORAGE_SALES_KEY = 'daily_sales_tracker_real_sales_v6';
+const STORAGE_TRADES_KEY = 'daily_sales_tracker_real_trades_v6';
+const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v6';
+const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -92,7 +101,7 @@ export interface WeekRangeInfo {
   weekNumber: number;
   year: number;
   startDateKey: string; // Sunday YYYY-MM-DD
-  endDateKey: string;   // Saturday YYYY-MM-DD
+  endDateKey: string; // Saturday YYYY-MM-DD
   startDisplay: string;
   endDisplay: string;
   label: string;
@@ -184,9 +193,9 @@ export function shiftWeek(startDateKey: string, weekDelta: number): WeekRangeInf
 }
 
 /**
- * Cloud Sales Database
- * Synchronizes real sales transactions and salesman team roster across all devices.
- * No mock/example sales.
+ * Cloud Sales & Trades Database
+ * Independent Sales Ledger (Cash & Card) and Trade Ledger (Cards traded for Cash or Vendor Credit).
+ * Combined reporting in the Vendor Portal.
  */
 class CloudSalesDatabase {
   private salesCache: Map<string, SaleRecord> = new Map();
@@ -326,31 +335,33 @@ class CloudSalesDatabase {
         }
       );
 
-      // 2. Real-time listener for Single Unified Sales Records across all devices
+      // 2. Real-time listener for Sales Records (Cash & Card) across all devices
       const salesCol = collection(db, 'sales');
       const salesQuery = query(salesCol, orderBy('timestamp', 'desc'));
       onSnapshot(
         salesQuery,
         (snapshot) => {
           this.isCloudConnected = true;
-          // Rebuild cache strictly from cloud records so all devices stay identical
           this.salesCache.clear();
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            const rawMethod = data.paymentMethod?.toLowerCase();
+            const paymentMethod: PaymentMethod = rawMethod === 'cash' ? 'cash' : 'card';
+
             this.salesCache.set(docSnap.id, {
               id: docSnap.id,
               salesmanName: data.salesmanName || '',
               itemDescription: data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : ''),
               isMiscellaneous: Boolean(data.isMiscellaneous) || data.itemDescription?.trim().toLowerCase() === 'miscellaneous',
               amount: Number(data.amount) || 0,
-              paymentMethod: data.paymentMethod || 'card',
+              paymentMethod,
+              notes: data.notes || undefined,
+              timestamp: data.timestamp || Date.now(),
+              dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
               tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
               tradeItemDescription: data.tradeItemDescription || undefined,
-              notes: data.notes || undefined,
-              timestamp: data.timestamp || Date.now(),
-              dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
             });
           });
 
@@ -361,7 +372,7 @@ class CloudSalesDatabase {
         }
       );
 
-      // 3. Real-time listener for Trades collection across all devices
+      // 3. Real-time listener for Trades collection (Cards traded for Cash or Vendor Credit)
       const tradesCol = collection(db, 'trades');
       const tradesQuery = query(tradesCol, orderBy('timestamp', 'desc'));
       onSnapshot(
@@ -371,19 +382,23 @@ class CloudSalesDatabase {
           this.tradesCache.clear();
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            const rawType = data.tradeType?.toLowerCase();
+            const tradeType: TradeType = rawType === 'cash' ? 'cash' : 'credit';
+
             this.tradesCache.set(docSnap.id, {
               id: docSnap.id,
               vendorName: data.vendorName || '',
               itemDescription: data.itemDescription || '',
               tradeValue: Number(data.tradeValue) || 0,
+              tradeType,
               dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
               timestamp: data.timestamp || Date.now(),
+              customerName: data.customerName || undefined,
+              notes: data.notes || undefined,
               isStandalone: data.isStandalone !== undefined ? Boolean(data.isStandalone) : true,
               soldItemDescription: data.soldItemDescription || undefined,
               saleAmount: data.saleAmount !== undefined && data.saleAmount !== null ? Number(data.saleAmount) : undefined,
               associatedSaleId: data.associatedSaleId || undefined,
-              customerName: data.customerName || undefined,
-              notes: data.notes || undefined,
             });
           });
 
@@ -428,7 +443,6 @@ class CloudSalesDatabase {
     if (this.vendorColors.has(name)) {
       return this.vendorColors.get(name)!;
     }
-    // Deterministic fallback from PRESET_VENDOR_PALETTE
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -538,18 +552,14 @@ class CloudSalesDatabase {
     return this.removeVendor(name);
   }
 
-  // --- Sales Transactions Methods ---
+  // --- Sales Ledger Transactions (Cash or Card) ---
 
   public async insertSale(input: {
     salesmanName: string;
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
-    paymentMethod: PaymentMethod;
-    tradeDetails?: string;
-    tradeAcceptingVendor?: string;
-    tradeValue?: number;
-    tradeItemDescription?: string;
+    paymentMethod: PaymentMethod; // cash or card
     notes?: string;
     dateKey?: string;
     timestamp?: number;
@@ -566,17 +576,13 @@ class CloudSalesDatabase {
       itemDescription: finalDescription,
       isMiscellaneous: isMiscellaneous ? true : undefined,
       amount: Math.round(Number(input.amount) * 100) / 100,
-      paymentMethod: input.paymentMethod,
-      tradeDetails: input.tradeDetails?.trim() || undefined,
-      tradeAcceptingVendor: input.tradeAcceptingVendor?.trim() || undefined,
-      tradeValue: input.tradeValue !== undefined && !isNaN(Number(input.tradeValue)) ? Math.round(Number(input.tradeValue) * 100) / 100 : undefined,
-      tradeItemDescription: input.tradeItemDescription?.trim() || undefined,
+      paymentMethod: input.paymentMethod === 'cash' ? 'cash' : 'card',
       notes: input.notes?.trim() || undefined,
       timestamp,
       dateKey,
     };
 
-    // 1. Immediately store in local memory cache & storage
+    // Store in cache & notify
     this.salesCache.set(id, record);
 
     if (!this.salesmenList.includes(record.salesmanName)) {
@@ -586,7 +592,7 @@ class CloudSalesDatabase {
 
     this.notify();
 
-    // 2. Persist to Firestore so all devices sync instantly
+    // Persist to Firestore
     try {
       await setDoc(doc(db, 'sales', id), {
         salesmanName: record.salesmanName,
@@ -594,32 +600,10 @@ class CloudSalesDatabase {
         isMiscellaneous: record.isMiscellaneous || false,
         amount: record.amount,
         paymentMethod: record.paymentMethod,
-        tradeDetails: record.tradeDetails || null,
-        tradeAcceptingVendor: record.tradeAcceptingVendor || null,
-        tradeValue: record.tradeValue !== undefined ? record.tradeValue : null,
-        tradeItemDescription: record.tradeItemDescription || null,
         notes: record.notes || null,
         timestamp: record.timestamp,
         dateKey: record.dateKey,
       });
-
-      // If this sale was transacted with trade, automatically record the trade item
-      if (record.paymentMethod === 'trade') {
-        const tradeVal = record.tradeValue !== undefined ? record.tradeValue : record.amount;
-        const tradeItem = record.tradeItemDescription?.trim() || record.tradeDetails?.trim() || `Trade against ${record.itemDescription}`;
-        const tradeVendor = record.tradeAcceptingVendor?.trim() || record.salesmanName;
-        await this.insertTrade({
-          vendorName: tradeVendor,
-          itemDescription: tradeItem,
-          tradeValue: tradeVal,
-          dateKey: record.dateKey,
-          isStandalone: false,
-          soldItemDescription: record.itemDescription,
-          saleAmount: record.amount,
-          associatedSaleId: record.id,
-          notes: record.notes,
-        });
-      }
     } catch (e) {
       console.warn('Sale saved to memory/localStorage; Firestore sync pending:', e);
     }
@@ -642,10 +626,8 @@ class CloudSalesDatabase {
       itemDescription: updates.itemDescription !== undefined ? updates.itemDescription.trim() : existing.itemDescription,
       isMiscellaneous: isMisc,
       amount: updates.amount !== undefined ? Math.round(Number(updates.amount) * 100) / 100 : existing.amount,
-      tradeDetails: updates.tradeDetails !== undefined ? (updates.tradeDetails ? updates.tradeDetails.trim() : undefined) : existing.tradeDetails,
-      tradeAcceptingVendor: updates.tradeAcceptingVendor !== undefined ? (updates.tradeAcceptingVendor ? updates.tradeAcceptingVendor.trim() : undefined) : existing.tradeAcceptingVendor,
-      tradeValue: updates.tradeValue !== undefined ? (updates.tradeValue !== null && !isNaN(Number(updates.tradeValue)) ? Math.round(Number(updates.tradeValue) * 100) / 100 : undefined) : existing.tradeValue,
-      tradeItemDescription: updates.tradeItemDescription !== undefined ? (updates.tradeItemDescription ? updates.tradeItemDescription.trim() : undefined) : existing.tradeItemDescription,
+      paymentMethod: updates.paymentMethod ? (updates.paymentMethod === 'cash' ? 'cash' : 'card') : existing.paymentMethod,
+      notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
     };
 
     this.salesCache.set(id, updated);
@@ -658,10 +640,6 @@ class CloudSalesDatabase {
       if (updates.isMiscellaneous !== undefined) firestoreUpdates.isMiscellaneous = updates.isMiscellaneous;
       if (updates.amount !== undefined) firestoreUpdates.amount = Math.round(Number(updates.amount) * 100) / 100;
       if (updates.paymentMethod !== undefined) firestoreUpdates.paymentMethod = updates.paymentMethod;
-      if (updates.tradeDetails !== undefined) firestoreUpdates.tradeDetails = updates.tradeDetails ? updates.tradeDetails.trim() : null;
-      if (updates.tradeAcceptingVendor !== undefined) firestoreUpdates.tradeAcceptingVendor = updates.tradeAcceptingVendor ? updates.tradeAcceptingVendor.trim() : null;
-      if (updates.tradeValue !== undefined) firestoreUpdates.tradeValue = updates.tradeValue !== undefined && updates.tradeValue !== null ? Math.round(Number(updates.tradeValue) * 100) / 100 : null;
-      if (updates.tradeItemDescription !== undefined) firestoreUpdates.tradeItemDescription = updates.tradeItemDescription ? updates.tradeItemDescription.trim() : null;
       if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
       if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
 
@@ -682,35 +660,24 @@ class CloudSalesDatabase {
     }
   }
 
-  // --- Dedicated Trades CRUD & Methods ---
+  // --- Dedicated Trades Ledger (Cards Traded in for Cash or Credit) ---
 
   public async insertTrade(input: {
     vendorName: string;
     itemDescription: string;
     tradeValue: number;
-    dateKey?: string;
-    isStandalone?: boolean;
-    soldItemDescription?: string;
-    saleAmount?: number;
-    associatedSaleId?: string;
+    tradeType: TradeType; // 'cash' or 'credit'
     customerName?: string;
     notes?: string;
+    dateKey?: string;
+    timestamp?: number;
   }): Promise<TradeRecord> {
-    const timestamp = Date.now();
+    const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
     const cleanVendor = input.vendorName.trim();
     const cleanItem = input.itemDescription.trim();
     const val = Math.round(Number(input.tradeValue) * 100) / 100;
-    const isStandalone = input.isStandalone !== undefined ? input.isStandalone : !input.associatedSaleId;
-
-    // Check if duplicate for same sale
-    if (input.associatedSaleId) {
-      for (const existing of this.tradesCache.values()) {
-        if (existing.associatedSaleId === input.associatedSaleId) {
-          return existing;
-        }
-      }
-    }
+    const tradeType: TradeType = input.tradeType === 'cash' ? 'cash' : 'credit';
 
     const id = `trade_${timestamp}_${Math.random().toString(36).slice(2, 7)}`;
     const record: TradeRecord = {
@@ -718,14 +685,12 @@ class CloudSalesDatabase {
       vendorName: cleanVendor,
       itemDescription: cleanItem,
       tradeValue: isNaN(val) ? 0 : val,
-      dateKey,
-      timestamp,
-      isStandalone,
-      soldItemDescription: input.soldItemDescription?.trim() || undefined,
-      saleAmount: input.saleAmount !== undefined && !isNaN(Number(input.saleAmount)) ? Math.round(Number(input.saleAmount) * 100) / 100 : undefined,
-      associatedSaleId: input.associatedSaleId || undefined,
+      tradeType,
       customerName: input.customerName?.trim() || undefined,
       notes: input.notes?.trim() || undefined,
+      dateKey,
+      timestamp,
+      isStandalone: true,
     };
 
     this.tradesCache.set(id, record);
@@ -742,14 +707,11 @@ class CloudSalesDatabase {
         vendorName: record.vendorName,
         itemDescription: record.itemDescription,
         tradeValue: record.tradeValue,
-        dateKey: record.dateKey,
-        timestamp: record.timestamp,
-        isStandalone: record.isStandalone ?? true,
-        soldItemDescription: record.soldItemDescription || null,
-        saleAmount: record.saleAmount ?? null,
-        associatedSaleId: record.associatedSaleId || null,
+        tradeType: record.tradeType,
         customerName: record.customerName || null,
         notes: record.notes || null,
+        dateKey: record.dateKey,
+        timestamp: record.timestamp,
       });
     } catch (e) {
       console.warn('Trade saved to memory/localStorage; Firestore sync pending:', e);
@@ -768,6 +730,7 @@ class CloudSalesDatabase {
       vendorName: updates.vendorName !== undefined ? updates.vendorName.trim() : existing.vendorName,
       itemDescription: updates.itemDescription !== undefined ? updates.itemDescription.trim() : existing.itemDescription,
       tradeValue: updates.tradeValue !== undefined ? Math.round(Number(updates.tradeValue) * 100) / 100 : existing.tradeValue,
+      tradeType: updates.tradeType ? (updates.tradeType === 'cash' ? 'cash' : 'credit') : existing.tradeType,
       customerName: updates.customerName !== undefined ? (updates.customerName ? updates.customerName.trim() : undefined) : existing.customerName,
       notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
     };
@@ -780,10 +743,10 @@ class CloudSalesDatabase {
       if (updates.vendorName !== undefined) firestoreUpdates.vendorName = updates.vendorName.trim();
       if (updates.itemDescription !== undefined) firestoreUpdates.itemDescription = updates.itemDescription.trim();
       if (updates.tradeValue !== undefined) firestoreUpdates.tradeValue = Math.round(Number(updates.tradeValue) * 100) / 100;
+      if (updates.tradeType !== undefined) firestoreUpdates.tradeType = updates.tradeType;
       if (updates.customerName !== undefined) firestoreUpdates.customerName = updates.customerName ? updates.customerName.trim() : null;
       if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
       if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
-      if (updates.isStandalone !== undefined) firestoreUpdates.isStandalone = updates.isStandalone;
 
       await updateDoc(doc(db, 'trades', id), firestoreUpdates);
     } catch (e) {
@@ -804,38 +767,9 @@ class CloudSalesDatabase {
 
   public getTradesForDay(dateKey: string): TradeRecord[] {
     const list: TradeRecord[] = [];
-    const seenSaleIds = new Set<string>();
-
     this.tradesCache.forEach((trade) => {
       if (trade.dateKey === dateKey) {
         list.push(trade);
-        if (trade.associatedSaleId) {
-          seenSaleIds.add(trade.associatedSaleId);
-        }
-      }
-    });
-
-    // Also include any sales with paymentMethod === 'trade' not already in tradesCache
-    this.salesCache.forEach((sale) => {
-      if (sale.dateKey === dateKey && sale.paymentMethod === 'trade') {
-        if (!seenSaleIds.has(sale.id)) {
-          const tradeVal = sale.tradeValue !== undefined ? sale.tradeValue : sale.amount;
-          const tradeItem = sale.tradeItemDescription?.trim() || sale.tradeDetails?.trim() || `Trade against ${sale.itemDescription}`;
-          const tradeVendor = sale.tradeAcceptingVendor?.trim() || sale.salesmanName;
-          list.push({
-            id: `synthetic_${sale.id}`,
-            vendorName: tradeVendor,
-            itemDescription: tradeItem,
-            tradeValue: tradeVal,
-            dateKey: sale.dateKey,
-            timestamp: sale.timestamp,
-            isStandalone: false,
-            soldItemDescription: sale.itemDescription,
-            saleAmount: sale.amount,
-            associatedSaleId: sale.id,
-            notes: sale.notes,
-          });
-        }
       }
     });
 
@@ -845,21 +779,53 @@ class CloudSalesDatabase {
   public getDailyTradeSummary(dateKey: string): TradeDaySummary {
     const trades = this.getTradesForDay(dateKey);
     let totalTradeValue = 0;
-    let standaloneCount = 0;
-    let againstSaleCount = 0;
-    const vendorMap = new Map<string, { totalVal: number; count: number }>();
+    let cashTradeValue = 0;
+    let cashTradeCount = 0;
+    let creditTradeValue = 0;
+    let creditTradeCount = 0;
+
+    const vendorMap = new Map<
+      string,
+      {
+        totalVal: number;
+        count: number;
+        cashVal: number;
+        cashCount: number;
+        creditVal: number;
+        creditCount: number;
+      }
+    >();
 
     for (const t of trades) {
       totalTradeValue += t.tradeValue;
-      if (t.isStandalone) {
-        standaloneCount++;
+
+      const isCash = t.tradeType === 'cash';
+      if (isCash) {
+        cashTradeValue += t.tradeValue;
+        cashTradeCount++;
       } else {
-        againstSaleCount++;
+        creditTradeValue += t.tradeValue;
+        creditTradeCount++;
       }
 
-      const existing = vendorMap.get(t.vendorName) || { totalVal: 0, count: 0 };
+      const existing = vendorMap.get(t.vendorName) || {
+        totalVal: 0,
+        count: 0,
+        cashVal: 0,
+        cashCount: 0,
+        creditVal: 0,
+        creditCount: 0,
+      };
+
       existing.totalVal += t.tradeValue;
       existing.count += 1;
+      if (isCash) {
+        existing.cashVal += t.tradeValue;
+        existing.cashCount += 1;
+      } else {
+        existing.creditVal += t.tradeValue;
+        existing.creditCount += 1;
+      }
       vendorMap.set(t.vendorName, existing);
     }
 
@@ -868,6 +834,10 @@ class CloudSalesDatabase {
       color: this.getVendorColor(vendorName),
       totalTradeValue: Math.round(data.totalVal * 100) / 100,
       tradeCount: data.count,
+      cashTradeValue: Math.round(data.cashVal * 100) / 100,
+      cashTradeCount: data.cashCount,
+      creditTradeValue: Math.round(data.creditVal * 100) / 100,
+      creditTradeCount: data.creditCount,
     })).sort((a, b) => b.totalTradeValue - a.totalTradeValue);
 
     const totalCount = trades.length;
@@ -877,8 +847,10 @@ class CloudSalesDatabase {
       dateKey,
       totalTradeValue: Math.round(totalTradeValue * 100) / 100,
       totalCount,
-      standaloneCount,
-      againstSaleCount,
+      cashTradeValue: Math.round(cashTradeValue * 100) / 100,
+      cashTradeCount,
+      creditTradeValue: Math.round(creditTradeValue * 100) / 100,
+      creditTradeCount,
       averageTradeValue,
       topVendor: vendorStats[0],
       vendorStats,
@@ -894,13 +866,11 @@ class CloudSalesDatabase {
       'Trade ID',
       'Date',
       'Time',
-      'Vendor Taking In',
-      'Item Traded In',
-      'Trade Valuation (£)',
-      'Trade Category',
-      'Sold Item (If Against Sale)',
-      'Sale Value (£)',
-      'Customer',
+      'Vendor Taking In Cards',
+      'Cards / Item Traded In',
+      'Trade Valuation (£) [Before Commission]',
+      'Traded In For',
+      'Customer Name',
       'Notes',
     ];
 
@@ -925,16 +895,20 @@ class CloudSalesDatabase {
         escape(t.vendorName),
         escape(t.itemDescription),
         t.tradeValue.toFixed(2),
-        escape(t.isStandalone ? 'Standalone Trade' : 'Against Sale'),
-        escape(t.soldItemDescription || ''),
-        t.saleAmount !== undefined ? t.saleAmount.toFixed(2) : '',
+        escape(t.tradeType === 'cash' ? 'Cash Payout' : "Vendor's Credit"),
         escape(t.customerName || ''),
         escape(t.notes || ''),
       ].join(',');
     });
 
-    return [headers.join(','), ...rows].join('\n');
+    return [
+      `# DISCLAIMER: All figures are gross valuations before commission reductions`,
+      headers.join(','),
+      ...rows,
+    ].join('\n');
   }
+
+  // --- Sales Retrieval & Daily Summary ---
 
   public getSalesForDay(dateKey: string): SaleRecord[] {
     const list: SaleRecord[] = [];
@@ -966,8 +940,6 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
-    let tradeRevenue = 0;
-    let tradeCount = 0;
 
     const salesmanMap = new Map<string, SalesmanStat>();
 
@@ -977,12 +949,9 @@ class CloudSalesDatabase {
       if (sale.paymentMethod === 'cash') {
         cashRevenue += sale.amount;
         cashCount++;
-      } else if (sale.paymentMethod === 'card') {
+      } else {
         cardRevenue += sale.amount;
         cardCount++;
-      } else if (sale.paymentMethod === 'trade') {
-        tradeRevenue += sale.amount;
-        tradeCount++;
       }
 
       let stat = salesmanMap.get(sale.salesmanName);
@@ -992,10 +961,9 @@ class CloudSalesDatabase {
           totalAmount: 0,
           count: 0,
           cashAmount: 0,
+          cashCount: 0,
           cardAmount: 0,
-          tradeAmount: 0,
-          tradeTakenInAmount: 0,
-          tradeTakenInCount: 0,
+          cardCount: 0,
           color: this.getVendorColor(sale.salesmanName),
         };
         salesmanMap.set(sale.salesmanName, stat);
@@ -1003,32 +971,12 @@ class CloudSalesDatabase {
 
       stat.count += 1;
       stat.totalAmount += sale.amount;
-      if (sale.paymentMethod === 'cash') stat.cashAmount += sale.amount;
-      if (sale.paymentMethod === 'card') stat.cardAmount += sale.amount;
-      if (sale.paymentMethod === 'trade') stat.tradeAmount += sale.amount;
-
-      // Track trade-in items taken in by vendors
-      if (sale.paymentMethod === 'trade') {
-        const tradeAcceptor = sale.tradeAcceptingVendor || sale.salesmanName;
-        const tradeVal = sale.tradeValue !== undefined ? sale.tradeValue : sale.amount;
-
-        let acceptorStat = salesmanMap.get(tradeAcceptor);
-        if (!acceptorStat) {
-          acceptorStat = {
-            name: tradeAcceptor,
-            totalAmount: 0,
-            count: 0,
-            cashAmount: 0,
-            cardAmount: 0,
-            tradeAmount: 0,
-            tradeTakenInAmount: 0,
-            tradeTakenInCount: 0,
-            color: this.getVendorColor(tradeAcceptor),
-          };
-          salesmanMap.set(tradeAcceptor, acceptorStat);
-        }
-        acceptorStat.tradeTakenInAmount = (acceptorStat.tradeTakenInAmount || 0) + tradeVal;
-        acceptorStat.tradeTakenInCount = (acceptorStat.tradeTakenInCount || 0) + 1;
+      if (sale.paymentMethod === 'cash') {
+        stat.cashAmount += sale.amount;
+        stat.cashCount = (stat.cashCount || 0) + 1;
+      } else {
+        stat.cardAmount += sale.amount;
+        stat.cardCount = (stat.cardCount || 0) + 1;
       }
     }
 
@@ -1044,8 +992,6 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
-      tradeRevenue: Math.round(tradeRevenue * 100) / 100,
-      tradeCount,
       averageTicket: sales.length > 0 ? Math.round((totalRevenue / sales.length) * 100) / 100 : 0,
       topVendor,
       topSalesman: topVendor,
@@ -1054,7 +1000,9 @@ class CloudSalesDatabase {
     };
   }
 
-  public getVendorDayDetails(dateKey: string, vendorName: string) {
+  // --- Vendor Portal: Independent Sales & Trade reporting combined ---
+
+  public getVendorDayDetails(dateKey: string, vendorName: string): VendorDayDetails {
     const allDaySales = this.getSalesForDay(dateKey);
     const cleanVendor = vendorName.trim();
     const vendorSales = allDaySales.filter(
@@ -1066,43 +1014,40 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
-    let tradeRevenue = 0;
-    let tradeCount = 0;
 
     for (const s of vendorSales) {
       totalRevenue += s.amount;
       if (s.paymentMethod === 'cash') {
         cashRevenue += s.amount;
         cashCount++;
-      } else if (s.paymentMethod === 'card') {
+      } else {
         cardRevenue += s.amount;
         cardCount++;
-      } else if (s.paymentMethod === 'trade') {
-        tradeRevenue += s.amount;
-        tradeCount++;
       }
     }
 
-    // Trades taken in by this vendor (either explicitly designated as accepting vendor or the vendor who made the trade sale)
-    const tradesTakenIn = allDaySales
-      .filter((s) => {
-        if (s.paymentMethod !== 'trade') return false;
-        const acceptor = s.tradeAcceptingVendor || s.salesmanName;
-        return acceptor.toLowerCase() === cleanVendor.toLowerCase();
-      })
-      .map((s) => ({
-        saleId: s.id,
-        timestamp: s.timestamp,
-        tradeItemDescription: s.tradeItemDescription || s.tradeDetails || 'Traded-in item',
-        tradeValue: s.tradeValue !== undefined ? s.tradeValue : s.amount,
-        soldItemDescription: s.itemDescription,
-        saleAmount: s.amount,
-        salesmanName: s.salesmanName,
-        tradeAcceptingVendor: s.tradeAcceptingVendor || s.salesmanName,
-        notes: s.notes,
-      }));
+    // Trades taken in by this vendor on dateKey
+    const allTrades = this.getTradesForDay(dateKey);
+    const tradesTakenIn = allTrades.filter(
+      (t) => t.vendorName.toLowerCase() === cleanVendor.toLowerCase()
+    );
 
-    const totalTradeTakenInAmount = tradesTakenIn.reduce((sum, t) => sum + t.tradeValue, 0);
+    let totalTradeTakenInAmount = 0;
+    let cashTradeValue = 0;
+    let cashTradeCount = 0;
+    let creditTradeValue = 0;
+    let creditTradeCount = 0;
+
+    for (const t of tradesTakenIn) {
+      totalTradeTakenInAmount += t.tradeValue;
+      if (t.tradeType === 'cash') {
+        cashTradeValue += t.tradeValue;
+        cashTradeCount++;
+      } else {
+        creditTradeValue += t.tradeValue;
+        creditTradeCount++;
+      }
+    }
 
     return {
       vendorName: cleanVendor,
@@ -1115,13 +1060,15 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
-      tradeRevenue: Math.round(tradeRevenue * 100) / 100,
-      tradeCount,
       averageTicket: vendorSales.length > 0 ? Math.round((totalRevenue / vendorSales.length) * 100) / 100 : 0,
       sales: vendorSales,
       tradesTakenIn,
       totalTradeTakenInAmount: Math.round(totalTradeTakenInAmount * 100) / 100,
       tradeTakenInCount: tradesTakenIn.length,
+      cashTradeValue: Math.round(cashTradeValue * 100) / 100,
+      cashTradeCount,
+      creditTradeValue: Math.round(creditTradeValue * 100) / 100,
+      creditTradeCount,
     };
   }
 
@@ -1130,31 +1077,20 @@ class CloudSalesDatabase {
     const weekInfo = getWeekRangeInfo(startDateKey);
 
     const weekSales: SaleRecord[] = [];
-    const weekTradesTakenIn: TradeTakenInRecord[] = [];
+    const weekTradesTakenIn: TradeRecord[] = [];
 
     this.salesCache.forEach((rec) => {
       if (rec.dateKey >= startDateKey && rec.dateKey <= endDateKey) {
         if (rec.salesmanName.toLowerCase() === cleanVendor) {
           weekSales.push(rec);
         }
+      }
+    });
 
-        // Check if trade was accepted by this vendor
-        if (rec.paymentMethod === 'trade') {
-          const acceptor = rec.tradeAcceptingVendor || rec.salesmanName;
-          if (acceptor.toLowerCase() === cleanVendor) {
-            weekTradesTakenIn.push({
-              saleId: rec.id,
-              timestamp: rec.timestamp,
-              dateKey: rec.dateKey,
-              tradeItemDescription: rec.tradeItemDescription || rec.tradeDetails || 'Traded item',
-              tradeValue: rec.tradeValue !== undefined ? rec.tradeValue : rec.amount,
-              soldItemDescription: rec.itemDescription,
-              saleAmount: rec.amount,
-              salesmanName: rec.salesmanName,
-              tradeAcceptingVendor: acceptor,
-              notes: rec.notes,
-            });
-          }
+    this.tradesCache.forEach((t) => {
+      if (t.dateKey >= startDateKey && t.dateKey <= endDateKey) {
+        if (t.vendorName.toLowerCase() === cleanVendor) {
+          weekTradesTakenIn.push(t);
         }
       }
     });
@@ -1167,26 +1103,36 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
-    let tradeRevenue = 0;
-    let tradeCount = 0;
 
     for (const s of weekSales) {
       totalRevenue += s.amount;
       if (s.paymentMethod === 'cash') {
         cashRevenue += s.amount;
         cashCount++;
-      } else if (s.paymentMethod === 'card') {
+      } else {
         cardRevenue += s.amount;
         cardCount++;
-      } else if (s.paymentMethod === 'trade') {
-        tradeRevenue += s.amount;
-        tradeCount++;
       }
     }
 
-    const totalTradeTakenInAmount = weekTradesTakenIn.reduce((sum, t) => sum + t.tradeValue, 0);
+    let totalTradeTakenInAmount = 0;
+    let cashTradeValue = 0;
+    let cashTradeCount = 0;
+    let creditTradeValue = 0;
+    let creditTradeCount = 0;
 
-    // Group by the 7 days of this Sunday-to-Saturday week
+    for (const t of weekTradesTakenIn) {
+      totalTradeTakenInAmount += t.tradeValue;
+      if (t.tradeType === 'cash') {
+        cashTradeValue += t.tradeValue;
+        cashTradeCount++;
+      } else {
+        creditTradeValue += t.tradeValue;
+        creditTradeCount++;
+      }
+    }
+
+    // 7-day strip (Sun - Sat)
     const dayBreakdown: DayBreakdownItem[] = weekInfo.days.map((day) => {
       const daySales = weekSales.filter((s) => s.dateKey === day.dateKey);
       const dayTrades = weekTradesTakenIn.filter((t) => t.dateKey === day.dateKey);
@@ -1194,16 +1140,22 @@ class CloudSalesDatabase {
       let dayTotal = 0;
       let dayCash = 0;
       let dayCard = 0;
-      let dayTradeRev = 0;
 
       for (const s of daySales) {
         dayTotal += s.amount;
         if (s.paymentMethod === 'cash') dayCash += s.amount;
-        else if (s.paymentMethod === 'card') dayCard += s.amount;
-        else if (s.paymentMethod === 'trade') dayTradeRev += s.amount;
+        else dayCard += s.amount;
       }
 
-      const dayTradeTakenInVal = dayTrades.reduce((sum, t) => sum + t.tradeValue, 0);
+      let dayTradeVal = 0;
+      let dayCashTradeVal = 0;
+      let dayCreditTradeVal = 0;
+
+      for (const t of dayTrades) {
+        dayTradeVal += t.tradeValue;
+        if (t.tradeType === 'cash') dayCashTradeVal += t.tradeValue;
+        else dayCreditTradeVal += t.tradeValue;
+      }
 
       return {
         dateKey: day.dateKey,
@@ -1215,9 +1167,10 @@ class CloudSalesDatabase {
         totalRevenue: Math.round(dayTotal * 100) / 100,
         cashRevenue: Math.round(dayCash * 100) / 100,
         cardRevenue: Math.round(dayCard * 100) / 100,
-        tradeRevenue: Math.round(dayTradeRev * 100) / 100,
-        tradeTakenInAmount: Math.round(dayTradeTakenInVal * 100) / 100,
+        tradeTakenInAmount: Math.round(dayTradeVal * 100) / 100,
         tradeTakenInCount: dayTrades.length,
+        cashTradeValue: Math.round(dayCashTradeVal * 100) / 100,
+        creditTradeValue: Math.round(dayCreditTradeVal * 100) / 100,
       };
     });
 
@@ -1231,11 +1184,13 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
-      tradeRevenue: Math.round(tradeRevenue * 100) / 100,
-      tradeCount,
       averageTicket: weekSales.length > 0 ? Math.round((totalRevenue / weekSales.length) * 100) / 100 : 0,
       totalTradeTakenInAmount: Math.round(totalTradeTakenInAmount * 100) / 100,
       tradeTakenInCount: weekTradesTakenIn.length,
+      cashTradeValue: Math.round(cashTradeValue * 100) / 100,
+      cashTradeCount,
+      creditTradeValue: Math.round(creditTradeValue * 100) / 100,
+      creditTradeCount,
       dayBreakdown,
       sales: weekSales,
       tradesTakenIn: weekTradesTakenIn,
@@ -1264,9 +1219,6 @@ class CloudSalesDatabase {
       'Item Sold',
       'Gross Amount (£) [Before Commission]',
       'Payment Method',
-      'Trade Details',
-      'Trade Accepting Vendor',
-      'Trade Value (£)',
       'Notes',
     ];
 
@@ -1278,9 +1230,6 @@ class CloudSalesDatabase {
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
       sale.paymentMethod.toUpperCase(),
-      `"${(sale.tradeDetails || '').replace(/"/g, '""')}"`,
-      `"${(sale.tradeAcceptingVendor || '').replace(/"/g, '""')}"`,
-      sale.tradeValue !== undefined ? sale.tradeValue.toFixed(2) : '',
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -1301,9 +1250,6 @@ class CloudSalesDatabase {
       'Item Sold',
       'Gross Amount (£) [Before Commission]',
       'Payment Method',
-      'Trade Details',
-      'Trade Accepting Vendor',
-      'Trade Value (£)',
       'Notes',
     ];
     const rows = sales.map((sale) => [
@@ -1314,9 +1260,6 @@ class CloudSalesDatabase {
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
       sale.paymentMethod.toUpperCase(),
-      `"${(sale.tradeDetails || '').replace(/"/g, '""')}"`,
-      `"${(sale.tradeAcceptingVendor || '').replace(/"/g, '""')}"`,
-      sale.tradeValue !== undefined ? sale.tradeValue.toFixed(2) : '',
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -1326,19 +1269,6 @@ class CloudSalesDatabase {
       ...rows.map((r) => r.join(',')),
     ].join('\n');
   }
-}
-
-export interface TradeTakenInRecord {
-  saleId: string;
-  timestamp: number;
-  dateKey: string;
-  tradeItemDescription: string;
-  tradeValue: number;
-  soldItemDescription: string;
-  saleAmount: number;
-  salesmanName: string;
-  tradeAcceptingVendor: string;
-  notes?: string;
 }
 
 export interface DayBreakdownItem {
@@ -1351,9 +1281,32 @@ export interface DayBreakdownItem {
   totalRevenue: number;
   cashRevenue: number;
   cardRevenue: number;
-  tradeRevenue: number;
   tradeTakenInAmount: number;
   tradeTakenInCount: number;
+  cashTradeValue: number;
+  creditTradeValue: number;
+}
+
+export interface VendorDayDetails {
+  vendorName: string;
+  color: string;
+  dateKey: string;
+  formattedDate: string;
+  salesCount: number;
+  totalRevenue: number;
+  cashRevenue: number;
+  cashCount: number;
+  cardRevenue: number;
+  cardCount: number;
+  averageTicket: number;
+  sales: SaleRecord[];
+  tradesTakenIn: TradeRecord[];
+  totalTradeTakenInAmount: number;
+  tradeTakenInCount: number;
+  cashTradeValue: number;
+  cashTradeCount: number;
+  creditTradeValue: number;
+  creditTradeCount: number;
 }
 
 export interface VendorWeekDetails {
@@ -1366,14 +1319,16 @@ export interface VendorWeekDetails {
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
-  tradeRevenue: number;
-  tradeCount: number;
   averageTicket: number;
   totalTradeTakenInAmount: number;
   tradeTakenInCount: number;
+  cashTradeValue: number;
+  cashTradeCount: number;
+  creditTradeValue: number;
+  creditTradeCount: number;
   dayBreakdown: DayBreakdownItem[];
   sales: SaleRecord[];
-  tradesTakenIn: TradeTakenInRecord[];
+  tradesTakenIn: TradeRecord[];
 }
 
 export const cloudDb = new CloudSalesDatabase();

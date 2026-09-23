@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Banknote, CreditCard, ArrowLeftRight } from 'lucide-react';
+import { Users, Banknote, CreditCard } from 'lucide-react';
 import { VendorStat } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
 
@@ -37,9 +37,9 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
       <div className="px-5 py-3.5 border-b border-zinc-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-zinc-500" />
-          <h3 className="text-sm font-bold text-zinc-900">Vendor Performance Today</h3>
+          <h3 className="text-sm font-bold text-zinc-900">Vendor Sales Performance</h3>
           <span className="hidden sm:inline-block text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-            Gross (Before Commission)
+            Gross Before Commission
           </span>
         </div>
         <span className="text-xs text-zinc-400 font-medium">
@@ -89,7 +89,7 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                   {formatCurrency(vendor.totalAmount)}
                 </span>
                 <span className={`text-xs font-medium ${isSelected ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                  {shareOfTotal.toFixed(0)}% of day
+                  {shareOfTotal.toFixed(0)}% of sales
                 </span>
               </div>
 
@@ -104,43 +104,27 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                 />
               </div>
 
-              {/* Payment method breakdown & Trade taken in */}
-              <div className="space-y-1.5 pt-1 border-t border-zinc-200/50 text-[11px]">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-0.5 ${isSelected ? 'text-emerald-300' : 'text-emerald-700 font-medium'}`}
-                    title={`Cash: ${formatCurrency(vendor.cashAmount)}`}
-                  >
-                    <Banknote className="w-3 h-3" />
-                    {formatCurrency(vendor.cashAmount)}
-                  </span>
-                  <span className="text-zinc-300">•</span>
-                  <span
-                    className={`inline-flex items-center gap-0.5 ${isSelected ? 'text-blue-300' : 'text-blue-700 font-medium'}`}
-                    title={`Card: ${formatCurrency(vendor.cardAmount)}`}
-                  >
-                    <CreditCard className="w-3 h-3" />
-                    {formatCurrency(vendor.cardAmount)}
-                  </span>
-                  <span className="text-zinc-300">•</span>
-                  <span
-                    className={`inline-flex items-center gap-0.5 ${isSelected ? 'text-amber-300' : 'text-amber-700 font-medium'}`}
-                    title={`Trade: ${formatCurrency(vendor.tradeAmount)}`}
-                  >
-                    <ArrowLeftRight className="w-3 h-3" />
-                    {formatCurrency(vendor.tradeAmount)}
-                  </span>
-                </div>
+              {/* Cash & Card breakdown */}
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 text-[11px]">
+                <span
+                  className={`inline-flex items-center gap-1 font-semibold ${
+                    isSelected ? 'text-emerald-300' : 'text-emerald-700'
+                  }`}
+                  title={`Cash: ${formatCurrency(vendor.cashAmount)}`}
+                >
+                  <Banknote className="w-3 h-3" />
+                  Cash: {formatCurrency(vendor.cashAmount)}
+                </span>
 
-                {/* Trade taken in badge */}
-                {(vendor.tradeTakenInAmount !== undefined && vendor.tradeTakenInAmount > 0) && (
-                  <div className={`flex items-center justify-between px-2 py-0.5 rounded text-[10px] font-bold ${
-                    isSelected ? 'bg-amber-950/60 text-amber-300 border border-amber-500/30' : 'bg-amber-100/70 text-amber-900 border border-amber-200'
-                  }`}>
-                    <span>Trades Taken In:</span>
-                    <span>{formatCurrency(vendor.tradeTakenInAmount)} ({vendor.tradeTakenInCount || 0})</span>
-                  </div>
-                )}
+                <span
+                  className={`inline-flex items-center gap-1 font-semibold ${
+                    isSelected ? 'text-blue-300' : 'text-blue-700'
+                  }`}
+                  title={`Card: ${formatCurrency(vendor.cardAmount)}`}
+                >
+                  <CreditCard className="w-3 h-3" />
+                  Card: {formatCurrency(vendor.cardAmount)}
+                </span>
               </div>
             </button>
           );
@@ -149,6 +133,3 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
     </div>
   );
 };
-
-export const SalesmanBreakdown = VendorBreakdown;
-

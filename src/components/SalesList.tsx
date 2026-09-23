@@ -3,7 +3,6 @@ import {
   Search,
   Banknote,
   CreditCard,
-  ArrowLeftRight,
   Edit2,
   Trash2,
   Clock,
@@ -20,7 +19,7 @@ interface SalesListProps {
   allVendors?: string[];
   allSalesmen?: string[];
   selectedPaymentFilter: string;
-  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'trade') => void;
+  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card') => void;
   selectedVendor?: string;
   selectedSalesman?: string;
   onSelectVendor?: (name: string) => void;
@@ -71,9 +70,6 @@ export const SalesList: React.FC<SalesListProps> = ({
         (s) =>
           s.itemDescription.toLowerCase().includes(q) ||
           s.salesmanName.toLowerCase().includes(q) ||
-          (s.tradeAcceptingVendor && s.tradeAcceptingVendor.toLowerCase().includes(q)) ||
-          (s.tradeItemDescription && s.tradeItemDescription.toLowerCase().includes(q)) ||
-          (s.tradeDetails && s.tradeDetails.toLowerCase().includes(q)) ||
           (s.notes && s.notes.toLowerCase().includes(q))
       );
     }
@@ -94,30 +90,21 @@ export const SalesList: React.FC<SalesListProps> = ({
     return filteredSales.reduce((sum, s) => sum + s.amount, 0);
   }, [filteredSales]);
 
-  const renderPaymentBadge = (method: PaymentMethod, tradeDetails?: string) => {
-    switch (method) {
-      case 'cash':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-            <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-            Cash
-          </span>
-        );
-      case 'card':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-            Card
-          </span>
-        );
-      case 'trade':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-            <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
-            Trade
-          </span>
-        );
+  const renderPaymentBadge = (method: PaymentMethod | string) => {
+    if (method === 'cash') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+          Cash
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+        <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+        Card
+      </span>
+    );
   };
 
   return (
@@ -128,7 +115,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           <div>
             <h2 className="text-base font-bold text-zinc-900">Today's Sales Records</h2>
             <p className="text-xs text-zinc-500">
-              Showing {filteredSales.length} of {sales.length} transactions recorded in memory
+              Showing {filteredSales.length} of {sales.length} cash & card transactions
             </p>
           </div>
 
@@ -148,7 +135,7 @@ export const SalesList: React.FC<SalesListProps> = ({
               id="input-search-sales"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search item, salesman name, or trade note..."
+              placeholder="Search item, vendor name, or sale memo..."
               className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-zinc-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900 transition-all"
             />
             {searchQuery && (
@@ -162,25 +149,25 @@ export const SalesList: React.FC<SalesListProps> = ({
             )}
           </div>
 
-          {/* Payment Filter Pills */}
+          {/* Payment Filter Pills (Cash or Card) */}
           <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs">
             <button
               type="button"
               id="filter-payment-all"
               onClick={() => onSelectPaymentFilter('all')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
                 selectedPaymentFilter === 'all'
                   ? 'bg-white text-zinc-900 shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              All
+              All Sales
             </button>
             <button
               type="button"
               id="filter-payment-cash"
               onClick={() => onSelectPaymentFilter('cash')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all ${
+              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
                 selectedPaymentFilter === 'cash'
                   ? 'bg-emerald-600 text-white shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-emerald-700'
@@ -192,25 +179,13 @@ export const SalesList: React.FC<SalesListProps> = ({
               type="button"
               id="filter-payment-card"
               onClick={() => onSelectPaymentFilter('card')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all ${
+              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
                 selectedPaymentFilter === 'card'
                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-blue-700'
               }`}
             >
               <CreditCard className="w-3 h-3" /> Card
-            </button>
-            <button
-              type="button"
-              id="filter-payment-trade"
-              onClick={() => onSelectPaymentFilter('trade')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all ${
-                selectedPaymentFilter === 'trade'
-                  ? 'bg-amber-600 text-white shadow-xs font-bold'
-                  : 'text-zinc-600 hover:text-amber-700'
-              }`}
-            >
-              <ArrowLeftRight className="w-3 h-3" /> Trade
             </button>
           </div>
 
@@ -239,193 +214,147 @@ export const SalesList: React.FC<SalesListProps> = ({
             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
-              <option value="amount-high">Amount (High to Low)</option>
-              <option value="amount-low">Amount (Low to High)</option>
+              <option value="amount-high">Amount: High to Low</option>
+              <option value="amount-low">Amount: Low to High</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Sales Records List */}
+      {/* Sales Table / List View */}
       {filteredSales.length === 0 ? (
-        <div className="p-12 text-center">
-          <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3 text-zinc-400">
-            <FileText className="w-6 h-6" />
+        <div className="text-center py-12 px-4">
+          <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3">
+            <SlidersHorizontal className="w-6 h-6 text-zinc-400" />
           </div>
-          <h3 className="text-sm font-bold text-zinc-900">No Sales Records Found</h3>
-          <p className="text-xs text-zinc-500 max-w-sm mx-auto mt-1">
-            {sales.length === 0
-              ? "No sales have been recorded for this date yet. Use the 'Record New Sale' form to add transactions."
-              : 'No sales match your current search or filter criteria. Try resetting your filters.'}
+          <h3 className="text-sm font-semibold text-zinc-800 mb-1">No sales records match your criteria</h3>
+          <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+            Try adjusting your search query, selecting "All Sales", or record a new sale above.
           </p>
-          {(selectedPaymentFilter !== 'all' || selectedVendor !== 'all' || searchQuery) && (
-            <button
-              type="button"
-              onClick={() => {
-                onSelectPaymentFilter('all');
-                handleSelectVendor('all');
-                setSearchQuery('');
-              }}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors"
-            >
-              Reset Filters
-            </button>
-          )}
         </div>
       ) : (
-        <div className="divide-y divide-zinc-100 overflow-x-auto">
-          {/* Table Header on Desktop */}
-          <div className="hidden md:grid md:grid-cols-12 px-5 py-2.5 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-            <div className="col-span-2">Time</div>
-            <div className="col-span-3">Vendor</div>
-            <div className="col-span-4">Item Sold & Details</div>
-            <div className="col-span-2 text-right">Price / Method</div>
-            <div className="col-span-1 text-right">Actions</div>
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-50/80 text-zinc-500 font-semibold uppercase tracking-wider border-b border-zinc-100">
+              <tr>
+                <th scope="col" className="py-3 px-4">Time</th>
+                <th scope="col" className="py-3 px-4">Vendor</th>
+                <th scope="col" className="py-3 px-4">Item Sold</th>
+                <th scope="col" className="py-3 px-4 text-right">Gross Price</th>
+                <th scope="col" className="py-3 px-4 text-center">Payment</th>
+                <th scope="col" className="py-3 px-4">Notes</th>
+                <th scope="col" className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {filteredSales.map((sale) => {
+                const dateObj = new Date(sale.timestamp);
+                const timeString = dateObj.toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                });
+                const isMisc = Boolean(sale.isMiscellaneous) || sale.itemDescription?.trim().toLowerCase() === 'miscellaneous';
+                const vendorColor = cloudDb.getVendorColor(sale.salesmanName);
 
-          {filteredSales.map((sale) => {
-            const timeStr = new Date(sale.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-
-            return (
-              <div
-                key={sale.id}
-                id={`sale-row-${sale.id}`}
-                className="p-4 md:px-5 md:py-3.5 hover:bg-zinc-50/70 transition-colors grid grid-cols-1 md:grid-cols-12 items-start md:items-center gap-2 md:gap-3"
-              >
-                {/* Time & Date */}
-                <div className="md:col-span-2 flex items-center gap-1.5 text-xs text-zinc-500">
-                  <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="font-medium text-zinc-700">{timeStr}</span>
-                </div>
-
-                {/* Vendor Name with Brand Color Badge */}
-                <div className="md:col-span-3 flex items-center gap-2">
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-2xs"
-                    style={{ backgroundColor: cloudDb.getVendorColor(sale.salesmanName) }}
-                  >
-                    {sale.salesmanName.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-zinc-900">{sale.salesmanName}</span>
-                      <span
-                        className="w-2 h-2 rounded-full inline-block shrink-0"
-                        style={{ backgroundColor: cloudDb.getVendorColor(sale.salesmanName) }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-zinc-400">Vendor</span>
-                  </div>
-                </div>
-
-                {/* Item Sold and Trade Details */}
-                <div className="md:col-span-4 space-y-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-semibold text-zinc-900 leading-snug">
-                      {sale.itemDescription}
-                    </span>
-                    {(sale.isMiscellaneous || sale.itemDescription.trim().toLowerCase() === 'miscellaneous') && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                        Misc
+                return (
+                  <tr key={sale.id} className="hover:bg-zinc-50/70 transition-colors group">
+                    {/* Timestamp */}
+                    <td className="py-3 px-4 whitespace-nowrap text-zinc-500 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                        {timeString}
                       </span>
-                    )}
-                  </div>
+                    </td>
 
-                  {sale.paymentMethod === 'trade' && (
-                    <div className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/90 text-amber-950 text-[11px] space-y-0.5">
-                      <div className="flex items-center gap-1 font-semibold text-amber-900">
-                        <ArrowLeftRight className="w-3 h-3 text-amber-700 shrink-0" />
-                        <span>Trade-in</span>
-                        {sale.tradeValue !== undefined && (
-                          <span className="ml-auto font-bold text-amber-800">
-                            Valued at £{sale.tradeValue.toFixed(2)}
+                    {/* Vendor Name */}
+                    <td className="py-3 px-4 whitespace-nowrap font-bold text-zinc-900">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                          style={{ backgroundColor: vendorColor }}
+                        />
+                        <span>{sale.salesmanName}</span>
+                      </div>
+                    </td>
+
+                    {/* Item Description */}
+                    <td className="py-3 px-4 font-medium text-zinc-800 max-w-[260px]">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isMisc ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded text-[11px] border border-zinc-200">
+                            Miscellaneous
                           </span>
+                        ) : (
+                          <span className="break-words">{sale.itemDescription}</span>
                         )}
                       </div>
-                      {sale.tradeAcceptingVendor && (
-                        <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
-                          <span>Accepted by:</span>
-                          <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-white/80 px-1.5 py-0.5 rounded border border-amber-200">
-                            <span
-                              className="w-2 h-2 rounded-full inline-block"
-                              style={{ backgroundColor: cloudDb.getVendorColor(sale.tradeAcceptingVendor) }}
-                            />
-                            {sale.tradeAcceptingVendor}
-                          </span>
-                        </div>
-                      )}
-                      {sale.tradeItemDescription && (
-                        <div className="text-[10px] text-zinc-600">
-                          Item: {sale.tradeItemDescription}
-                        </div>
-                      )}
-                      {!sale.tradeAcceptingVendor && sale.tradeValue === undefined && sale.tradeDetails && (
-                        <div className="text-[10px] text-amber-800">{sale.tradeDetails}</div>
-                      )}
-                    </div>
-                  )}
+                    </td>
 
-                  {sale.notes && (
-                    <p className="text-[11px] text-zinc-500 italic">"{sale.notes}"</p>
-                  )}
-                </div>
+                    {/* Amount */}
+                    <td className="py-3 px-4 whitespace-nowrap text-right font-black text-sm text-zinc-950 tabular-nums">
+                      {formatCurrency(sale.amount)}
+                    </td>
 
-                {/* Amount & Payment Method */}
-                <div className="md:col-span-2 flex md:flex-col md:items-end justify-between items-center gap-1.5">
-                  <span className="text-base font-extrabold text-zinc-900">
-                    {formatCurrency(sale.amount)}
-                  </span>
-                  <div>{renderPaymentBadge(sale.paymentMethod, sale.tradeDetails)}</div>
-                </div>
+                    {/* Payment Method Badge */}
+                    <td className="py-3 px-4 whitespace-nowrap text-center">
+                      {renderPaymentBadge(sale.paymentMethod)}
+                    </td>
 
-                {/* Actions: Edit / Delete */}
-                <div className="md:col-span-1 flex items-center justify-end gap-1 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-100">
-                  <button
-                    type="button"
-                    onClick={() => onEditSale(sale)}
-                    className="p-1.5 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
-                    title="Edit Sale"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                    {/* Notes */}
+                    <td className="py-3 px-4 text-zinc-500 max-w-[180px] truncate" title={sale.notes}>
+                      {sale.notes || '—'}
+                    </td>
 
-                  {deleteConfirmId === sale.id ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onDeleteSale(sale.id);
-                          setDeleteConfirmId(null);
-                        }}
-                        className="px-2 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded transition-colors"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(null)}
-                        className="px-1.5 py-1 text-[10px] text-zinc-500 hover:text-zinc-700"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(sale.id)}
-                      className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="Delete Sale"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    {/* Action buttons */}
+                    <td className="py-3 px-4 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onEditSale(sale)}
+                          className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                          title="Edit transaction"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {deleteConfirmId === sale.id ? (
+                          <div className="flex items-center gap-1 animate-fade-in">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteSale(sale.id);
+                                setDeleteConfirmId(null);
+                              }}
+                              className="px-2 py-1 rounded bg-rose-600 text-white font-bold text-[11px] hover:bg-rose-700 cursor-pointer shadow-xs"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-1.5 py-1 rounded bg-zinc-200 text-zinc-700 font-medium text-[11px] hover:bg-zinc-300 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(sale.id)}
+                            className="p-1.5 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete transaction"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

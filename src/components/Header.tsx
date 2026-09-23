@@ -65,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                Multi-vendor sales ledger, real-time totals & trade-in valuation
+                Multi-vendor sales ledger (cash/card), cards trade-ins (cash/credit) & vendor portal
               </p>
             </div>
           </div>

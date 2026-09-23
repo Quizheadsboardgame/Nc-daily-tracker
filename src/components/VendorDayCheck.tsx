@@ -12,10 +12,10 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  FileSpreadsheet,
   Download,
   CalendarDays,
-  CheckCircle2
+  Ticket,
+  FileSpreadsheet
 } from 'lucide-react';
 import { SaleRecord, DaySummary } from '../types';
 import { 
@@ -122,10 +122,10 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
 
     if (viewMode === 'weekly') {
       csvContent = cloudDb.exportWeekToCsv(currentWeek.startDateKey, currentWeek.endDateKey, activeVendor);
-      filename = `sales_${activeVendor.toLowerCase()}_week${currentWeek.weekNumber}_${currentWeek.startDateKey}_to_${currentWeek.endDateKey}.csv`;
+      filename = `vendor_${activeVendor.toLowerCase()}_week${currentWeek.weekNumber}_${currentWeek.startDateKey}_to_${currentWeek.endDateKey}.csv`;
     } else {
       csvContent = cloudDb.exportDayToCsv(selectedDailyDateKey);
-      filename = `sales_${activeVendor.toLowerCase()}_${selectedDailyDateKey}.csv`;
+      filename = `vendor_${activeVendor.toLowerCase()}_${selectedDailyDateKey}.csv`;
     }
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -164,11 +164,11 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 Vendor Performance Portal
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                Sun – Sat Weeks
+                Sunday – Saturday Weeks
               </span>
             </div>
             <h2 className="text-lg font-bold text-zinc-900 mt-0.5">
-              Sales & Trade Taken In Overview
+              Sales Ledger (Cash/Card) & Cards Trade-In Overview
             </h2>
           </div>
 
@@ -405,7 +405,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 id="vendor-daily-date-select"
                 value={selectedDailyDateKey}
                 onChange={(e) => setSelectedDailyDateKey(e.target.value || getLocalDateKey())}
-                className="px-3 py-1.5 rounded-xl border border-zinc-300 text-xs font-semibold text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl border border-zinc-300 text-xs font-semibold text-zinc-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900 cursor-pointer"
               />
               {selectedDailyDateKey !== getLocalDateKey() && (
                 <button
@@ -433,10 +433,10 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
         )}
       </div>
 
-      {/* MANDATORY USER DISCLAIMER BANNER: "this is before commision reductions" */}
+      {/* MANDATORY DISCLAIMER BANNER: All figures are before commission reductions */}
       <div 
         id="banner-vendor-commission-disclaimer" 
-        className="bg-amber-50/90 border-2 border-amber-300/90 rounded-2xl p-4 sm:p-4.5 flex items-start gap-3.5 shadow-xs"
+        className="bg-amber-50/90 border-2 border-amber-300/90 rounded-2xl p-4 flex items-start gap-3.5 shadow-xs"
       >
         <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0 mt-0.5">
           <AlertCircle className="w-5 h-5 text-amber-700" />
@@ -451,7 +451,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             </span>
           </div>
           <p className="text-xs text-amber-900/90 leading-relaxed font-medium">
-            All sales figures, revenue totals, ticket averages, and trade values shown on this page are <strong>gross amounts before commission reductions</strong>. Payouts and settlements will be calculated after standard commission deductions are applied.
+            All sales figures (cash and card) and cards trade-in valuations (cash payouts and vendor credit) displayed in this portal are <strong>gross amounts before commission reductions</strong>. Payouts and settlements will be calculated after standard commission deductions are applied.
           </p>
         </div>
       </div>
@@ -489,11 +489,11 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   {weekData.vendorName}
                 </h1>
                 <p className="text-xs text-white/80 mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span>{weekData.salesCount} {weekData.salesCount === 1 ? 'sale' : 'sales'} logged this week</span>
+                  <span>{weekData.salesCount} {weekData.salesCount === 1 ? 'sale' : 'sales'} (cash/card)</span>
                   <span>•</span>
-                  <span>{weekData.tradeTakenInCount} {weekData.tradeTakenInCount === 1 ? 'trade taken in' : 'trades taken in'}</span>
+                  <span>{weekData.tradeTakenInCount} {weekData.tradeTakenInCount === 1 ? 'trade-in taken in' : 'trade-ins taken in'}</span>
                   <span>•</span>
-                  <span className="text-amber-300 font-bold">Figures before commission reductions</span>
+                  <span className="text-amber-300 font-bold">Gross figures before commission</span>
                 </p>
               </div>
             </div>
@@ -501,7 +501,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             <div className="flex items-center gap-4 relative z-10 self-start md:self-auto bg-black/30 backdrop-blur-xs px-4 py-2.5 rounded-xl border border-white/10">
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-zinc-300 font-bold block">
-                  Weekly Gross Sales
+                  Gross Sales (Cash/Card)
                 </span>
                 <span className="text-2xl font-black text-white">
                   {formatCurrency(weekData.totalRevenue)}
@@ -511,19 +511,19 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               <div className="h-8 w-px bg-white/20" />
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-amber-300 font-bold block">
-                  Weekly Trades Taken In
+                  Cards Traded In
                 </span>
                 <span className="text-2xl font-black text-amber-400">
                   {formatCurrency(weekData.totalTradeTakenInAmount)}
                 </span>
-                <span className="text-[9px] text-amber-200/80 block">{weekData.tradeTakenInCount} items in stock</span>
+                <span className="text-[9px] text-amber-200/80 block">{weekData.tradeTakenInCount} items</span>
               </div>
             </div>
           </div>
 
-          {/* Primary Weekly KPI Cards */}
+          {/* Primary Weekly KPI Cards (4 Cards) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* KPI 1: Weekly Gross Sales */}
+            {/* KPI 1: Gross Sales */}
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
@@ -537,7 +537,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 {formatCurrency(weekData.totalRevenue)}
               </div>
               <div className="text-xs text-zinc-500 mt-1 flex items-center justify-between">
-                <span>{weekData.salesCount} transactions</span>
+                <span>{weekData.salesCount} sales logged</span>
                 <span className="font-semibold text-zinc-700">
                   Avg: {formatCurrency(weekData.averageTicket)}
                 </span>
@@ -547,15 +547,41 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               </div>
             </div>
 
-            {/* KPI 2: Weekly Trades Taken In */}
+            {/* KPI 2: Cash & Card Sales Split */}
+            <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                  Sales Payment Split
+                </span>
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
+                  <Banknote className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5" /> Cash:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.cashRevenue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-blue-700 font-bold flex items-center gap-1">
+                    <CreditCard className="w-3.5 h-3.5" /> Card:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.cardRevenue)}</span>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] text-zinc-500 font-medium">
+                {weekData.cashCount} cash • {weekData.cardCount} card
+              </div>
+            </div>
+
+            {/* KPI 3: Total Cards Traded In */}
             <div className="bg-amber-50/60 rounded-2xl border-2 border-amber-300/80 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                    Trades Taken In
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900">
-                    Week Total
+                    Cards Traded In
                   </span>
                 </div>
                 <div className="p-2 rounded-lg bg-amber-200 text-amber-800">
@@ -566,52 +592,39 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 {formatCurrency(weekData.totalTradeTakenInAmount)}
               </div>
               <div className="text-xs text-amber-800 mt-1 font-medium">
-                {weekData.tradeTakenInCount} {weekData.tradeTakenInCount === 1 ? 'item accepted into stock' : 'items accepted into stock'}
+                {weekData.tradeTakenInCount} {weekData.tradeTakenInCount === 1 ? 'card trade' : 'card trades'} taken in
               </div>
               <div className="mt-2 text-[10px] font-bold text-amber-800/90 bg-amber-200/60 px-2 py-0.5 rounded inline-block">
                 Before commission reductions
               </div>
             </div>
 
-            {/* KPI 3: Weekly Cash Revenue */}
+            {/* KPI 4: Trade Compensation Split (Cash vs Credit) */}
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Cash Collected
+                  Trade Compensation
                 </span>
-                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
-                  <Banknote className="w-4 h-4" />
+                <div className="p-2 rounded-lg bg-purple-50 text-purple-700">
+                  <Ticket className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-2xl font-black text-emerald-700">
-                {formatCurrency(weekData.cashRevenue)}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                {weekData.cashCount} cash {weekData.cashCount === 1 ? 'sale' : 'sales'} this week
-              </div>
-              <div className="mt-2 text-[10px] font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded inline-block">
-                Gross cash
-              </div>
-            </div>
-
-            {/* KPI 4: Weekly Card Revenue */}
-            <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Card Collected
-                </span>
-                <div className="p-2 rounded-lg bg-blue-50 text-blue-700">
-                  <CreditCard className="w-4 h-4" />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5" /> Cash Payout:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.cashTradeValue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-purple-700 font-bold flex items-center gap-1">
+                    <Ticket className="w-3.5 h-3.5" /> Vendor Credit:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.creditTradeValue)}</span>
                 </div>
               </div>
-              <div className="text-2xl font-black text-blue-700">
-                {formatCurrency(weekData.cardRevenue)}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                {weekData.cardCount} card {weekData.cardCount === 1 ? 'sale' : 'sales'} this week
-              </div>
-              <div className="mt-2 text-[10px] font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded inline-block">
-                Gross card
+              <div className="mt-2 text-[10px] text-zinc-500 font-medium">
+                {weekData.cashTradeCount} cash payouts • {weekData.creditTradeCount} credit issued
               </div>
             </div>
           </div>
@@ -621,13 +634,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             <div className="px-5 py-4 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-50/60">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-                  <span>Day-by-Day Performance (Sunday to Saturday)</span>
+                  <span>Day-by-Day Breakdown (Sunday to Saturday)</span>
                   <span className="text-xs font-normal text-zinc-500">
                     • Week {currentWeek.weekNumber}
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-500">
-                  Daily gross sales and trade taken in breakdown. All amounts before commission reductions.
+                  Daily sales (cash/card) and cards traded in (cash payout / vendor credit). Gross amounts before commission reductions.
                 </p>
               </div>
 
@@ -637,7 +650,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   onClick={() => setWeekFilterDayKey('all')}
                   className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
                 >
-                  Reset Day Filter
+                  Show Full Week
                 </button>
               )}
             </div>
@@ -649,11 +662,11 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                     <th className="py-3 px-4">Day</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Sales Count</th>
-                    <th className="py-3 px-4 text-right">Gross Sales (Before Comm.)</th>
-                    <th className="py-3 px-4 text-right">Cash</th>
-                    <th className="py-3 px-4 text-right">Card</th>
-                    <th className="py-3 px-4 text-right text-amber-800">Trade Taken In</th>
-                    <th className="py-3 px-4 text-center">Action</th>
+                    <th className="py-3 px-4 text-right">Gross Sales</th>
+                    <th className="py-3 px-4 text-right">Cash Sales</th>
+                    <th className="py-3 px-4 text-right">Card Sales</th>
+                    <th className="py-3 px-4 text-right text-amber-800">Cards Traded In</th>
+                    <th className="py-3 px-4 text-center">Filter Day</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
@@ -706,7 +719,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             <div>
                               <span>{formatCurrency(day.tradeTakenInAmount)}</span>
                               <span className="text-[10px] text-amber-700 block font-normal">
-                                ({day.tradeTakenInCount} {day.tradeTakenInCount === 1 ? 'item' : 'items'})
+                                ({day.tradeTakenInCount} {day.tradeTakenInCount === 1 ? 'trade' : 'trades'})
                               </span>
                             </div>
                           ) : (
@@ -752,7 +765,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             </div>
           </div>
 
-          {/* Section: Trades Taken In this Week */}
+          {/* SECTION: Cards Traded In to this Vendor */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden" id="section-weekly-trades-taken-in">
             <div className="px-5 py-4 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/40">
               <div className="flex items-center gap-2.5">
@@ -761,7 +774,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-                    <span>Trades Taken In by {weekData.vendorName}</span>
+                    <span>Cards Traded In to {weekData.vendorName}</span>
                     <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
                       {displayedWeekTrades.length}
                     </span>
@@ -772,13 +785,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                     )}
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Trade items accepted into stock during Week {currentWeek.weekNumber}. Values shown before commission reductions.
+                    Cards traded in for cash payout or vendor credit. Figures before commission reductions.
                   </p>
                 </div>
               </div>
 
               <div className="text-right sm:self-auto self-start">
-                <span className="text-[11px] text-zinc-500 block uppercase font-semibold">Total Trade Value Taken In:</span>
+                <span className="text-[11px] text-zinc-500 block uppercase font-semibold">Total Cards Traded Value:</span>
                 <span className="text-base font-black text-amber-700">
                   {formatCurrency(
                     displayedWeekTrades.reduce((sum, t) => sum + t.tradeValue, 0)
@@ -792,67 +805,80 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               <div className="p-8 text-center text-zinc-500">
                 <ArrowLeftRight className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-zinc-700">
-                  No trade-ins recorded for {weekData.vendorName} {weekFilterDayKey === 'all' ? 'this week' : 'on this date'}
+                  No cards trade-ins recorded for {weekData.vendorName} {weekFilterDayKey === 'all' ? 'this week' : 'on this date'}
                 </p>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  When a trade sale designates {weekData.vendorName} as the accepting vendor, it will be listed here.
+                  Cards logged on the Trades page for {weekData.vendorName} will automatically appear here.
                 </p>
               </div>
             ) : (
               <div className="divide-y divide-zinc-100">
-                {displayedWeekTrades.map((trade, idx) => (
-                  <div key={trade.saleId + idx} className="p-4 hover:bg-zinc-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          Trade #{idx + 1}
-                        </span>
-                        <span className="text-xs font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">
-                          {formatDisplayDate(trade.dateKey)}
-                        </span>
-                        <span className="text-xs text-zinc-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {trade.salesmanName.toLowerCase() !== weekData.vendorName.toLowerCase() && (
-                          <span className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md font-medium">
-                            Processed on sale by: <strong className="text-zinc-800">{trade.salesmanName}</strong>
+                {displayedWeekTrades.map((trade, idx) => {
+                  const isCash = trade.tradeType === 'cash';
+                  return (
+                    <div key={trade.id || idx} className="p-4 hover:bg-zinc-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            Trade #{idx + 1}
                           </span>
+                          {/* Compensation Type Badge */}
+                          {isCash ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <Banknote className="w-3 h-3 text-emerald-700" />
+                              Cash Payout
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-purple-100 text-purple-900 border border-purple-300">
+                              <Ticket className="w-3 h-3 text-purple-700" />
+                              Vendor's Credit
+                            </span>
+                          )}
+
+                          <span className="text-xs font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">
+                            {formatDisplayDate(trade.dateKey)}
+                          </span>
+                          <span className="text-xs text-zinc-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <div className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 pt-0.5">
+                          <ShoppingBag className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Cards Traded: </span>
+                          <span className="text-zinc-900">{trade.itemDescription}</span>
+                        </div>
+
+                        {trade.customerName && (
+                          <div className="text-xs text-zinc-600">
+                            Customer: <strong className="text-zinc-800">{trade.customerName}</strong>
+                          </div>
+                        )}
+
+                        {trade.notes && (
+                          <p className="text-xs text-zinc-500 italic bg-zinc-50 px-2 py-1 rounded border border-zinc-100 mt-1">
+                            Note: {trade.notes}
+                          </p>
                         )}
                       </div>
 
-                      <div className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
-                        <ShoppingBag className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Trade Item: </span>
-                        <span className="text-zinc-800 underline decoration-amber-300">{trade.tradeItemDescription}</span>
+                      <div className="sm:text-right bg-amber-50 sm:bg-transparent p-3 sm:p-0 rounded-xl shrink-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                          Assessed Trade Value (Before Comm.)
+                        </span>
+                        <span className="text-xl font-black text-amber-700">
+                          {formatCurrency(trade.tradeValue)}
+                        </span>
                       </div>
-
-                      <div className="text-xs text-zinc-500">
-                        Associated Sold Item: <strong className="text-zinc-700">{trade.soldItemDescription}</strong> (Sale total: {formatCurrency(trade.saleAmount)})
-                      </div>
-
-                      {trade.notes && (
-                        <p className="text-xs text-zinc-500 italic bg-zinc-50 px-2 py-1 rounded border border-zinc-100 mt-1">
-                          Note: {trade.notes}
-                        </p>
-                      )}
                     </div>
-
-                    <div className="sm:text-right bg-amber-50 sm:bg-transparent p-3 sm:p-0 rounded-xl">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-                        Assessed Trade Value (Before Comm.)
-                      </span>
-                      <span className="text-xl font-black text-amber-700">
-                        {formatCurrency(trade.tradeValue)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* Section: Sales Logged this Week */}
+          {/* SECTION: Sales Logged this Week (Cash or Card) */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden" id="section-weekly-sales-logged">
             <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
               <div className="flex items-center gap-2">
@@ -861,13 +887,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-                    <span>Sales Logged by {weekData.vendorName}</span>
+                    <span>Sales Ledger Records for {weekData.vendorName}</span>
                     <span className="text-xs font-normal text-zinc-500">
                       • Week {currentWeek.weekNumber}
                     </span>
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Gross sales amounts before commission reductions
+                    Gross sales in cash or card before commission reductions
                   </p>
                 </div>
               </div>
@@ -886,19 +912,21 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             ) : (
               <div className="divide-y divide-zinc-100">
                 {displayedWeekSales.map((sale) => {
-                  const methodBadge = {
-                    cash: { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', label: 'Cash' },
-                    card: { bg: 'bg-blue-50 text-blue-800 border-blue-200', label: 'Card' },
-                    trade: { bg: 'bg-amber-50 text-amber-800 border-amber-200', label: 'Trade' },
-                  }[sale.paymentMethod];
+                  const isCash = sale.paymentMethod === 'cash';
 
                   return (
                     <div key={sale.id} className="p-4 hover:bg-zinc-50/60 transition-colors flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border uppercase tracking-wider ${methodBadge.bg}`}>
-                            {methodBadge.label}
-                          </span>
+                          {isCash ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <Banknote className="w-3 h-3 text-emerald-600" /> Cash
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                              <CreditCard className="w-3 h-3 text-blue-600" /> Card
+                            </span>
+                          )}
                           <span className="text-xs font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">
                             {formatDisplayDate(sale.dateKey)}
                           </span>
@@ -914,15 +942,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             </span>
                           )}
                         </h4>
-                        {sale.paymentMethod === 'trade' && (
-                          <div className="text-xs text-amber-800 bg-amber-50/80 px-2.5 py-1 rounded-md border border-amber-200/60 inline-flex items-center gap-1.5">
-                            <ArrowLeftRight className="w-3 h-3 text-amber-600" />
-                            <span>Trade item: <strong>{sale.tradeItemDescription || sale.tradeDetails}</strong></span>
-                            {sale.tradeAcceptingVendor && (
-                              <span>• Accepted by: <strong>{sale.tradeAcceptingVendor}</strong></span>
-                            )}
-                          </div>
-                        )}
                         {sale.notes && (
                           <p className="text-xs text-zinc-500 italic">
                             Note: {sale.notes}
@@ -982,7 +1001,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             <div className="flex items-center gap-4 relative z-10 self-start md:self-auto bg-black/25 backdrop-blur-xs px-4 py-2.5 rounded-xl border border-white/10">
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-zinc-300 font-semibold block">
-                  Gross Sales Revenue
+                  Gross Sales (Cash/Card)
                 </span>
                 <span className="text-2xl font-black text-white">
                   {formatCurrency(dayData.totalRevenue)}
@@ -992,12 +1011,12 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               <div className="h-8 w-px bg-white/20" />
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold block">
-                  Trades Taken In
+                  Cards Traded In
                 </span>
                 <span className="text-2xl font-black text-amber-400">
                   {formatCurrency(dayData.totalTradeTakenInAmount)}
                 </span>
-                <span className="text-[9px] text-amber-200/80 block">{dayData.tradeTakenInCount} items in stock</span>
+                <span className="text-[9px] text-amber-200/80 block">{dayData.tradeTakenInCount} items</span>
               </div>
             </div>
           </div>
@@ -1027,14 +1046,39 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               </div>
             </div>
 
+            <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                  Sales Payment Split
+                </span>
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
+                  <Banknote className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5" /> Cash:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.cashRevenue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-blue-700 font-bold flex items-center gap-1">
+                    <CreditCard className="w-3.5 h-3.5" /> Card:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.cardRevenue)}</span>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] text-zinc-500 font-medium">
+                {dayData.cashCount} cash • {dayData.cardCount} card
+              </div>
+            </div>
+
             <div className="bg-amber-50/60 rounded-2xl border-2 border-amber-300/80 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                    Trades Taken In
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900">
-                    Day Total
+                    Cards Traded In
                   </span>
                 </div>
                 <div className="p-2 rounded-lg bg-amber-200 text-amber-800">
@@ -1045,7 +1089,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 {formatCurrency(dayData.totalTradeTakenInAmount)}
               </div>
               <div className="text-xs text-amber-800 mt-1 font-medium">
-                {dayData.tradeTakenInCount} {dayData.tradeTakenInCount === 1 ? 'item accepted into stock' : 'items accepted into stock'}
+                {dayData.tradeTakenInCount} {dayData.tradeTakenInCount === 1 ? 'trade taken in' : 'trades taken in'}
               </div>
               <div className="mt-2 text-[10px] font-bold text-amber-800/90 bg-amber-200/60 px-2 py-0.5 rounded inline-block">
                 Before commission reductions
@@ -1055,45 +1099,33 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Cash Collected
+                  Trade Compensation
                 </span>
-                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
-                  <Banknote className="w-4 h-4" />
+                <div className="p-2 rounded-lg bg-purple-50 text-purple-700">
+                  <Ticket className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-2xl font-black text-emerald-700">
-                {formatCurrency(dayData.cashRevenue)}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                {dayData.cashCount} cash {dayData.cashCount === 1 ? 'sale' : 'sales'}
-              </div>
-              <div className="mt-2 text-[10px] font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded inline-block">
-                Gross cash
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Card Collected
-                </span>
-                <div className="p-2 rounded-lg bg-blue-50 text-blue-700">
-                  <CreditCard className="w-4 h-4" />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5" /> Cash Payout:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.cashTradeValue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-purple-700 font-bold flex items-center gap-1">
+                    <Ticket className="w-3.5 h-3.5" /> Vendor Credit:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.creditTradeValue)}</span>
                 </div>
               </div>
-              <div className="text-2xl font-black text-blue-700">
-                {formatCurrency(dayData.cardRevenue)}
-              </div>
-              <div className="text-xs text-zinc-500 mt-1">
-                {dayData.cardCount} card {dayData.cardCount === 1 ? 'sale' : 'sales'}
-              </div>
-              <div className="mt-2 text-[10px] font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded inline-block">
-                Gross card
+              <div className="mt-2 text-[10px] text-zinc-500 font-medium">
+                {dayData.cashTradeCount} cash payouts • {dayData.creditTradeCount} credit issued
               </div>
             </div>
           </div>
 
-          {/* Trades Taken In by Vendor Today */}
+          {/* Cards Traded In to Vendor Today */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden">
             <div className="px-5 py-4 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/30">
               <div className="flex items-center gap-2.5">
@@ -1102,19 +1134,19 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-                    <span>Trades Taken In by {dayData.vendorName} Today</span>
+                    <span>Cards Traded In to {dayData.vendorName} Today</span>
                     <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
                       {dayData.tradeTakenInCount}
                     </span>
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Assessed values before commission reductions
+                    Gross trade valuations before commission reductions
                   </p>
                 </div>
               </div>
 
               <div className="text-right sm:self-auto self-start">
-                <span className="text-xs text-zinc-500 block">Total Trade Taken In Value:</span>
+                <span className="text-xs text-zinc-500 block">Total Cards Traded Value:</span>
                 <span className="text-base font-black text-amber-700">
                   {formatCurrency(dayData.totalTradeTakenInAmount)}
                 </span>
@@ -1124,55 +1156,66 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             {dayData.tradesTakenIn.length === 0 ? (
               <div className="p-8 text-center text-zinc-500">
                 <ArrowLeftRight className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-zinc-700">No trade-ins taken in today by {dayData.vendorName}</p>
+                <p className="text-sm font-semibold text-zinc-700">No cards trade-ins taken in today by {dayData.vendorName}</p>
               </div>
             ) : (
               <div className="divide-y divide-zinc-100">
-                {dayData.tradesTakenIn.map((trade, idx) => (
-                  <div key={trade.saleId + idx} className="p-4 hover:bg-zinc-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          Trade #{idx + 1}
-                        </span>
-                        <span className="text-xs text-zinc-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {trade.salesmanName.toLowerCase() !== dayData.vendorName.toLowerCase() && (
-                          <span className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md font-medium">
-                            Processed by: <strong className="text-zinc-800">{trade.salesmanName}</strong>
+                {dayData.tradesTakenIn.map((trade, idx) => {
+                  const isCash = trade.tradeType === 'cash';
+                  return (
+                    <div key={trade.id || idx} className="p-4 hover:bg-zinc-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            Trade #{idx + 1}
                           </span>
+                          {isCash ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <Banknote className="w-3 h-3 text-emerald-700" />
+                              Cash Payout
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-purple-100 text-purple-900 border border-purple-300">
+                              <Ticket className="w-3 h-3 text-purple-700" />
+                              Vendor's Credit
+                            </span>
+                          )}
+                          <span className="text-xs text-zinc-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <div className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 pt-0.5">
+                          <ShoppingBag className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Cards Traded: </span>
+                          <span className="text-zinc-900">{trade.itemDescription}</span>
+                        </div>
+
+                        {trade.customerName && (
+                          <div className="text-xs text-zinc-600">
+                            Customer: <strong className="text-zinc-800">{trade.customerName}</strong>
+                          </div>
+                        )}
+
+                        {trade.notes && (
+                          <p className="text-xs text-zinc-500 italic bg-zinc-50 px-2 py-1 rounded border border-zinc-100 mt-1">
+                            Note: {trade.notes}
+                          </p>
                         )}
                       </div>
 
-                      <div className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
-                        <ShoppingBag className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Trade Item: </span>
-                        <span className="text-zinc-800 underline decoration-amber-300">{trade.tradeItemDescription}</span>
+                      <div className="sm:text-right bg-amber-50 sm:bg-transparent p-3 sm:p-0 rounded-xl shrink-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                          Assessed Value (Before Comm.)
+                        </span>
+                        <span className="text-xl font-black text-amber-700">
+                          {formatCurrency(trade.tradeValue)}
+                        </span>
                       </div>
-
-                      <div className="text-xs text-zinc-500">
-                        Associated Sold Item: <strong className="text-zinc-700">{trade.soldItemDescription}</strong> (Sale total: {formatCurrency(trade.saleAmount)})
-                      </div>
-
-                      {trade.notes && (
-                        <p className="text-xs text-zinc-500 italic bg-zinc-50 px-2 py-1 rounded border border-zinc-100 mt-1">
-                          Note: {trade.notes}
-                        </p>
-                      )}
                     </div>
-
-                    <div className="sm:text-right bg-amber-50 sm:bg-transparent p-3 sm:p-0 rounded-xl">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-                        Assessed Value (Before Comm.)
-                      </span>
-                      <span className="text-xl font-black text-amber-700">
-                        {formatCurrency(trade.tradeValue)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1189,7 +1232,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                     Sales Logged by {dayData.vendorName} Today
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Gross amounts before commission reductions
+                    Gross amounts in cash or card before commission reductions
                   </p>
                 </div>
               </div>
@@ -1206,19 +1249,21 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             ) : (
               <div className="divide-y divide-zinc-100">
                 {dayData.sales.map((sale) => {
-                  const methodBadge = {
-                    cash: { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', label: 'Cash' },
-                    card: { bg: 'bg-blue-50 text-blue-800 border-blue-200', label: 'Card' },
-                    trade: { bg: 'bg-amber-50 text-amber-800 border-amber-200', label: 'Trade' },
-                  }[sale.paymentMethod];
+                  const isCash = sale.paymentMethod === 'cash';
 
                   return (
                     <div key={sale.id} className="p-4 hover:bg-zinc-50/60 transition-colors flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border uppercase tracking-wider ${methodBadge.bg}`}>
-                            {methodBadge.label}
-                          </span>
+                          {isCash ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <Banknote className="w-3 h-3 text-emerald-600" /> Cash
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                              <CreditCard className="w-3 h-3 text-blue-600" /> Card
+                            </span>
+                          )}
                           <span className="text-xs text-zinc-400">
                             {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
@@ -1231,15 +1276,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                             </span>
                           )}
                         </h4>
-                        {sale.paymentMethod === 'trade' && (
-                          <div className="text-xs text-amber-800 bg-amber-50/80 px-2.5 py-1 rounded-md border border-amber-200/60 inline-flex items-center gap-1.5">
-                            <ArrowLeftRight className="w-3 h-3 text-amber-600" />
-                            <span>Trade item: <strong>{sale.tradeItemDescription || sale.tradeDetails}</strong></span>
-                            {sale.tradeAcceptingVendor && (
-                              <span>• Accepted by: <strong>{sale.tradeAcceptingVendor}</strong></span>
-                            )}
-                          </div>
-                        )}
                         {sale.notes && (
                           <p className="text-xs text-zinc-500 italic">
                             Note: {sale.notes}

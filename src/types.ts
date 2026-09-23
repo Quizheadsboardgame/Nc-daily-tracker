@@ -1,30 +1,33 @@
-export type PaymentMethod = 'cash' | 'card' | 'trade';
+export type PaymentMethod = 'cash' | 'card';
+
+export type TradeType = 'cash' | 'credit'; // Cards traded in for cash OR for credit (vendors credit)
 
 export interface SaleRecord {
   id: string;
-  salesmanName: string;
+  salesmanName: string; // Vendor name
   itemDescription: string;
   isMiscellaneous?: boolean;
-  amount: number;
-  paymentMethod: PaymentMethod;
+  amount: number; // Gross sale price in GBP (£)
+  paymentMethod: PaymentMethod; // cash or card
+  notes?: string;
+  timestamp: number; // Unix timestamp in milliseconds
+  dateKey: string; // YYYY-MM-DD format
+  // Backward compatibility fields if legacy records exist
   tradeDetails?: string;
   tradeAcceptingVendor?: string;
   tradeValue?: number;
   tradeItemDescription?: string;
-  notes?: string;
-  timestamp: number; // Unix timestamp in milliseconds
-  dateKey: string; // YYYY-MM-DD format for fast daily indexing
 }
 
 export interface VendorStat {
   name: string;
-  totalAmount: number;
+  totalAmount: number; // Gross cash + card revenue
   count: number;
   cashAmount: number;
+  cashCount?: number;
   cardAmount: number;
-  tradeAmount: number;
-  tradeTakenInAmount?: number;
-  tradeTakenInCount?: number;
+  cardCount?: number;
+  tradeAmount?: number;
   color?: string;
 }
 
@@ -41,13 +44,11 @@ export interface DaySummary {
   dateKey: string;
   formattedDate: string;
   totalCount: number;
-  totalRevenue: number;
+  totalRevenue: number; // Gross cash + card revenue
   cashRevenue: number;
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
-  tradeRevenue: number;
-  tradeCount: number;
   averageTicket: number;
   topVendor?: VendorStat;
   topSalesman?: VendorStat;
@@ -58,31 +59,39 @@ export interface DaySummary {
 export interface TradeRecord {
   id: string;
   vendorName: string; // Vendor who accepted / is holding the trade
-  itemDescription: string; // Item traded in description
+  itemDescription: string; // Cards / Item traded in description
   tradeValue: number; // Valuation in GBP (£)
+  tradeType: TradeType; // 'cash' (cash payout) or 'credit' (vendor credit)
+  customerName?: string; // Optional customer name (great for credit tracking)
+  notes?: string;
   dateKey: string; // YYYY-MM-DD
   timestamp: number; // Milliseconds epoch
-  isStandalone?: boolean; // True if logged directly without a sale
-  soldItemDescription?: string; // If against a sale, what was sold
-  saleAmount?: number; // If against a sale, the sale price
-  associatedSaleId?: string; // Link to SaleRecord if against a sale
-  customerName?: string;
-  notes?: string;
+  // Backward compatibility fields
+  isStandalone?: boolean;
+  soldItemDescription?: string;
+  saleAmount?: number;
+  associatedSaleId?: string;
 }
 
 export interface TradeVendorStat {
   vendorName: string;
   color: string;
-  totalTradeValue: number;
+  totalTradeValue: number; // Total value of cards traded in
   tradeCount: number;
+  cashTradeValue: number; // Total valuation of cards traded in for cash
+  cashTradeCount: number;
+  creditTradeValue: number; // Total valuation of cards traded in for vendor credit
+  creditTradeCount: number;
 }
 
 export interface TradeDaySummary {
   dateKey: string;
-  totalTradeValue: number;
+  totalTradeValue: number; // Total valuation of cards traded in
   totalCount: number;
-  standaloneCount: number;
-  againstSaleCount: number;
+  cashTradeValue: number; // Cards traded for cash (£)
+  cashTradeCount: number;
+  creditTradeValue: number; // Cards traded for vendor credit (£)
+  creditTradeCount: number;
   averageTradeValue: number;
   topVendor?: TradeVendorStat;
   vendorStats: TradeVendorStat[];

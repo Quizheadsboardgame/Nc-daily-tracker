@@ -13,5 +13,9 @@ service cloud.firestore {
     match /trades/{tradeId} {
       allow read, write: if true;
     }
+    // Preloaded vendor stock and cards synced across all terminals
+    match /stock/{stockId} {
+      allow read, write: if true;
+    }
   }
 }
