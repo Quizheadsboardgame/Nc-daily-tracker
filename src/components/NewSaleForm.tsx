@@ -179,7 +179,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             <h2 className="text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2">
               <span>Record New Sale</span>
               <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                Cash • Card • Traded Out
+                Cash • Card • Trade Out
               </span>
             </h2>
             <p className="text-[11px] text-zinc-500">
@@ -450,7 +450,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 <span>Card</span>
               </button>
 
-              {/* Traded Out Button */}
+              {/* Trade Out Button */}
               <button
                 type="button"
                 id="btn-payment-traded-out"
@@ -463,14 +463,14 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 title="Item traded out from vendor's inventory/till"
               >
                 <ArrowLeftRight className="w-4 h-4 shrink-0 text-amber-200" />
-                <span>Traded Out</span>
+                <span>Trade Out</span>
               </button>
             </div>
 
             {paymentMethod === 'traded_out' && (
               <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5 animate-fade-in">
                 <span className="font-bold">Notice:</span>
-                <span>This item is recorded as traded out from stock. (Cards traded in to store are logged separately on Trade In page).</span>
+                <span>This item is recorded as trade out from stock. (Cards traded in to store are logged separately on Trade In page).</span>
               </div>
             )}
           </div>

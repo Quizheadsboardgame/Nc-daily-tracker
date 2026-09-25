@@ -48,7 +48,7 @@ const renderSalePaymentBadge = (method: string) => {
   if (method === 'traded_out') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-        <ArrowLeftRight className="w-3 h-3 text-amber-600" /> Traded Out
+        <ArrowLeftRight className="w-3 h-3 text-amber-600" /> Trade Out
       </span>
     );
   }
@@ -594,13 +594,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-amber-700 font-bold flex items-center gap-1">
-                    <ArrowLeftRight className="w-3.5 h-3.5" /> Traded Out:
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> Trade Out:
                   </span>
                   <span className="font-black text-zinc-900">{formatCurrency(weekData.tradedOutRevenue || 0)}</span>
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {weekData.cashCount} cash • {weekData.cardCount} card • {weekData.tradedOutCount || 0} traded out
+                {weekData.cashCount} cash • {weekData.cardCount} card • {weekData.tradedOutCount || 0} trade out
               </div>
             </div>
 
@@ -693,7 +693,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                     <th className="py-3 px-3 text-right">Gross Sales</th>
                     <th className="py-3 px-3 text-right">Cash</th>
                     <th className="py-3 px-3 text-right">Card</th>
-                    <th className="py-3 px-3 text-right text-amber-700">Traded Out</th>
+                    <th className="py-3 px-3 text-right text-amber-700">Trade Out</th>
                     <th className="py-3 px-3 text-right text-amber-800">Cards Traded In</th>
                     <th className="py-3 px-3 text-center">Filter Day</th>
                   </tr>
@@ -1094,13 +1094,13 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-amber-700 font-bold flex items-center gap-1">
-                    <ArrowLeftRight className="w-3.5 h-3.5" /> Traded Out:
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> Trade Out:
                   </span>
                   <span className="font-black text-zinc-900">{formatCurrency(dayData.tradedOutRevenue || 0)}</span>
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {dayData.cashCount} cash • {dayData.cardCount} card • {dayData.tradedOutCount || 0} traded out
+                {dayData.cashCount} cash • {dayData.cardCount} card • {dayData.tradedOutCount || 0} trade out
               </div>
             </div>
 

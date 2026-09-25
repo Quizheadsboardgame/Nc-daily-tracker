@@ -140,7 +140,7 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
           </div>
         </button>
 
-        {/* Traded Out Sales Card (Clickable Filter) */}
+        {/* Trade Out Sales Card (Clickable Filter) */}
         <button
           type="button"
           id="btn-stat-filter-traded-out"
@@ -157,7 +157,7 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
                 selectedPaymentFilter === 'traded_out' ? 'text-amber-300' : 'text-amber-900'
               }`}
             >
-              <ArrowLeftRight className="w-4 h-4 shrink-0" /> Traded Out
+              <ArrowLeftRight className="w-4 h-4 shrink-0" /> Trade Out
             </span>
             <span
               className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${

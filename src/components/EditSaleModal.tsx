@@ -79,7 +79,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-zinc-900">Edit Sales Record</h3>
-            <p className="text-xs text-zinc-500">Update till transaction (Cash, Card, or Traded Out)</p>
+            <p className="text-xs text-zinc-500">Update till transaction (Cash, Card, or Trade Out)</p>
           </div>
           <button
             type="button"
@@ -215,7 +215,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                   title="Item traded out from vendor's inventory"
                 >
                   <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
-                  <span>Traded Out</span>
+                  <span>Trade Out</span>
                 </button>
               </div>
             </div>

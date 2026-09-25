@@ -130,7 +130,7 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                   className={`inline-flex items-center gap-1 font-semibold truncate ${
                     isSelected ? 'text-amber-300' : 'text-amber-700'
                   }`}
-                  title={`Traded Out: ${formatCurrency(vendor.tradedOutAmount || 0)}`}
+                  title={`Trade Out: ${formatCurrency(vendor.tradedOutAmount || 0)}`}
                 >
                   <ArrowLeftRight className="w-3 h-3 shrink-0" />
                   <span>{formatCurrency(vendor.tradedOutAmount || 0)}</span>

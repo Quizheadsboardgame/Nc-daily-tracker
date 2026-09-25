@@ -68,7 +68,8 @@ export const SalesList: React.FC<SalesListProps> = ({
         (s) =>
           s.itemDescription.toLowerCase().includes(q) ||
           s.salesmanName.toLowerCase().includes(q) ||
-          (s.notes && s.notes.toLowerCase().includes(q))
+          (s.notes && s.notes.toLowerCase().includes(q)) ||
+          ((q === 'trade out' || q === 'traded out' || q === 'trade') && s.paymentMethod === 'traded_out')
       );
     }
 
@@ -99,9 +100,9 @@ export const SalesList: React.FC<SalesListProps> = ({
     }
     if (method === 'traded_out') {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
-          <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
-          Traded Out
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+          <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
+          Trade Out
         </span>
       );
     }
@@ -121,7 +122,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           <div>
             <h2 className="text-base font-bold text-zinc-900">Today's Sales Records</h2>
             <p className="text-xs text-zinc-500">
-              Showing {filteredSales.length} of {sales.length} transactions (Cash, Card & Traded Out)
+              Showing {filteredSales.length} of {sales.length} transactions (Cash, Card & Trade Out)
             </p>
           </div>
 
@@ -155,7 +156,7 @@ export const SalesList: React.FC<SalesListProps> = ({
             )}
           </div>
 
-          {/* Payment Filter Pills (Cash, Card, or Traded Out) */}
+          {/* Payment Filter Pills (Cash, Card, or Trade Out) */}
           <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs flex-wrap sm:flex-nowrap">
             <button
               type="button"
@@ -203,7 +204,7 @@ export const SalesList: React.FC<SalesListProps> = ({
                   : 'text-amber-800 hover:text-amber-900'
               }`}
             >
-              <ArrowLeftRight className="w-3 h-3" /> Traded Out
+              <ArrowLeftRight className="w-3 h-3" /> Trade Out
             </button>
           </div>
 
@@ -273,10 +274,18 @@ export const SalesList: React.FC<SalesListProps> = ({
                   hour12: true,
                 });
                 const isMisc = Boolean(sale.isMiscellaneous) || sale.itemDescription?.trim().toLowerCase() === 'miscellaneous';
+                const isTradeOut = sale.paymentMethod === 'traded_out';
                 const vendorColor = cloudDb.getVendorColor(sale.salesmanName);
 
                 return (
-                  <tr key={sale.id} className="hover:bg-zinc-50/70 transition-colors group">
+                  <tr
+                    key={sale.id}
+                    className={`transition-colors group ${
+                      isTradeOut
+                        ? 'bg-amber-50/30 hover:bg-amber-50/60'
+                        : 'hover:bg-zinc-50/70'
+                    }`}
+                  >
                     {/* Timestamp */}
                     <td className="py-3 px-4 whitespace-nowrap text-zinc-500 font-medium">
                       <span className="flex items-center gap-1.5">
@@ -305,6 +314,12 @@ export const SalesList: React.FC<SalesListProps> = ({
                           </span>
                         ) : (
                           <span className="break-words">{sale.itemDescription}</span>
+                        )}
+                        {isTradeOut && (
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[10px] border border-amber-300">
+                            <ArrowLeftRight className="w-2.5 h-2.5 text-amber-700" />
+                            Trade Out
+                          </span>
                         )}
                       </div>
                     </td>
