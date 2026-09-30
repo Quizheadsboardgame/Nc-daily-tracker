@@ -249,7 +249,17 @@ class CloudSalesDatabase {
         const parsed = JSON.parse(storedSales);
         if (Array.isArray(parsed) && parsed.length > 0) {
           for (const item of parsed) {
-            this.salesCache.set(item.id, item);
+            const raw = (item.paymentMethod || '').toString().toLowerCase().trim();
+            const paymentMethod: PaymentMethod =
+              raw === 'cash'
+                ? 'cash'
+                : raw === 'traded_out' || raw === 'trade_out' || raw === 'trade out' || raw === 'trade' || raw === 'traded'
+                ? 'traded_out'
+                : 'card';
+            this.salesCache.set(item.id, {
+              ...item,
+              paymentMethod,
+            });
           }
         }
       }
@@ -345,8 +355,17 @@ class CloudSalesDatabase {
           this.salesCache.clear();
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            const rawMethod = data.paymentMethod?.toLowerCase();
-            const paymentMethod: PaymentMethod = rawMethod === 'cash' ? 'cash' : 'card';
+            const rawMethod = (data.paymentMethod || '').toString().toLowerCase().trim();
+            const paymentMethod: PaymentMethod =
+              rawMethod === 'cash'
+                ? 'cash'
+                : rawMethod === 'traded_out' ||
+                  rawMethod === 'trade_out' ||
+                  rawMethod === 'trade out' ||
+                  rawMethod === 'trade' ||
+                  rawMethod === 'traded'
+                ? 'traded_out'
+                : 'card';
 
             this.salesCache.set(docSnap.id, {
               id: docSnap.id,
@@ -1280,7 +1299,7 @@ class CloudSalesDatabase {
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.paymentMethod.toUpperCase(),
+      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -1310,7 +1329,7 @@ class CloudSalesDatabase {
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.paymentMethod.toUpperCase(),
+      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 

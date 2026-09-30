@@ -108,8 +108,9 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       notes: notes.trim() || undefined,
     });
 
+    const methodDisplay = paymentMethod === 'traded_out' ? 'TRADE OUT' : paymentMethod.toUpperCase();
     setLastRecordedInfo(
-      `${vendorName.trim()} • ${finalItemDesc} • £${numAmount.toFixed(2)} (${paymentMethod.toUpperCase()})`
+      `${vendorName.trim()} • ${finalItemDesc} • £${numAmount.toFixed(2)} (${methodDisplay})`
     );
     setShowSuccessBadge(true);
     setTimeout(() => {
@@ -462,7 +463,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 }`}
                 title="Item traded out from vendor's inventory/till"
               >
-                <ArrowLeftRight className="w-4 h-4 shrink-0 text-amber-200" />
+                <ArrowLeftRight className={`w-4 h-4 shrink-0 ${paymentMethod === 'traded_out' ? 'text-amber-200' : 'text-amber-700'}`} />
                 <span>Trade Out</span>
               </button>
             </div>

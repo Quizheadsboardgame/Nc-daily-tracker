@@ -214,7 +214,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                   }`}
                   title="Item traded out from vendor's inventory"
                 >
-                  <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
+                  <ArrowLeftRight className={`w-3.5 h-3.5 shrink-0 ${paymentMethod === 'traded_out' ? 'text-amber-200' : 'text-amber-700'}`} />
                   <span>Trade Out</span>
                 </button>
               </div>

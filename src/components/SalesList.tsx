@@ -69,7 +69,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           s.itemDescription.toLowerCase().includes(q) ||
           s.salesmanName.toLowerCase().includes(q) ||
           (s.notes && s.notes.toLowerCase().includes(q)) ||
-          ((q === 'trade out' || q === 'traded out' || q === 'trade') && s.paymentMethod === 'traded_out')
+          (s.paymentMethod === 'traded_out' && ('trade out'.includes(q) || 'traded out'.includes(q) || q === 'out'))
       );
     }
 
