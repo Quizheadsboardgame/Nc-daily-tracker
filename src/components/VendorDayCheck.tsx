@@ -543,8 +543,8 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             </div>
           </div>
 
-          {/* Primary Weekly KPI Cards (4 Cards) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Primary Weekly KPI Cards (4 Cards) - Locked to mobile screen */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full">
             {/* KPI 1: Gross Sales */}
             <div className="bg-white rounded-2xl border border-zinc-200 p-4.5 shadow-xs">
               <div className="flex items-center justify-between mb-2">

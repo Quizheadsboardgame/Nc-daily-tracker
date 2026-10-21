@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
+import { VendorDropdown } from './VendorDropdown';
 
 interface SalesListProps {
   sales: SaleRecord[];
@@ -115,7 +116,7 @@ export const SalesList: React.FC<SalesListProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden" id="card-sales-ledger">
+    <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs" id="card-sales-ledger">
       {/* Header with Title and Search Controls */}
       <div className="p-4 sm:p-5 border-b border-zinc-100 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -208,21 +209,19 @@ export const SalesList: React.FC<SalesListProps> = ({
             </button>
           </div>
 
-          {/* Vendor Filter Dropdown */}
-          <div className="flex items-center gap-1.5">
-            <select
-              id="select-vendor-filter"
-              value={selectedVendor}
-              onChange={(e) => handleSelectVendor(e.target.value)}
-              className="text-xs font-medium text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 cursor-pointer"
-            >
-              <option value="all">All Vendors</option>
-              {allVendors.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+          {/* Vendor Filter Dropdown with color dots */}
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+            <div className="w-full sm:w-44">
+              <VendorDropdown
+                id="select-vendor-filter"
+                value={selectedVendor}
+                onChange={handleSelectVendor}
+                vendors={allVendors}
+                includeAllOption={true}
+                allOptionLabel="All Vendors"
+                placeholder="All Vendors"
+              />
+            </div>
 
             {/* Sort Dropdown */}
             <select
@@ -252,8 +251,116 @@ export const SalesList: React.FC<SalesListProps> = ({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <>
+          {/* Mobile Locked Cards View (Prevents horizontal overflow and screen drifting) */}
+          <div className="md:hidden divide-y divide-zinc-150">
+            {filteredSales.map((sale) => {
+              const dateObj = new Date(sale.timestamp);
+              const timeString = dateObj.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              });
+              const isMisc = Boolean(sale.isMiscellaneous) || sale.itemDescription?.trim().toLowerCase() === 'miscellaneous';
+              const isTradeOut = sale.paymentMethod === 'traded_out';
+              const vendorColor = cloudDb.getVendorColor(sale.salesmanName);
+
+              return (
+                <div
+                  key={`mobile-${sale.id}`}
+                  className={`p-3.5 space-y-2 transition-colors ${
+                    isTradeOut ? 'bg-amber-50/40' : 'bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 shadow-2xs border border-white ring-1 ring-zinc-900/15"
+                        style={{ backgroundColor: vendorColor }}
+                      />
+                      <span className="font-bold text-xs text-zinc-900 truncate">
+                        {sale.salesmanName}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                        <Clock className="w-3 h-3" />
+                        {timeString}
+                      </span>
+                    </div>
+                    <div className="shrink-0">
+                      {renderPaymentBadge(sale.paymentMethod)}
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-zinc-800 font-semibold break-words">
+                    {isMisc ? (
+                      <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded text-[11px] border border-zinc-200">
+                        Miscellaneous
+                      </span>
+                    ) : (
+                      <span>{sale.itemDescription}</span>
+                    )}
+                    {sale.notes && (
+                      <p className="text-[11px] text-zinc-500 font-normal italic mt-0.5 break-words">
+                        Memo: {sale.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                    <div className="text-sm font-black text-zinc-950 tabular-nums">
+                      {formatCurrency(sale.amount)}
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onEditSale(sale)}
+                        className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 text-xs font-semibold flex items-center gap-1"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+
+                      {deleteConfirmId === sale.id ? (
+                        <div className="flex items-center gap-1 animate-fade-in">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDeleteSale(sale.id);
+                              setDeleteConfirmId(null);
+                            }}
+                            className="px-2 py-1 rounded-md bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 cursor-pointer shadow-xs"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="px-2 py-1 rounded-md bg-zinc-200 text-zinc-700 font-medium text-xs hover:bg-zinc-300 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmId(sale.id)}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold"
+                          title="Delete transaction"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-left text-xs">
             <thead className="bg-zinc-50/80 text-zinc-500 font-semibold uppercase tracking-wider border-b border-zinc-100">
               <tr>
                 <th scope="col" className="py-3 px-4">Time</th>
@@ -389,6 +496,7 @@ export const SalesList: React.FC<SalesListProps> = ({
             </tbody>
           </table>
         </div>
+      </>
       )}
     </div>
   );

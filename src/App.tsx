@@ -141,11 +141,11 @@ export default function App() {
         onOpenManageVendors={() => setActiveTab('manage-vendors')}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* Main Container - Locked to mobile viewport */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 overflow-x-hidden">
         {/* Navigation Tabs Bar for easy switching */}
-        <div className="flex items-center justify-between border-b border-zinc-250 pb-3.5 gap-2.5 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-zinc-250 pb-3.5 gap-2.5 flex-wrap w-full max-w-full">
+          <div className="flex items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs overflow-x-auto max-w-full no-scrollbar">
             <button
               type="button"
               id="tab-btn-ledger"

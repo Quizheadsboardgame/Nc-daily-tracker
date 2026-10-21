@@ -20,10 +20,10 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
 
   return (
     <div className="space-y-4" id="section-daily-stats">
-      {/* 5 Sales Ledger KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      {/* 5 Sales Ledger KPI Cards - Locked securely to mobile screen */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3.5 w-full max-w-full">
         {/* Total Day Gross Sales Revenue */}
-        <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
+        <div className="col-span-2 sm:col-span-1 bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Total Sales

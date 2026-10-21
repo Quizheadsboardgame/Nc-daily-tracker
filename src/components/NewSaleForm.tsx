@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { cloudDb } from '../db/cloudDatabase';
+import { VendorDropdown } from './VendorDropdown';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -164,11 +165,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   return (
     <div
-      className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs relative overflow-hidden transition-all duration-200"
+      className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs relative transition-all duration-200"
       id="card-new-sale-form"
     >
       {/* Decorative top accent strip */}
-      <div className="h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-400" />
+      <div className="h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-400 rounded-t-2xl" />
 
       {/* Header bar */}
       <div className="px-5 py-3.5 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-50/70">
@@ -277,32 +278,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="relative">
-                <div
-                  className="w-3.5 h-3.5 rounded-full absolute left-3 top-3 pointer-events-none transition-colors border border-white shadow-2xs"
-                  style={{ backgroundColor: selectedVendorColor }}
-                />
-                <select
-                  id="select-vendor-name"
-                  value={vendorName}
-                  onChange={(e) => {
-                    setVendorName(e.target.value);
-                    if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
-                  }}
-                  className={`w-full pl-9 pr-8 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
-                    errors.vendor
-                      ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
-                      : 'border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400 focus:ring-zinc-900/10 focus:border-zinc-900'
-                  }`}
-                >
-                  <option value="">-- Choose Vendor --</option>
-                  {knownVendors.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <VendorDropdown
+                id="select-vendor-name"
+                value={vendorName}
+                onChange={(val) => {
+                  setVendorName(val);
+                  if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
+                }}
+                vendors={knownVendors}
+                placeholder="-- Choose Vendor --"
+                hasError={Boolean(errors.vendor)}
+              />
             )}
 
             {errors.vendor && <p className="text-[11px] font-semibold text-rose-600">{errors.vendor}</p>}

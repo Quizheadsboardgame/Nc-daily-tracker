@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Save } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
+import { VendorDropdown } from './VendorDropdown';
 
 interface EditSaleModalProps {
   sale: SaleRecord | null;
@@ -75,7 +76,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-zinc-200 overflow-hidden animate-fade-in">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-zinc-200 animate-fade-in relative">
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-zinc-900">Edit Sales Record</h3>
@@ -99,23 +100,14 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">Vendor's Name</label>
-            <div className="relative">
-              <User className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 pointer-events-none" />
-              <select
-                id="edit-select-vendor"
-                value={vendorName}
-                onChange={(e) => setVendorName(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 text-sm rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 bg-white cursor-pointer font-medium text-zinc-900"
-                required
-              >
-                <option value="">-- Select Vendor --</option>
-                {vendors.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <VendorDropdown
+              id="edit-select-vendor"
+              value={vendorName}
+              onChange={(val) => setVendorName(val)}
+              vendors={vendors}
+              placeholder="-- Select Vendor --"
+              required
+            />
           </div>
 
           <div>

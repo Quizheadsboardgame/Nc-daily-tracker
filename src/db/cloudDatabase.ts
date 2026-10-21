@@ -450,7 +450,50 @@ class CloudSalesDatabase {
   // --- Vendors Roster & Color Methods ---
 
   public getKnownVendors(): string[] {
-    return this.salesmenList;
+    const vendorSet = new Set<string>();
+
+    // 1. Default preloaded vendors
+    for (const v of DEFAULT_PRELOADED_SALESMEN) {
+      if (v && v.trim()) vendorSet.add(v.trim());
+    }
+
+    // 2. Salesmen / Vendors roster from state
+    for (const v of this.salesmenList) {
+      if (v && v.trim()) vendorSet.add(v.trim());
+    }
+
+    // 3. Any vendor configured with an assigned color
+    this.vendorColors.forEach((_, name) => {
+      if (name && name.trim()) vendorSet.add(name.trim());
+    });
+
+    // 4. Any vendor that appears in any recorded sales
+    this.salesCache.forEach((sale) => {
+      if (sale.salesmanName && sale.salesmanName.trim()) {
+        vendorSet.add(sale.salesmanName.trim());
+      }
+      if (sale.tradeAcceptingVendor && sale.tradeAcceptingVendor.trim()) {
+        vendorSet.add(sale.tradeAcceptingVendor.trim());
+      }
+    });
+
+    // 5. Any vendor that appears in cards trades
+    this.tradesCache.forEach((trade) => {
+      if (trade.vendorName && trade.vendorName.trim()) {
+        vendorSet.add(trade.vendorName.trim());
+      }
+    });
+
+    // Keep this.salesmenList up to date with discovered vendors
+    const all = Array.from(vendorSet).filter(Boolean).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    if (all.length > this.salesmenList.length) {
+      this.salesmenList = all;
+    }
+
+    return all;
   }
 
   public getKnownSalesmen(): string[] {
@@ -459,21 +502,29 @@ class CloudSalesDatabase {
 
   public getVendorColor(name: string): string {
     if (!name) return '#64748b';
-    if (this.vendorColors.has(name)) {
-      return this.vendorColors.get(name)!;
+    const clean = name.trim();
+    if (this.vendorColors.has(clean)) {
+      return this.vendorColors.get(clean)!;
+    }
+    // Also check case-insensitive match
+    for (const [key, col] of this.vendorColors.entries()) {
+      if (key.toLowerCase() === clean.toLowerCase()) {
+        return col;
+      }
     }
     let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < clean.length; i++) {
+      hash = clean.charCodeAt(i) + ((hash << 5) - hash);
     }
     const index = Math.abs(hash) % PRESET_VENDOR_PALETTE.length;
     const fallbackColor = PRESET_VENDOR_PALETTE[index].hex;
-    this.vendorColors.set(name, fallbackColor);
+    this.vendorColors.set(clean, fallbackColor);
     return fallbackColor;
   }
 
   public getVendorProfiles(): { name: string; color: string }[] {
-    return this.salesmenList.map((name) => ({
+    const all = this.getKnownVendors();
+    return all.map((name) => ({
       name,
       color: this.getVendorColor(name),
     }));

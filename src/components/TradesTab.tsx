@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { TradeRecord, TradeDaySummary, TradeType } from '../types';
 import { cloudDb, formatCurrency, formatDisplayDate, getLocalDateKey } from '../db/cloudDatabase';
+import { VendorDropdown } from './VendorDropdown';
 
 interface TradesTabProps {
   currentDateKey: string;
@@ -279,10 +280,10 @@ export const TradesTab: React.FC<TradesTabProps> = ({
 
       {/* RECORD TRADE-IN FORM */}
       <div
-        className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs relative overflow-hidden"
+        className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs relative"
         id="card-record-trade-form"
       >
-        <div className="h-1 bg-gradient-to-r from-amber-500 via-purple-500 to-emerald-500" />
+        <div className="h-1 bg-gradient-to-r from-amber-500 via-purple-500 to-emerald-500 rounded-t-2xl" />
 
         <div className="px-5 py-3.5 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-50/70">
           <div className="flex items-center gap-2">
@@ -313,32 +314,17 @@ export const TradesTab: React.FC<TradesTabProps> = ({
               <label htmlFor="trade-vendor-select" className="block text-xs font-bold text-zinc-800">
                 Vendor Taking In Cards <span className="text-rose-500">*</span>
               </label>
-              <div className="relative">
-                <div
-                  className="w-3.5 h-3.5 rounded-full absolute left-3 top-3 pointer-events-none transition-colors border border-white shadow-2xs"
-                  style={{ backgroundColor: selectedVendorColor }}
-                />
-                <select
-                  id="trade-vendor-select"
-                  value={vendorName}
-                  onChange={(e) => {
-                    setVendorName(e.target.value);
-                    if (formErrors.vendorName) setFormErrors((prev) => ({ ...prev, vendorName: '' }));
-                  }}
-                  className={`w-full pl-9 pr-8 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
-                    formErrors.vendorName
-                      ? 'border-rose-400 bg-rose-50/30 text-rose-900'
-                      : 'border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400 focus:ring-zinc-900/10 focus:border-zinc-900'
-                  }`}
-                >
-                  <option value="">-- Choose Vendor --</option>
-                  {knownVendors.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <VendorDropdown
+                id="trade-vendor-select"
+                value={vendorName}
+                onChange={(val) => {
+                  setVendorName(val);
+                  if (formErrors.vendorName) setFormErrors((prev) => ({ ...prev, vendorName: '' }));
+                }}
+                vendors={knownVendors}
+                placeholder="-- Choose Vendor --"
+                hasError={Boolean(formErrors.vendorName)}
+              />
               {formErrors.vendorName && (
                 <p className="text-[11px] font-semibold text-rose-600">{formErrors.vendorName}</p>
               )}
@@ -541,8 +527,8 @@ export const TradesTab: React.FC<TradesTabProps> = ({
         </form>
       </div>
 
-      {/* INDEPENDENT TRADE KPI STATS (4 CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5" id="section-trades-kpis">
+      {/* INDEPENDENT TRADE KPI STATS (4 CARDS) - Locked to mobile screen */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 w-full max-w-full" id="section-trades-kpis">
         {/* Total Cards Traded In */}
         <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
           <div className="flex items-center justify-between">
@@ -764,7 +750,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
       )}
 
       {/* TRADES LEDGER TABLE & FILTERS */}
-      <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs">
         {/* Table header and search controls */}
         <div className="p-4 sm:p-5 border-b border-zinc-100 space-y-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -844,20 +830,18 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             </div>
 
             {/* Vendor Filter */}
-            <div className="flex items-center gap-1.5">
-              <select
-                id="select-trade-vendor-filter"
-                value={filterVendor}
-                onChange={(e) => setFilterVendor(e.target.value)}
-                className="text-xs font-medium text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 cursor-pointer"
-              >
-                <option value="all">All Vendors</option>
-                {knownVendors.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+              <div className="w-full sm:w-44">
+                <VendorDropdown
+                  id="select-trade-vendor-filter"
+                  value={filterVendor}
+                  onChange={(val) => setFilterVendor(val)}
+                  vendors={knownVendors}
+                  includeAllOption={true}
+                  allOptionLabel="All Vendors"
+                  placeholder="All Vendors"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -874,8 +858,116 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <>
+            {/* Mobile Locked Cards View (Prevents screen drifting and wobble on mobile) */}
+            <div className="md:hidden divide-y divide-zinc-150">
+              {filteredTrades.map((t) => {
+                const dateObj = new Date(t.timestamp);
+                const timeString = dateObj.toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                });
+                const vendorColor = cloudDb.getVendorColor(t.vendorName);
+                const isCash = t.tradeType === 'cash';
+
+                return (
+                  <div key={`mobile-trade-${t.id}`} className="p-3.5 space-y-2 bg-white">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0 shadow-2xs border border-white ring-1 ring-zinc-900/15"
+                          style={{ backgroundColor: vendorColor }}
+                        />
+                        <span className="font-bold text-xs text-zinc-900 truncate">
+                          {t.vendorName}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                          <Clock className="w-3 h-3" />
+                          {timeString}
+                        </span>
+                      </div>
+                      <div className="shrink-0">
+                        {isCash ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            <Banknote className="w-3 h-3 text-emerald-700" />
+                            Cash
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-black bg-purple-100 text-purple-900 border border-purple-300">
+                            <Ticket className="w-3 h-3 text-purple-700" />
+                            Credit
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-zinc-800 font-semibold break-words">
+                      <span>{t.itemDescription}</span>
+                      {t.customerName && (
+                        <p className="text-[11px] text-zinc-600 font-medium mt-0.5">
+                          Customer: {t.customerName}
+                        </p>
+                      )}
+                      {t.notes && (
+                        <p className="text-[11px] text-zinc-500 font-normal italic mt-0.5 break-words">
+                          Memo: {t.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                      <div className="text-sm font-black text-zinc-950 tabular-nums">
+                        {formatCurrency(t.tradeValue)}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(t)}
+                          className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 text-xs font-semibold flex items-center gap-1"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+
+                        {deletingTradeId === t.id ? (
+                          <div className="flex items-center gap-1 animate-fade-in">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTrade(t.id)}
+                              className="px-2 py-1 rounded-md bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 cursor-pointer shadow-xs"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTradeId(null)}
+                              className="px-2 py-1 rounded-md bg-zinc-200 text-zinc-700 font-medium text-xs hover:bg-zinc-300 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTradeId(t.id)}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold"
+                            title="Delete trade"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
               <thead className="bg-zinc-50/80 text-zinc-500 font-semibold uppercase tracking-wider border-b border-zinc-100">
                 <tr>
                   <th scope="col" className="py-3 px-4">Time</th>
@@ -1009,13 +1101,14 @@ export const TradesTab: React.FC<TradesTabProps> = ({
               </tbody>
             </table>
           </div>
-        )}
+        </>
+      )}
       </div>
 
       {/* EDIT TRADE MODAL */}
       {editingTrade && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-zinc-200 overflow-hidden animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-zinc-200 animate-fade-in relative">
             <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-zinc-900">Edit Cards Trade-In</h3>
@@ -1042,19 +1135,13 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">
                   Vendor Taking In Cards
                 </label>
-                <select
+                <VendorDropdown
                   value={editVendor}
-                  onChange={(e) => setEditVendor(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-300 font-medium text-zinc-900 cursor-pointer"
+                  onChange={(val) => setEditVendor(val)}
+                  vendors={knownVendors}
+                  placeholder="-- Select Vendor --"
                   required
-                >
-                  <option value="">-- Select Vendor --</option>
-                  {knownVendors.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Cards Description */}
