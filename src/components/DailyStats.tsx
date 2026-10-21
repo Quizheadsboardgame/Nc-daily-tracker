@@ -1,12 +1,12 @@
 import React from 'react';
-import { Banknote, CreditCard, Receipt, TrendingUp, DollarSign, ArrowLeftRight } from 'lucide-react';
+import { Banknote, CreditCard, Receipt, TrendingUp, DollarSign, ArrowLeftRight, Globe } from 'lucide-react';
 import { DaySummary } from '../types';
 import { formatCurrency } from '../db/cloudDatabase';
 
 interface DailyStatsProps {
   summary: DaySummary;
   selectedPaymentFilter: string;
-  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'traded_out') => void;
+  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'traded_out' | 'online') => void;
 }
 
 export const DailyStats: React.FC<DailyStatsProps> = ({
@@ -16,12 +16,13 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
 }) => {
   const cashPct = summary.totalRevenue > 0 ? (summary.cashRevenue / summary.totalRevenue) * 100 : 0;
   const cardPct = summary.totalRevenue > 0 ? (summary.cardRevenue / summary.totalRevenue) * 100 : 0;
+  const onlinePct = summary.totalRevenue > 0 ? ((summary.onlineRevenue || 0) / summary.totalRevenue) * 100 : 0;
   const tradedOutPct = summary.totalRevenue > 0 ? (summary.tradedOutRevenue / summary.totalRevenue) * 100 : 0;
 
   return (
     <div className="space-y-4" id="section-daily-stats">
-      {/* 5 Sales Ledger KPI Cards - Locked securely to mobile screen */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3.5 w-full max-w-full">
+      {/* 6 Sales Ledger KPI Cards - Locked securely to mobile screen */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5 w-full max-w-full">
         {/* Total Day Gross Sales Revenue */}
         <div className="col-span-2 sm:col-span-1 bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
           <div className="flex items-center justify-between">
@@ -136,6 +137,53 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
               }`}
             >
               {cardPct.toFixed(1)}% volume
+            </div>
+          </div>
+        </button>
+
+        {/* Online Sales Card (Clickable Filter) */}
+        <button
+          type="button"
+          id="btn-stat-filter-online"
+          onClick={() => onSelectPaymentFilter(selectedPaymentFilter === 'online' ? 'all' : 'online')}
+          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-xs transition-all cursor-pointer relative ${
+            selectedPaymentFilter === 'online'
+              ? 'bg-violet-950 text-white border-violet-500 ring-2 ring-violet-500/50 shadow-md'
+              : 'bg-white border-zinc-300 hover:border-violet-500 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-1 flex-wrap">
+            <span
+              className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                selectedPaymentFilter === 'online' ? 'text-violet-300' : 'text-violet-900'
+              }`}
+            >
+              <Globe className="w-4 h-4 shrink-0 text-violet-500" /> Online
+            </span>
+            <span
+              className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${
+                selectedPaymentFilter === 'online'
+                  ? 'bg-violet-400 text-zinc-950 font-black'
+                  : 'bg-violet-100 text-violet-900 border border-violet-300'
+              }`}
+            >
+              {summary.onlineCount || 0}
+            </span>
+          </div>
+          <div className="mt-3">
+            <div
+              className={`text-2xl font-black tracking-tight tabular-nums break-words ${
+                selectedPaymentFilter === 'online' ? 'text-white' : 'text-zinc-950'
+              }`}
+            >
+              {formatCurrency(summary.onlineRevenue || 0)}
+            </div>
+            <div
+              className={`text-xs font-bold mt-1.5 ${
+                selectedPaymentFilter === 'online' ? 'text-violet-300' : 'text-violet-700'
+              }`}
+            >
+              {onlinePct.toFixed(1)}% volume
             </div>
           </div>
         </button>

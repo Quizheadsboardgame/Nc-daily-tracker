@@ -9,9 +9,10 @@ import { ManageVendorsTab } from './components/ManageVendorsTab';
 import { TradesTab } from './components/TradesTab';
 import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
+import { OnlineCardsTab } from './components/OnlineCardsTab';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2 } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -22,7 +23,7 @@ export default function App() {
   const [knownVendors, setKnownVendors] = useState<string[]>(() => cloudDb.getKnownVendors());
 
   // Filter states
-  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card' | 'traded_out'>('all');
+  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'cash' | 'card' | 'traded_out' | 'online'>('all');
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   // Modal states
@@ -179,6 +180,29 @@ export default function App() {
                     : 'bg-amber-100 text-amber-900 border border-amber-300'
                 }`}>
                   {cloudDb.getTradesForDay(currentDateKey).length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-online-cards"
+              onClick={() => setActiveTab('online-cards')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'online-cards'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <ShoppingBag className={`w-4 h-4 ${activeTab === 'online-cards' ? 'text-violet-400' : 'text-violet-600'}`} />
+              <span>Online Cards</span>
+              {cloudDb.getOnlineCardsSummary().availableCount > 0 && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                  activeTab === 'online-cards'
+                    ? 'bg-violet-400 text-zinc-950'
+                    : 'bg-violet-100 text-violet-900 border border-violet-300'
+                }`}>
+                  {cloudDb.getOnlineCardsSummary().availableCount}
                 </span>
               )}
             </button>
@@ -343,7 +367,18 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: Vendor Daily Check Tab (Sales & How much Trade taken in) */}
+        {/* TAB 3: Online Cards Inventory & Barcode System */}
+        {activeTab === 'online-cards' && (
+          <div className="animate-fade-in" id="tab-content-online-cards">
+            <OnlineCardsTab
+              knownVendors={knownVendors}
+              currentDateKey={currentDateKey}
+              onNavigateToLedger={() => setActiveTab('ledger')}
+            />
+          </div>
+        )}
+
+        {/* TAB 4: Vendor Daily Check Tab (Sales & How much Trade taken in) */}
         {activeTab === 'vendor-check' && (
           <div className="animate-fade-in" id="tab-content-vendor-check">
             <VendorDayCheck

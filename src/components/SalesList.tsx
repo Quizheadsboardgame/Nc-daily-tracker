@@ -4,6 +4,7 @@ import {
   Banknote,
   CreditCard,
   ArrowLeftRight,
+  Globe,
   Edit2,
   Trash2,
   Clock,
@@ -18,7 +19,7 @@ interface SalesListProps {
   allVendors?: string[];
   allSalesmen?: string[];
   selectedPaymentFilter: string;
-  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'traded_out') => void;
+  onSelectPaymentFilter: (filter: 'all' | 'cash' | 'card' | 'traded_out' | 'online') => void;
   selectedVendor?: string;
   selectedSalesman?: string;
   onSelectVendor?: (name: string) => void;
@@ -70,6 +71,8 @@ export const SalesList: React.FC<SalesListProps> = ({
           s.itemDescription.toLowerCase().includes(q) ||
           s.salesmanName.toLowerCase().includes(q) ||
           (s.notes && s.notes.toLowerCase().includes(q)) ||
+          (s.onlineBarcode && s.onlineBarcode.toLowerCase().includes(q)) ||
+          (s.paymentMethod === 'online' && ('online'.includes(q) || 'web'.includes(q) || 'internet'.includes(q))) ||
           (s.paymentMethod === 'traded_out' && ('trade out'.includes(q) || 'traded out'.includes(q) || q === 'out'))
       );
     }
@@ -96,6 +99,14 @@ export const SalesList: React.FC<SalesListProps> = ({
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
           <Banknote className="w-3.5 h-3.5 text-emerald-600" />
           Cash
+        </span>
+      );
+    }
+    if (method === 'online') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-violet-100 text-violet-900 border border-violet-300 shadow-2xs">
+          <Globe className="w-3.5 h-3.5 text-violet-600" />
+          Online Sale
         </span>
       );
     }
@@ -194,6 +205,18 @@ export const SalesList: React.FC<SalesListProps> = ({
               }`}
             >
               <CreditCard className="w-3 h-3" /> Card
+            </button>
+            <button
+              type="button"
+              id="filter-payment-online"
+              onClick={() => onSelectPaymentFilter('online')}
+              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                selectedPaymentFilter === 'online'
+                  ? 'bg-violet-600 text-white shadow-xs font-bold'
+                  : 'text-zinc-600 hover:text-violet-700'
+              }`}
+            >
+              <Globe className="w-3 h-3" /> Online
             </button>
             <button
               type="button"

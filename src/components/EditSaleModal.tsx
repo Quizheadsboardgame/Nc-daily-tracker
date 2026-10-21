@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Save } from 'lucide-react';
+import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Globe, Save } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { VendorDropdown } from './VendorDropdown';
 
@@ -38,6 +38,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           ? 'cash'
           : sale.paymentMethod === 'traded_out'
           ? 'traded_out'
+          : sale.paymentMethod === 'online'
+          ? 'online'
           : 'card'
       );
       setNotes(sale.notes || '');
@@ -168,14 +170,14 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
             <div className="sm:col-span-7">
               <label className="block text-xs font-semibold text-zinc-700 mb-1">Method / Settlement</label>
-              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
                 <button
                   type="button"
                   id="edit-btn-payment-cash"
                   onClick={() => setPaymentMethod('cash')}
                   className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     paymentMethod === 'cash'
-                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
@@ -188,7 +190,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                   onClick={() => setPaymentMethod('card')}
                   className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     paymentMethod === 'card'
-                      ? 'bg-blue-600 text-white border-blue-600'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
@@ -197,11 +199,24 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                 </button>
                 <button
                   type="button"
+                  id="edit-btn-payment-online"
+                  onClick={() => setPaymentMethod('online')}
+                  className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    paymentMethod === 'online'
+                      ? 'bg-violet-600 text-white border-violet-600 shadow-2xs'
+                      : 'bg-violet-50 hover:bg-violet-100 text-violet-900 border-violet-300'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5 shrink-0 text-violet-600" />
+                  <span>Online</span>
+                </button>
+                <button
+                  type="button"
                   id="edit-btn-payment-traded-out"
                   onClick={() => setPaymentMethod('traded_out')}
                   className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     paymentMethod === 'traded_out'
-                      ? 'bg-amber-600 text-white border-amber-600'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
                       : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                   }`}
                   title="Item traded out from vendor's inventory"

@@ -21,6 +21,8 @@ import {
   TradeType,
   TradeDaySummary,
   TradeVendorStat,
+  OnlineCard,
+  OnlineCardsSummary,
 } from '../types';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
@@ -54,6 +56,7 @@ const STORAGE_SALES_KEY = 'daily_sales_tracker_real_sales_v6';
 const STORAGE_TRADES_KEY = 'daily_sales_tracker_real_trades_v6';
 const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v6';
 const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v6';
+const STORAGE_ONLINE_CARDS_KEY = 'daily_sales_tracker_real_online_cards_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -200,6 +203,7 @@ export function shiftWeek(startDateKey: string, weekDelta: number): WeekRangeInf
 class CloudSalesDatabase {
   private salesCache: Map<string, SaleRecord> = new Map();
   private tradesCache: Map<string, TradeRecord> = new Map();
+  private onlineCardsCache: Map<string, OnlineCard> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private listeners: Set<() => void> = new Set();
@@ -273,6 +277,16 @@ class CloudSalesDatabase {
           }
         }
       }
+
+      const storedOnline = localStorage.getItem(STORAGE_ONLINE_CARDS_KEY);
+      if (storedOnline) {
+        const parsedOnline = JSON.parse(storedOnline);
+        if (Array.isArray(parsedOnline) && parsedOnline.length > 0) {
+          for (const item of parsedOnline) {
+            this.onlineCardsCache.set(item.id, item);
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -288,6 +302,7 @@ class CloudSalesDatabase {
       localStorage.setItem(STORAGE_VENDOR_COLORS_KEY, JSON.stringify(colorsObj));
       localStorage.setItem(STORAGE_SALES_KEY, JSON.stringify(Array.from(this.salesCache.values())));
       localStorage.setItem(STORAGE_TRADES_KEY, JSON.stringify(Array.from(this.tradesCache.values())));
+      localStorage.setItem(STORAGE_ONLINE_CARDS_KEY, JSON.stringify(Array.from(this.onlineCardsCache.values())));
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
     }
@@ -365,6 +380,8 @@ class CloudSalesDatabase {
                   rawMethod === 'trade' ||
                   rawMethod === 'traded'
                 ? 'traded_out'
+                : rawMethod === 'online'
+                ? 'online'
                 : 'card';
 
             this.salesCache.set(docSnap.id, {
@@ -377,6 +394,9 @@ class CloudSalesDatabase {
               notes: data.notes || undefined,
               timestamp: data.timestamp || Date.now(),
               dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+              isOnlineSale: Boolean(data.isOnlineSale) || paymentMethod === 'online',
+              onlineCardId: data.onlineCardId || undefined,
+              onlineBarcode: data.onlineBarcode || undefined,
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
               tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -425,6 +445,40 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Trades Firestore listener error:', error);
+        }
+      );
+
+      // 4. Real-time listener for Online Cards collection
+      const onlineCardsCol = collection(db, 'online_cards');
+      const onlineCardsQuery = query(onlineCardsCol, orderBy('timestamp', 'desc'));
+      onSnapshot(
+        onlineCardsQuery,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.onlineCardsCache.clear();
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            this.onlineCardsCache.set(docSnap.id, {
+              id: docSnap.id,
+              barcode: data.barcode || docSnap.id,
+              vendorName: data.vendorName || '',
+              cardName: data.cardName || '',
+              price: Number(data.price) || 0,
+              status: data.status === 'sold' ? 'sold' : 'available',
+              notes: data.notes || undefined,
+              timestamp: data.timestamp || Date.now(),
+              dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+              soldAt: data.soldAt || undefined,
+              soldDateKey: data.soldDateKey || undefined,
+              saleId: data.saleId || undefined,
+            });
+          });
+
+          this.saveToStorage();
+          this.notify();
+        },
+        (error) => {
+          console.warn('Online cards Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -481,6 +535,13 @@ class CloudSalesDatabase {
     this.tradesCache.forEach((trade) => {
       if (trade.vendorName && trade.vendorName.trim()) {
         vendorSet.add(trade.vendorName.trim());
+      }
+    });
+
+    // 6. Any vendor that has online cards registered
+    this.onlineCardsCache.forEach((card) => {
+      if (card.vendorName && card.vendorName.trim()) {
+        vendorSet.add(card.vendorName.trim());
       }
     });
 
@@ -629,10 +690,13 @@ class CloudSalesDatabase {
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
-    paymentMethod: PaymentMethod; // cash, card, or traded_out
+    paymentMethod: PaymentMethod; // cash, card, traded_out, or online
     notes?: string;
     dateKey?: string;
     timestamp?: number;
+    isOnlineSale?: boolean;
+    onlineCardId?: string;
+    onlineBarcode?: string;
   }): Promise<SaleRecord> {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
@@ -644,7 +708,11 @@ class CloudSalesDatabase {
       ? 'cash'
       : input.paymentMethod === 'traded_out'
       ? 'traded_out'
+      : input.paymentMethod === 'online'
+      ? 'online'
       : 'card';
+
+    const isOnlineSale = Boolean(input.isOnlineSale) || paymentMethod === 'online';
 
     const record: SaleRecord = {
       id,
@@ -656,6 +724,9 @@ class CloudSalesDatabase {
       notes: input.notes?.trim() || undefined,
       timestamp,
       dateKey,
+      isOnlineSale: isOnlineSale ? true : undefined,
+      onlineCardId: input.onlineCardId || undefined,
+      onlineBarcode: input.onlineBarcode || undefined,
     };
 
     // Store in cache & notify
@@ -679,6 +750,9 @@ class CloudSalesDatabase {
         notes: record.notes || null,
         timestamp: record.timestamp,
         dateKey: record.dateKey,
+        isOnlineSale: isOnlineSale,
+        onlineCardId: input.onlineCardId || null,
+        onlineBarcode: input.onlineBarcode || null,
       });
     } catch (e) {
       console.warn('Sale saved to memory/localStorage; Firestore sync pending:', e);
@@ -701,6 +775,8 @@ class CloudSalesDatabase {
         ? 'cash'
         : updates.paymentMethod === 'traded_out'
         ? 'traded_out'
+        : updates.paymentMethod === 'online'
+        ? 'online'
         : 'card';
     }
 
@@ -713,6 +789,9 @@ class CloudSalesDatabase {
       amount: updates.amount !== undefined ? Math.round(Number(updates.amount) * 100) / 100 : existing.amount,
       paymentMethod: updatedPaymentMethod,
       notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
+      isOnlineSale: updates.isOnlineSale !== undefined ? updates.isOnlineSale : existing.isOnlineSale,
+      onlineCardId: updates.onlineCardId !== undefined ? updates.onlineCardId : existing.onlineCardId,
+      onlineBarcode: updates.onlineBarcode !== undefined ? updates.onlineBarcode : existing.onlineBarcode,
     };
 
     this.salesCache.set(id, updated);
@@ -727,6 +806,9 @@ class CloudSalesDatabase {
       if (updates.paymentMethod !== undefined) firestoreUpdates.paymentMethod = updatedPaymentMethod;
       if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
       if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
+      if (updates.isOnlineSale !== undefined) firestoreUpdates.isOnlineSale = updates.isOnlineSale;
+      if (updates.onlineCardId !== undefined) firestoreUpdates.onlineCardId = updates.onlineCardId;
+      if (updates.onlineBarcode !== undefined) firestoreUpdates.onlineBarcode = updates.onlineBarcode;
 
       await updateDoc(doc(db, 'sales', id), firestoreUpdates);
     } catch (e) {
@@ -1025,6 +1107,8 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let onlineRevenue = 0;
+    let onlineCount = 0;
     let tradedOutRevenue = 0;
     let tradedOutCount = 0;
 
@@ -1039,6 +1123,9 @@ class CloudSalesDatabase {
       } else if (sale.paymentMethod === 'traded_out') {
         tradedOutRevenue += sale.amount;
         tradedOutCount++;
+      } else if (sale.paymentMethod === 'online' || sale.isOnlineSale) {
+        onlineRevenue += sale.amount;
+        onlineCount++;
       } else {
         cardRevenue += sale.amount;
         cardCount++;
@@ -1054,6 +1141,8 @@ class CloudSalesDatabase {
           cashCount: 0,
           cardAmount: 0,
           cardCount: 0,
+          onlineAmount: 0,
+          onlineCount: 0,
           tradedOutAmount: 0,
           tradedOutCount: 0,
           color: this.getVendorColor(sale.salesmanName),
@@ -1069,6 +1158,9 @@ class CloudSalesDatabase {
       } else if (sale.paymentMethod === 'traded_out') {
         stat.tradedOutAmount = (stat.tradedOutAmount || 0) + sale.amount;
         stat.tradedOutCount = (stat.tradedOutCount || 0) + 1;
+      } else if (sale.paymentMethod === 'online' || sale.isOnlineSale) {
+        stat.onlineAmount = (stat.onlineAmount || 0) + sale.amount;
+        stat.onlineCount = (stat.onlineCount || 0) + 1;
       } else {
         stat.cardAmount += sale.amount;
         stat.cardCount = (stat.cardCount || 0) + 1;
@@ -1087,6 +1179,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      onlineRevenue: Math.round(onlineRevenue * 100) / 100,
+      onlineCount,
       tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
       tradedOutCount,
       averageTicket: sales.length > 0 ? Math.round((totalRevenue / sales.length) * 100) / 100 : 0,
@@ -1111,6 +1205,8 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let onlineRevenue = 0;
+    let onlineCount = 0;
     let tradedOutRevenue = 0;
     let tradedOutCount = 0;
 
@@ -1122,6 +1218,9 @@ class CloudSalesDatabase {
       } else if (s.paymentMethod === 'traded_out') {
         tradedOutRevenue += s.amount;
         tradedOutCount++;
+      } else if (s.paymentMethod === 'online' || s.isOnlineSale) {
+        onlineRevenue += s.amount;
+        onlineCount++;
       } else {
         cardRevenue += s.amount;
         cardCount++;
@@ -1162,6 +1261,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      onlineRevenue: Math.round(onlineRevenue * 100) / 100,
+      onlineCount,
       tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
       tradedOutCount,
       averageTicket: vendorSales.length > 0 ? Math.round((totalRevenue / vendorSales.length) * 100) / 100 : 0,
@@ -1207,6 +1308,8 @@ class CloudSalesDatabase {
     let cashCount = 0;
     let cardRevenue = 0;
     let cardCount = 0;
+    let onlineRevenue = 0;
+    let onlineCount = 0;
     let tradedOutRevenue = 0;
     let tradedOutCount = 0;
 
@@ -1218,6 +1321,9 @@ class CloudSalesDatabase {
       } else if (s.paymentMethod === 'traded_out') {
         tradedOutRevenue += s.amount;
         tradedOutCount++;
+      } else if (s.paymentMethod === 'online' || s.isOnlineSale) {
+        onlineRevenue += s.amount;
+        onlineCount++;
       } else {
         cardRevenue += s.amount;
         cardCount++;
@@ -1249,6 +1355,8 @@ class CloudSalesDatabase {
       let dayTotal = 0;
       let dayCash = 0;
       let dayCard = 0;
+      let dayOnline = 0;
+      let dayOnlineCount = 0;
       let dayTradedOut = 0;
       let dayTradedOutCount = 0;
 
@@ -1259,6 +1367,9 @@ class CloudSalesDatabase {
         } else if (s.paymentMethod === 'traded_out') {
           dayTradedOut += s.amount;
           dayTradedOutCount++;
+        } else if (s.paymentMethod === 'online' || s.isOnlineSale) {
+          dayOnline += s.amount;
+          dayOnlineCount++;
         } else {
           dayCard += s.amount;
         }
@@ -1284,6 +1395,8 @@ class CloudSalesDatabase {
         totalRevenue: Math.round(dayTotal * 100) / 100,
         cashRevenue: Math.round(dayCash * 100) / 100,
         cardRevenue: Math.round(dayCard * 100) / 100,
+        onlineRevenue: Math.round(dayOnline * 100) / 100,
+        onlineCount: dayOnlineCount,
         tradedOutRevenue: Math.round(dayTradedOut * 100) / 100,
         tradedOutCount: dayTradedOutCount,
         tradeTakenInAmount: Math.round(dayTradeVal * 100) / 100,
@@ -1303,6 +1416,8 @@ class CloudSalesDatabase {
       cashCount,
       cardRevenue: Math.round(cardRevenue * 100) / 100,
       cardCount,
+      onlineRevenue: Math.round(onlineRevenue * 100) / 100,
+      onlineCount,
       tradedOutRevenue: Math.round(tradedOutRevenue * 100) / 100,
       tradedOutCount,
       averageTicket: weekSales.length > 0 ? Math.round((totalRevenue / weekSales.length) * 100) / 100 : 0,
@@ -1316,6 +1431,290 @@ class CloudSalesDatabase {
       sales: weekSales,
       tradesTakenIn: weekTradesTakenIn,
     };
+  }
+
+  // --- Online Cards Inventory & Barcode System ---
+
+  public getOnlineCards(filter?: {
+    status?: 'all' | 'available' | 'sold';
+    vendor?: string;
+    query?: string;
+  }): OnlineCard[] {
+    let list = Array.from(this.onlineCardsCache.values());
+
+    if (filter) {
+      if (filter.status && filter.status !== 'all') {
+        list = list.filter((c) => c.status === filter.status);
+      }
+      if (filter.vendor && filter.vendor !== 'all') {
+        const v = filter.vendor.trim().toLowerCase();
+        list = list.filter((c) => c.vendorName.trim().toLowerCase() === v);
+      }
+      if (filter.query && filter.query.trim()) {
+        const q = filter.query.trim().toLowerCase();
+        list = list.filter(
+          (c) =>
+            c.cardName.toLowerCase().includes(q) ||
+            c.barcode.toLowerCase().includes(q) ||
+            c.vendorName.toLowerCase().includes(q) ||
+            (c.notes && c.notes.toLowerCase().includes(q))
+        );
+      }
+    }
+
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public getOnlineCardByBarcode(barcodeOrId: string): OnlineCard | undefined {
+    const clean = barcodeOrId.trim().toUpperCase();
+    if (!clean) return undefined;
+
+    // Check direct ID or barcode
+    for (const card of this.onlineCardsCache.values()) {
+      if (card.barcode.toUpperCase() === clean || card.id.toUpperCase() === clean) {
+        return card;
+      }
+      // Also match without "ONL-" if user only scanned numbers
+      const numOnly = clean.replace(/[^0-9]/g, '');
+      const cardNumOnly = card.barcode.replace(/[^0-9]/g, '');
+      if (numOnly && cardNumOnly && numOnly === cardNumOnly) {
+        return card;
+      }
+    }
+    return undefined;
+  }
+
+  public getOnlineCardById(id: string): OnlineCard | undefined {
+    return this.onlineCardsCache.get(id);
+  }
+
+  public getOnlineCardsSummary(): OnlineCardsSummary {
+    let totalCards = 0;
+    let availableCount = 0;
+    let availableValue = 0;
+    let soldCount = 0;
+    let soldValue = 0;
+
+    this.onlineCardsCache.forEach((card) => {
+      totalCards++;
+      if (card.status === 'sold') {
+        soldCount++;
+        soldValue += card.price;
+      } else {
+        availableCount++;
+        availableValue += card.price;
+      }
+    });
+
+    return {
+      totalCards,
+      availableCount,
+      availableValue: Math.round(availableValue * 100) / 100,
+      soldCount,
+      soldValue: Math.round(soldValue * 100) / 100,
+    };
+  }
+
+  public async addOnlineCard(input: {
+    vendorName: string;
+    cardName: string;
+    price: number;
+    notes?: string;
+  }): Promise<OnlineCard> {
+    const vendorName = input.vendorName.trim();
+    const cardName = input.cardName.trim();
+    const price = Math.round(Number(input.price) * 100) / 100;
+    const notes = input.notes?.trim() || undefined;
+
+    // Generate unique barcode e.g. ONL-123456
+    let barcodeNumber = Math.floor(100000 + Math.random() * 900000).toString();
+    while (Array.from(this.onlineCardsCache.values()).some((c) => c.barcode === `ONL-${barcodeNumber}`)) {
+      barcodeNumber = Math.floor(100000 + Math.random() * 900000).toString();
+    }
+    const barcode = `ONL-${barcodeNumber}`;
+    const id = `onl_card_${barcodeNumber}_${Date.now().toString(36)}`;
+    const timestamp = Date.now();
+    const dateKey = getLocalDateKey(new Date(timestamp));
+
+    const card: OnlineCard = {
+      id,
+      barcode,
+      vendorName,
+      cardName,
+      price,
+      status: 'available',
+      notes,
+      timestamp,
+      dateKey,
+    };
+
+    this.onlineCardsCache.set(id, card);
+
+    // Register vendor if new
+    if (!this.salesmenList.includes(vendorName)) {
+      this.salesmenList.push(vendorName);
+      this.salesmenList.sort();
+    }
+
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'online_cards', id), {
+        id,
+        barcode,
+        vendorName,
+        cardName,
+        price,
+        status: 'available',
+        notes: notes || null,
+        timestamp,
+        dateKey,
+      });
+    } catch (e) {
+      console.warn('Online card saved locally; Firestore sync pending:', e);
+    }
+
+    return card;
+  }
+
+  public async updateOnlineCard(
+    id: string,
+    updates: Partial<Omit<OnlineCard, 'id' | 'barcode'>>
+  ): Promise<void> {
+    const existing = this.onlineCardsCache.get(id);
+    if (!existing) return;
+
+    const updated: OnlineCard = {
+      ...existing,
+      ...updates,
+      vendorName: updates.vendorName ? updates.vendorName.trim() : existing.vendorName,
+      cardName: updates.cardName ? updates.cardName.trim() : existing.cardName,
+      price: updates.price !== undefined ? Math.round(Number(updates.price) * 100) / 100 : existing.price,
+      notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
+    };
+
+    this.onlineCardsCache.set(id, updated);
+    this.notify();
+
+    try {
+      const firestoreUpdates: Record<string, any> = {};
+      if (updates.vendorName !== undefined) firestoreUpdates.vendorName = updates.vendorName.trim();
+      if (updates.cardName !== undefined) firestoreUpdates.cardName = updates.cardName.trim();
+      if (updates.price !== undefined) firestoreUpdates.price = Math.round(Number(updates.price) * 100) / 100;
+      if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
+      if (updates.status !== undefined) firestoreUpdates.status = updates.status;
+
+      await updateDoc(doc(db, 'online_cards', id), firestoreUpdates);
+    } catch (e) {
+      console.warn('Updated online card locally; Firestore sync pending:', e);
+    }
+  }
+
+  public async deleteOnlineCard(id: string): Promise<void> {
+    this.onlineCardsCache.delete(id);
+    this.notify();
+
+    try {
+      await deleteDoc(doc(db, 'online_cards', id));
+    } catch (e) {
+      console.warn('Deleted online card locally; Firestore sync pending:', e);
+    }
+  }
+
+  public async sellOnlineCard(
+    barcodeOrId: string,
+    options?: {
+      targetDateKey?: string;
+      customPrice?: number;
+      notes?: string;
+    }
+  ): Promise<{ card: OnlineCard; sale: SaleRecord }> {
+    const card = this.getOnlineCardByBarcode(barcodeOrId);
+    if (!card) {
+      throw new Error(`No card found with barcode or ID: "${barcodeOrId}"`);
+    }
+
+    if (card.status === 'sold') {
+      throw new Error(`This card (${card.cardName} - ${card.barcode}) was already sold on ${card.soldDateKey || 'a previous date'}!`);
+    }
+
+    const soldPrice = options?.customPrice !== undefined ? Math.round(Number(options.customPrice) * 100) / 100 : card.price;
+    const soldDateKey = options?.targetDateKey || getLocalDateKey();
+    const soldAt = Date.now();
+
+    // 1. Record the sale in the Sales Ledger as an Online Sale
+    const sale = await this.insertSale({
+      salesmanName: card.vendorName,
+      itemDescription: `${card.cardName} (Online #${card.barcode})`,
+      amount: soldPrice,
+      paymentMethod: 'online',
+      notes: options?.notes ? `Online Sale [${card.barcode}]: ${options.notes}` : `Online Sale [${card.barcode}]`,
+      dateKey: soldDateKey,
+      timestamp: soldAt,
+    });
+
+    // Also update sale record with online metadata
+    await this.updateSale(sale.id, {
+      isOnlineSale: true,
+      onlineCardId: card.id,
+      onlineBarcode: card.barcode,
+    });
+
+    // 2. Mark online card as sold
+    const updatedCard: OnlineCard = {
+      ...card,
+      status: 'sold',
+      soldAt,
+      soldDateKey,
+      saleId: sale.id,
+    };
+
+    this.onlineCardsCache.set(card.id, updatedCard);
+    this.notify();
+
+    try {
+      await updateDoc(doc(db, 'online_cards', card.id), {
+        status: 'sold',
+        soldAt,
+        soldDateKey,
+        saleId: sale.id,
+      });
+    } catch (e) {
+      console.warn('Marked card sold locally; Firestore sync pending:', e);
+    }
+
+    return { card: updatedCard, sale };
+  }
+
+  public async returnOnlineCardToStock(cardId: string): Promise<void> {
+    const card = this.onlineCardsCache.get(cardId);
+    if (!card) return;
+
+    if (card.saleId) {
+      await this.deleteSale(card.saleId);
+    }
+
+    const updatedCard: OnlineCard = {
+      ...card,
+      status: 'available',
+      soldAt: undefined,
+      soldDateKey: undefined,
+      saleId: undefined,
+    };
+
+    this.onlineCardsCache.set(cardId, updatedCard);
+    this.notify();
+
+    try {
+      await updateDoc(doc(db, 'online_cards', cardId), {
+        status: 'available',
+        soldAt: null,
+        soldDateKey: null,
+        saleId: null,
+      });
+    } catch (e) {
+      console.warn('Returned card to stock locally; Firestore sync pending:', e);
+    }
   }
 
   public exportWeekToCsv(startDateKey: string, endDateKey: string, vendorName?: string): string {
@@ -1350,7 +1749,7 @@ class CloudSalesDatabase {
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod.toUpperCase(),
+      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod === 'online' ? 'ONLINE SALE' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -1380,7 +1779,7 @@ class CloudSalesDatabase {
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod.toUpperCase(),
+      sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod === 'online' ? 'ONLINE SALE' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -1402,6 +1801,8 @@ export interface DayBreakdownItem {
   totalRevenue: number;
   cashRevenue: number;
   cardRevenue: number;
+  onlineRevenue?: number;
+  onlineCount?: number;
   tradedOutRevenue: number;
   tradedOutCount: number;
   tradeTakenInAmount: number;
@@ -1421,6 +1822,8 @@ export interface VendorDayDetails {
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  onlineRevenue?: number;
+  onlineCount?: number;
   tradedOutRevenue: number;
   tradedOutCount: number;
   averageTicket: number;
@@ -1444,6 +1847,8 @@ export interface VendorWeekDetails {
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  onlineRevenue?: number;
+  onlineCount?: number;
   tradedOutRevenue: number;
   tradedOutCount: number;
   averageTicket: number;
@@ -1459,3 +1864,4 @@ export interface VendorWeekDetails {
 }
 
 export const cloudDb = new CloudSalesDatabase();
+

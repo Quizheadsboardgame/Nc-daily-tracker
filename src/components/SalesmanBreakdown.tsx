@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Banknote, CreditCard, ArrowLeftRight } from 'lucide-react';
+import { Users, Banknote, CreditCard, ArrowLeftRight, Globe } from 'lucide-react';
 import { VendorStat } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
 
@@ -104,8 +104,8 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                 />
               </div>
 
-              {/* Cash, Card & Traded Out breakdown */}
-              <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-zinc-200/60 text-[10px]">
+              {/* Cash, Card, Online & Traded Out breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 pt-1.5 border-t border-zinc-200/60 text-[10px]">
                 <span
                   className={`inline-flex items-center gap-1 font-semibold truncate ${
                     isSelected ? 'text-emerald-300' : 'text-emerald-700'
@@ -124,6 +124,16 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                 >
                   <CreditCard className="w-3 h-3 shrink-0" />
                   <span>{formatCurrency(vendor.cardAmount)}</span>
+                </span>
+
+                <span
+                  className={`inline-flex items-center gap-1 font-semibold truncate ${
+                    isSelected ? 'text-violet-300' : 'text-violet-700'
+                  }`}
+                  title={`Online: ${formatCurrency(vendor.onlineAmount || 0)}`}
+                >
+                  <Globe className="w-3 h-3 shrink-0" />
+                  <span>{formatCurrency(vendor.onlineAmount || 0)}</span>
                 </span>
 
                 <span

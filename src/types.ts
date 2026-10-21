@@ -1,4 +1,4 @@
-export type PaymentMethod = 'cash' | 'card' | 'traded_out';
+export type PaymentMethod = 'cash' | 'card' | 'traded_out' | 'online';
 
 export type TradeType = 'cash' | 'credit'; // Cards traded in for cash OR for credit (vendors credit)
 
@@ -8,10 +8,13 @@ export interface SaleRecord {
   itemDescription: string;
   isMiscellaneous?: boolean;
   amount: number; // Gross sale price / valuation in GBP (£)
-  paymentMethod: PaymentMethod; // cash, card, or traded_out
+  paymentMethod: PaymentMethod; // cash, card, traded_out, or online
   notes?: string;
   timestamp: number; // Unix timestamp in milliseconds
   dateKey: string; // YYYY-MM-DD format
+  isOnlineSale?: boolean;
+  onlineCardId?: string;
+  onlineBarcode?: string;
   // Backward compatibility fields if legacy records exist
   tradeDetails?: string;
   tradeAcceptingVendor?: string;
@@ -21,12 +24,14 @@ export interface SaleRecord {
 
 export interface VendorStat {
   name: string;
-  totalAmount: number; // Gross cash + card + traded out revenue
+  totalAmount: number; // Gross cash + card + online + traded out revenue
   count: number;
   cashAmount: number;
   cashCount?: number;
   cardAmount: number;
   cardCount?: number;
+  onlineAmount?: number;
+  onlineCount?: number;
   tradedOutAmount: number;
   tradedOutCount?: number;
   tradeAmount?: number; // legacy alias
@@ -46,11 +51,13 @@ export interface DaySummary {
   dateKey: string;
   formattedDate: string;
   totalCount: number;
-  totalRevenue: number; // Gross cash + card + traded out revenue
+  totalRevenue: number; // Gross cash + card + online + traded out revenue
   cashRevenue: number;
   cashCount: number;
   cardRevenue: number;
   cardCount: number;
+  onlineRevenue: number;
+  onlineCount: number;
   tradedOutRevenue: number;
   tradedOutCount: number;
   averageTicket: number;
@@ -108,3 +115,29 @@ export interface FilterOptions {
   salesman?: string;
   sortBy: 'newest' | 'oldest' | 'amount-high' | 'amount-low';
 }
+
+export type OnlineCardStatus = 'available' | 'sold';
+
+export interface OnlineCard {
+  id: string; // e.g. "ONL-XXXXXX"
+  barcode: string; // barcode string e.g. "ONL-784920"
+  vendorName: string; // Vendor who owns the card
+  cardName: string; // Title / Card name
+  price: number; // Listed price in GBP (£)
+  status: OnlineCardStatus; // 'available' or 'sold'
+  notes?: string; // Optional condition, set, notes
+  timestamp: number; // Created timestamp
+  dateKey: string; // Date added (YYYY-MM-DD)
+  soldAt?: number; // Sold timestamp
+  soldDateKey?: string; // Date sold (YYYY-MM-DD)
+  saleId?: string; // Linked sale record ID in daily sales ledger
+}
+
+export interface OnlineCardsSummary {
+  totalCards: number;
+  availableCount: number;
+  availableValue: number;
+  soldCount: number;
+  soldValue: number;
+}
+

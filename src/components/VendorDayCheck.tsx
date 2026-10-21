@@ -15,7 +15,8 @@ import {
   Download,
   CalendarDays,
   Ticket,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Globe
 } from 'lucide-react';
 import { SaleRecord, DaySummary } from '../types';
 import { 
@@ -42,6 +43,13 @@ const renderSalePaymentBadge = (method: string) => {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
         <Banknote className="w-3 h-3 text-emerald-600" /> Cash
+      </span>
+    );
+  }
+  if (method === 'online') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-violet-100 text-violet-900 border border-violet-300">
+        <Globe className="w-3 h-3 text-violet-600" /> Online
       </span>
     );
   }
@@ -593,6 +601,12 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   <span className="font-black text-zinc-900">{formatCurrency(weekData.cardRevenue)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
+                  <span className="text-violet-700 font-bold flex items-center gap-1">
+                    <Globe className="w-3.5 h-3.5" /> Online:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(weekData.onlineRevenue || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
                   <span className="text-amber-700 font-bold flex items-center gap-1">
                     <ArrowLeftRight className="w-3.5 h-3.5" /> Trade Out:
                   </span>
@@ -600,7 +614,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {weekData.cashCount} cash • {weekData.cardCount} card • {weekData.tradedOutCount || 0} trade out
+                {weekData.cashCount} cash • {weekData.cardCount} card • {weekData.onlineCount || 0} online • {weekData.tradedOutCount || 0} trade out
               </div>
             </div>
 
@@ -1093,6 +1107,12 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   <span className="font-black text-zinc-900">{formatCurrency(dayData.cardRevenue)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
+                  <span className="text-violet-700 font-bold flex items-center gap-1">
+                    <Globe className="w-3.5 h-3.5" /> Online:
+                  </span>
+                  <span className="font-black text-zinc-900">{formatCurrency(dayData.onlineRevenue || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
                   <span className="text-amber-700 font-bold flex items-center gap-1">
                     <ArrowLeftRight className="w-3.5 h-3.5" /> Trade Out:
                   </span>
@@ -1100,7 +1120,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-zinc-500 font-medium">
-                {dayData.cashCount} cash • {dayData.cardCount} card • {dayData.tradedOutCount || 0} trade out
+                {dayData.cashCount} cash • {dayData.cardCount} card • {dayData.onlineCount || 0} online • {dayData.tradedOutCount || 0} trade out
               </div>
             </div>
 

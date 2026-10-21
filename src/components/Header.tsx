@@ -1,8 +1,8 @@
 import React from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2 } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag } from 'lucide-react';
 import { getLocalDateKey } from '../db/cloudDatabase';
 
-export type AppTab = 'ledger' | 'trades' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -99,6 +99,27 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
                 <span>Trade In</span>
+              </button>
+
+              <button
+                type="button"
+                id="nav-tab-online-cards"
+                onClick={() => onTabChange('online-cards')}
+                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'online-cards'
+                    ? 'bg-white text-zinc-950 shadow-sm font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <ShoppingBag className={`w-4 h-4 ${activeTab === 'online-cards' ? 'text-violet-600' : 'text-violet-400'}`} />
+                <span>Online Cards</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${
+                  activeTab === 'online-cards'
+                    ? 'bg-violet-100 text-violet-900'
+                    : 'bg-violet-950/60 text-violet-300 border border-violet-800/60'
+                }`}>
+                  Barcodes
+                </span>
               </button>
 
               <button
