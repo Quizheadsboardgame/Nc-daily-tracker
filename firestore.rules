@@ -17,5 +17,17 @@ service cloud.firestore {
     match /stock/{stockId} {
       allow read, write: if true;
     }
+    // Online cards and barcodes synced across all terminals
+    match /online_cards/{cardId} {
+      allow read, write: if true;
+    }
+    // General inventory collection synced across all terminals
+    match /inventory/{itemId} {
+      allow read, write: if true;
+    }
+    // Universal access rule to ensure all devices can read and write all application data
+    match /{document=**} {
+      allow read, write: if true;
+    }
   }
 }

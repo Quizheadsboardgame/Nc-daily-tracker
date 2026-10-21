@@ -208,6 +208,7 @@ class CloudSalesDatabase {
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private listeners: Set<() => void> = new Set();
   public isCloudConnected: boolean = false;
+  public lastSyncTimestamp: number = Date.now();
 
   constructor() {
     this.cleanLegacyStorage();
@@ -259,6 +260,8 @@ class CloudSalesDatabase {
                 ? 'cash'
                 : raw === 'traded_out' || raw === 'trade_out' || raw === 'trade out' || raw === 'trade' || raw === 'traded'
                 ? 'traded_out'
+                : raw === 'online'
+                ? 'online'
                 : 'card';
             this.salesCache.set(item.id, {
               ...item,
@@ -334,6 +337,7 @@ class CloudSalesDatabase {
         salesmenCol,
         (snapshot) => {
           this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
           if (snapshot.empty) {
             this.seedFirestoreSalesmen();
             return;
@@ -360,16 +364,18 @@ class CloudSalesDatabase {
         }
       );
 
-      // 2. Real-time listener for Sales Records (Cash & Card) across all devices
+      // 2. Real-time listener for Sales Records (Cash, Card, Traded Out, Online) across all devices
       const salesCol = collection(db, 'sales');
-      const salesQuery = query(salesCol, orderBy('timestamp', 'desc'));
       onSnapshot(
-        salesQuery,
+        salesCol,
         (snapshot) => {
           this.isCloudConnected = true;
-          this.salesCache.clear();
+          this.lastSyncTimestamp = Date.now();
+          const remoteSaleIds = new Set<string>();
+
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            remoteSaleIds.add(docSnap.id);
             const rawMethod = (data.paymentMethod || '').toString().toLowerCase().trim();
             const paymentMethod: PaymentMethod =
               rawMethod === 'cash'
@@ -404,6 +410,25 @@ class CloudSalesDatabase {
             });
           });
 
+          // Sync any local sales that haven't reached Firestore yet (e.g. offline fallback)
+          this.salesCache.forEach((localSale, saleId) => {
+            if (!remoteSaleIds.has(saleId)) {
+              setDoc(doc(db, 'sales', saleId), {
+                salesmanName: localSale.salesmanName,
+                itemDescription: localSale.itemDescription,
+                isMiscellaneous: localSale.isMiscellaneous || false,
+                amount: localSale.amount,
+                paymentMethod: localSale.paymentMethod,
+                notes: localSale.notes || null,
+                timestamp: localSale.timestamp,
+                dateKey: localSale.dateKey,
+                isOnlineSale: Boolean(localSale.isOnlineSale),
+                onlineCardId: localSale.onlineCardId || null,
+                onlineBarcode: localSale.onlineBarcode || null,
+              }).catch((e) => console.warn('Could not sync local sale to Firestore:', e));
+            }
+          });
+
           this.notify();
         },
         (error) => {
@@ -413,14 +438,16 @@ class CloudSalesDatabase {
 
       // 3. Real-time listener for Trades collection (Cards traded for Cash or Vendor Credit)
       const tradesCol = collection(db, 'trades');
-      const tradesQuery = query(tradesCol, orderBy('timestamp', 'desc'));
       onSnapshot(
-        tradesQuery,
+        tradesCol,
         (snapshot) => {
           this.isCloudConnected = true;
-          this.tradesCache.clear();
+          this.lastSyncTimestamp = Date.now();
+          const remoteTradeIds = new Set<string>();
+
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            remoteTradeIds.add(docSnap.id);
             const rawType = data.tradeType?.toLowerCase();
             const tradeType: TradeType = rawType === 'cash' ? 'cash' : 'credit';
 
@@ -441,6 +468,26 @@ class CloudSalesDatabase {
             });
           });
 
+          // Sync any local trades that haven't reached Firestore yet
+          this.tradesCache.forEach((localTrade, tradeId) => {
+            if (!remoteTradeIds.has(tradeId)) {
+              setDoc(doc(db, 'trades', tradeId), {
+                vendorName: localTrade.vendorName,
+                itemDescription: localTrade.itemDescription,
+                tradeValue: localTrade.tradeValue,
+                tradeType: localTrade.tradeType,
+                dateKey: localTrade.dateKey,
+                timestamp: localTrade.timestamp,
+                customerName: localTrade.customerName || null,
+                notes: localTrade.notes || null,
+                isStandalone: localTrade.isStandalone !== undefined ? Boolean(localTrade.isStandalone) : true,
+                soldItemDescription: localTrade.soldItemDescription || null,
+                saleAmount: localTrade.saleAmount !== undefined && localTrade.saleAmount !== null ? Number(localTrade.saleAmount) : null,
+                associatedSaleId: localTrade.associatedSaleId || null,
+              }).catch((e) => console.warn('Could not sync local trade to Firestore:', e));
+            }
+          });
+
           this.notify();
         },
         (error) => {
@@ -448,16 +495,18 @@ class CloudSalesDatabase {
         }
       );
 
-      // 4. Real-time listener for Online Cards collection
+      // 4. Real-time listener for Online Cards & Barcodes collection across all devices
       const onlineCardsCol = collection(db, 'online_cards');
-      const onlineCardsQuery = query(onlineCardsCol, orderBy('timestamp', 'desc'));
       onSnapshot(
-        onlineCardsQuery,
+        onlineCardsCol,
         (snapshot) => {
           this.isCloudConnected = true;
-          this.onlineCardsCache.clear();
+          this.lastSyncTimestamp = Date.now();
+          const remoteCardIds = new Set<string>();
+
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+            remoteCardIds.add(docSnap.id);
             this.onlineCardsCache.set(docSnap.id, {
               id: docSnap.id,
               barcode: data.barcode || docSnap.id,
@@ -472,6 +521,26 @@ class CloudSalesDatabase {
               soldDateKey: data.soldDateKey || undefined,
               saleId: data.saleId || undefined,
             });
+          });
+
+          // Sync any local cards that haven't reached Firestore yet (e.g. created offline or before rules deployment)
+          this.onlineCardsCache.forEach((localCard, cardId) => {
+            if (!remoteCardIds.has(cardId)) {
+              setDoc(doc(db, 'online_cards', cardId), {
+                id: localCard.id,
+                barcode: localCard.barcode,
+                vendorName: localCard.vendorName,
+                cardName: localCard.cardName,
+                price: localCard.price,
+                status: localCard.status,
+                notes: localCard.notes || null,
+                timestamp: localCard.timestamp,
+                dateKey: localCard.dateKey,
+                soldAt: localCard.soldAt || null,
+                soldDateKey: localCard.soldDateKey || null,
+                saleId: localCard.saleId || null,
+              }).catch((e) => console.warn('Could not sync local card to Firestore:', e));
+            }
           });
 
           this.saveToStorage();
@@ -1569,6 +1638,9 @@ class CloudSalesDatabase {
         notes: notes || null,
         timestamp,
         dateKey,
+        soldAt: null,
+        soldDateKey: null,
+        saleId: null,
       });
     } catch (e) {
       console.warn('Online card saved locally; Firestore sync pending:', e);
@@ -1714,6 +1786,155 @@ class CloudSalesDatabase {
       });
     } catch (e) {
       console.warn('Returned card to stock locally; Firestore sync pending:', e);
+    }
+  }
+
+  public getSyncStatus(): {
+    isConnected: boolean;
+    lastSyncTimestamp: number;
+    onlineCardsCount: number;
+    salesCount: number;
+    tradesCount: number;
+    vendorsCount: number;
+  } {
+    return {
+      isConnected: this.isCloudConnected,
+      lastSyncTimestamp: this.lastSyncTimestamp,
+      onlineCardsCount: this.onlineCardsCache.size,
+      salesCount: this.salesCache.size,
+      tradesCount: this.tradesCache.size,
+      vendorsCount: this.getKnownVendors().length,
+    };
+  }
+
+  /**
+   * Forces an immediate bi-directional pull and push with Cloud Firestore across all devices.
+   */
+  public async syncNow(): Promise<{ onlineCards: number; sales: number; trades: number }> {
+    try {
+      // 1. Online cards & barcodes
+      const onlineSnap = await getDocs(collection(db, 'online_cards'));
+      const remoteCardIds = new Set<string>();
+      onlineSnap.forEach((docSnap) => {
+        remoteCardIds.add(docSnap.id);
+        const data = docSnap.data();
+        this.onlineCardsCache.set(docSnap.id, {
+          id: docSnap.id,
+          barcode: data.barcode || docSnap.id,
+          vendorName: data.vendorName || '',
+          cardName: data.cardName || '',
+          price: Number(data.price) || 0,
+          status: data.status === 'sold' ? 'sold' : 'available',
+          notes: data.notes || undefined,
+          timestamp: data.timestamp || Date.now(),
+          dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+          soldAt: data.soldAt || undefined,
+          soldDateKey: data.soldDateKey || undefined,
+          saleId: data.saleId || undefined,
+        });
+      });
+
+      // Push any local cards that are not yet in Firestore
+      const cardPromises: Promise<any>[] = [];
+      this.onlineCardsCache.forEach((localCard, cardId) => {
+        if (!remoteCardIds.has(cardId)) {
+          cardPromises.push(
+            setDoc(doc(db, 'online_cards', cardId), {
+              id: localCard.id,
+              barcode: localCard.barcode,
+              vendorName: localCard.vendorName,
+              cardName: localCard.cardName,
+              price: localCard.price,
+              status: localCard.status,
+              notes: localCard.notes || null,
+              timestamp: localCard.timestamp,
+              dateKey: localCard.dateKey,
+              soldAt: localCard.soldAt || null,
+              soldDateKey: localCard.soldDateKey || null,
+              saleId: localCard.saleId || null,
+            })
+          );
+        }
+      });
+      await Promise.allSettled(cardPromises);
+
+      // 2. Sales records
+      const salesSnap = await getDocs(collection(db, 'sales'));
+      const remoteSaleIds = new Set<string>();
+      salesSnap.forEach((docSnap) => {
+        remoteSaleIds.add(docSnap.id);
+        const data = docSnap.data();
+        const rawMethod = (data.paymentMethod || '').toString().toLowerCase().trim();
+        const paymentMethod: PaymentMethod =
+          rawMethod === 'cash'
+            ? 'cash'
+            : rawMethod === 'traded_out' ||
+              rawMethod === 'trade_out' ||
+              rawMethod === 'trade out' ||
+              rawMethod === 'trade' ||
+              rawMethod === 'traded'
+            ? 'traded_out'
+            : rawMethod === 'online'
+            ? 'online'
+            : 'card';
+
+        this.salesCache.set(docSnap.id, {
+          id: docSnap.id,
+          salesmanName: data.salesmanName || '',
+          itemDescription: data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : ''),
+          isMiscellaneous: Boolean(data.isMiscellaneous),
+          amount: Number(data.amount) || 0,
+          paymentMethod,
+          notes: data.notes || undefined,
+          timestamp: data.timestamp || Date.now(),
+          dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+          isOnlineSale: Boolean(data.isOnlineSale) || paymentMethod === 'online',
+          onlineCardId: data.onlineCardId || undefined,
+          onlineBarcode: data.onlineBarcode || undefined,
+          tradeDetails: data.tradeDetails || undefined,
+          tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
+          tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
+          tradeItemDescription: data.tradeItemDescription || undefined,
+        });
+      });
+
+      // 3. Trades records
+      const tradesSnap = await getDocs(collection(db, 'trades'));
+      tradesSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const rawType = data.tradeType?.toLowerCase();
+        const tradeType: TradeType = rawType === 'cash' ? 'cash' : 'credit';
+
+        this.tradesCache.set(docSnap.id, {
+          id: docSnap.id,
+          vendorName: data.vendorName || '',
+          itemDescription: data.itemDescription || '',
+          tradeValue: Number(data.tradeValue) || 0,
+          tradeType,
+          dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+          timestamp: data.timestamp || Date.now(),
+          customerName: data.customerName || undefined,
+          notes: data.notes || undefined,
+          isStandalone: data.isStandalone !== undefined ? Boolean(data.isStandalone) : true,
+          soldItemDescription: data.soldItemDescription || undefined,
+          saleAmount: data.saleAmount !== undefined && data.saleAmount !== null ? Number(data.saleAmount) : undefined,
+          associatedSaleId: data.associatedSaleId || undefined,
+        });
+      });
+
+      this.isCloudConnected = true;
+      this.lastSyncTimestamp = Date.now();
+      this.saveToStorage();
+      this.notify();
+
+      return {
+        onlineCards: this.onlineCardsCache.size,
+        sales: this.salesCache.size,
+        trades: this.tradesCache.size,
+      };
+    } catch (e) {
+      console.error('Error during syncNow:', e);
+      throw e;
     }
   }
 

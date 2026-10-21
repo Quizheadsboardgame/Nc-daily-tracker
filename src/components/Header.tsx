@@ -1,6 +1,6 @@
-import React from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag } from 'lucide-react';
-import { getLocalDateKey } from '../db/cloudDatabase';
+import React, { useState } from 'react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw } from 'lucide-react';
+import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 
 export type AppTab = 'ledger' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -40,6 +40,23 @@ export const Header: React.FC<HeaderProps> = ({
   };
   const todayKey = getLocalDateKey();
   const isToday = currentDateKey === todayKey;
+  const [isHeaderSyncing, setIsHeaderSyncing] = useState(false);
+  const [syncLabel, setSyncLabel] = useState<string | null>(null);
+
+  const handleHeaderSync = async () => {
+    if (isHeaderSyncing) return;
+    setIsHeaderSyncing(true);
+    try {
+      const res = await cloudDb.syncNow();
+      setSyncLabel(`Synced (${res.onlineCards} cards)!`);
+      setTimeout(() => setSyncLabel(null), 3000);
+    } catch (e: any) {
+      setSyncLabel('Sync failed');
+      setTimeout(() => setSyncLabel(null), 3000);
+    } finally {
+      setIsHeaderSyncing(false);
+    }
+  };
 
   return (
     <header className="bg-zinc-950 text-white border-b border-zinc-850 sticky top-0 z-30 shadow-md" id="app-header">
@@ -55,14 +72,21 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
                   Daily Sales Tracker
                 </h1>
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 shadow-xs"
-                  title="Synchronized in real-time across all devices via Cloud Firestore"
+                <button
+                  type="button"
+                  id="btn-header-cloud-sync"
+                  onClick={handleHeaderSync}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/40 shadow-xs cursor-pointer transition-all"
+                  title="Synchronized in real-time across all devices via Cloud Firestore. Click to force instant sync."
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <Cloud className="w-3 h-3 text-emerald-400" />
-                  <span>Cloud Synced</span>
-                </span>
+                  <span className={`w-2 h-2 rounded-full ${isHeaderSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`} />
+                  {isHeaderSyncing ? (
+                    <RefreshCw className="w-3 h-3 text-emerald-400 animate-spin" />
+                  ) : (
+                    <Cloud className="w-3 h-3 text-emerald-400" />
+                  )}
+                  <span>{syncLabel || (isHeaderSyncing ? 'Syncing...' : 'Cloud Synced')}</span>
+                </button>
               </div>
               <p className="text-xs text-zinc-400 font-medium mt-0.5">
                 Multi-vendor sales ledger (cash/card), cards trade-ins (cash/credit) & vendor portal

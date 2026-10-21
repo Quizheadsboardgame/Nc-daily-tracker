@@ -22,6 +22,8 @@ import {
   Check,
   X,
   Volume2,
+  RefreshCw,
+  Cloud,
 } from 'lucide-react';
 import { OnlineCard, OnlineCardsSummary, SaleRecord } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
@@ -119,6 +121,16 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
 
   // Label Preview Modal
   const [previewCard, setPreviewCard] = useState<OnlineCard | null>(null);
+
+  // Cloud Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // Confirmation modal state (replaces window.confirm)
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'delete' | 'return';
+    card: OnlineCard;
+  } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -305,27 +317,63 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
     setEditingCard(null);
   };
 
-  // Return card to stock (un-sell)
-  const handleReturnToStock = async (card: OnlineCard) => {
-    if (window.confirm(`Are you sure you want to return "${card.cardName}" (${card.barcode}) back to stock? This will remove its recorded online sale from the daily sales ledger.`)) {
-      await cloudDb.returnOnlineCardToStock(card.id);
-      setScanMessage({
-        type: 'info',
-        text: `"${card.cardName}" has been returned to stock and its online sale removed.`,
-      });
+  // Real-time Cloud Sync trigger across all devices
+  const handleSyncNow = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await cloudDb.syncNow();
+      setSyncFeedback(`Successfully synchronized! ${res.onlineCards} cards and ${res.sales} sales updated.`);
+      playScannerBeep(true);
+      setTimeout(() => setSyncFeedback(null), 4000);
+    } catch (err: any) {
+      setSyncFeedback(`Cloud sync error: ${err.message || 'Check network connection'}`);
+      setTimeout(() => setSyncFeedback(null), 5000);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
-  // Delete card
-  const handleDeleteCard = async (card: OnlineCard) => {
-    if (window.confirm(`Delete "${card.cardName}" (${card.barcode}) from online inventory?`)) {
+  // Return card to stock (un-sell) - opens confirmation modal
+  const handleReturnToStock = (card: OnlineCard) => {
+    setConfirmAction({
+      type: 'return',
+      card,
+    });
+  };
+
+  // Delete card - opens confirmation modal
+  const handleDeleteCard = (card: OnlineCard) => {
+    setConfirmAction({
+      type: 'delete',
+      card,
+    });
+  };
+
+  // Execute modal confirmation
+  const handleExecuteConfirm = async () => {
+    if (!confirmAction) return;
+    const { type, card } = confirmAction;
+
+    if (type === 'return') {
+      await cloudDb.returnOnlineCardToStock(card.id);
+      setScanMessage({
+        type: 'info',
+        text: `"${card.cardName}" (${card.barcode}) has been returned to stock and its online sale removed from the daily sales ledger.`,
+      });
+    } else if (type === 'delete') {
       await cloudDb.deleteOnlineCard(card.id);
       setSelectedCardIds((prev) => {
         const next = new Set(prev);
         next.delete(card.id);
         return next;
       });
+      setScanMessage({
+        type: 'info',
+        text: `"${card.cardName}" (${card.barcode}) has been deleted from online inventory.`,
+      });
     }
+
+    setConfirmAction(null);
   };
 
   // Batch PDF Print
@@ -393,18 +441,39 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
             </p>
           </div>
 
-          {/* Quick jump to Sales Ledger */}
-          {onNavigateToLedger && (
+          {/* Action buttons & Cloud Sync */}
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0 self-start lg:self-auto">
             <button
               type="button"
-              onClick={onNavigateToLedger}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer self-start lg:self-auto"
+              id="btn-sync-online-cards"
+              onClick={handleSyncNow}
+              disabled={isSyncing}
+              className="px-3.5 py-2.5 rounded-xl bg-violet-600/70 hover:bg-violet-600 text-white text-xs font-bold border border-violet-400/40 transition-all flex items-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+              title="Sync online cards, barcodes, and inventory across all devices via Cloud Firestore"
             >
-              <span>View Daily Sales Report</span>
-              <ArrowRight className="w-4 h-4 text-violet-400" />
+              <RefreshCw className={`w-4 h-4 text-violet-200 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync with Devices'}</span>
             </button>
-          )}
+
+            {onNavigateToLedger && (
+              <button
+                type="button"
+                onClick={onNavigateToLedger}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <span>View Daily Sales Report</span>
+                <ArrowRight className="w-4 h-4 text-violet-400" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {syncFeedback && (
+          <div className="mt-3.5 py-2.5 px-4 rounded-xl bg-violet-900/90 border border-violet-400/50 text-violet-100 text-xs font-semibold flex items-center gap-2.5 animate-fade-in shadow-inner">
+            <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{syncFeedback}</span>
+          </div>
+        )}
 
         {/* 4 KPI Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-white/10">
@@ -1394,6 +1463,61 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                 className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black shadow-md cursor-pointer"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CONFIRMATION DIALOG MODAL (No window.confirm, safe for all iframes) */}
+      {/* ========================================================================= */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-zinc-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-2xl ${confirmAction.type === 'delete' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                {confirmAction.type === 'delete' ? <Trash2 className="w-5 h-5" /> : <RotateCcw className="w-5 h-5" />}
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-zinc-900">
+                  {confirmAction.type === 'delete' ? 'Delete Online Card?' : 'Return Card to Stock?'}
+                </h3>
+                <p className="text-xs text-zinc-500 font-medium">
+                  {confirmAction.type === 'delete'
+                    ? 'This card will be permanently deleted from online inventory across all devices.'
+                    : 'This will change status back to available and remove its recorded online sale from the daily sales ledger.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-zinc-50 rounded-2xl border border-zinc-200 text-xs space-y-1">
+              <div className="font-bold text-zinc-900">{confirmAction.card.cardName}</div>
+              <div className="text-zinc-500 flex items-center justify-between">
+                <span>Vendor: {confirmAction.card.vendorName}</span>
+                <span className="font-mono text-zinc-700 font-bold">{confirmAction.card.barcode}</span>
+              </div>
+              <div className="font-bold text-emerald-700">{formatCurrency(confirmAction.card.price)}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-100 text-zinc-700 text-xs font-bold hover:bg-zinc-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteConfirm}
+                className={`px-5 py-2 rounded-xl text-white text-xs font-black shadow-md cursor-pointer ${
+                  confirmAction.type === 'delete'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {confirmAction.type === 'delete' ? 'Yes, Delete' : 'Yes, Return to Stock'}
               </button>
             </div>
           </div>

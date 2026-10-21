@@ -2,7 +2,7 @@
   "entities": {
     "Sale": {
       "title": "Sale",
-      "description": "Recorded sales transaction item in the sales ledger (cash or card)",
+      "description": "Recorded sales transaction item in the sales ledger (cash, card, traded out, or online)",
       "type": "object",
       "properties": {
         "salesmanName": {
@@ -19,8 +19,8 @@
         },
         "paymentMethod": {
           "type": "string",
-          "enum": ["cash", "card", "traded_out"],
-          "description": "Payment method used for sales ledger transaction (cash, card, or traded out)"
+          "enum": ["cash", "card", "traded_out", "online"],
+          "description": "Payment method used for sales ledger transaction"
         },
         "isMiscellaneous": {
           "type": "boolean",
@@ -37,6 +37,18 @@
         "dateKey": {
           "type": "string",
           "description": "Calendar date string in YYYY-MM-DD format"
+        },
+        "isOnlineSale": {
+          "type": "boolean",
+          "description": "Whether this sale came from scanning an online inventory card"
+        },
+        "onlineCardId": {
+          "type": "string",
+          "description": "ID of the associated online card"
+        },
+        "onlineBarcode": {
+          "type": "string",
+          "description": "Barcode number of the associated online card"
         }
       },
       "required": ["salesmanName", "itemDescription", "amount", "paymentMethod", "timestamp", "dateKey"]
@@ -101,12 +113,65 @@
         }
       },
       "required": ["vendorName", "itemDescription", "tradeValue", "tradeType", "timestamp", "dateKey"]
+    },
+    "OnlineCard": {
+      "title": "OnlineCard",
+      "description": "Online card with barcode, vendor attribution, name, price, status and sales tracking",
+      "type": "object",
+      "properties": {
+        "barcode": {
+          "type": "string",
+          "description": "Unique Code 128 barcode string (e.g. ONL-123456)"
+        },
+        "vendorName": {
+          "type": "string",
+          "description": "Vendor owning the online card"
+        },
+        "cardName": {
+          "type": "string",
+          "description": "Name or title of the card"
+        },
+        "price": {
+          "type": "number",
+          "description": "Listed selling price in GBP"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "sold"],
+          "description": "Stock status"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes or description"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Creation timestamp in milliseconds"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Creation date string YYYY-MM-DD"
+        },
+        "soldAt": {
+          "type": "number",
+          "description": "Timestamp when sold via barcode scanner"
+        },
+        "soldDateKey": {
+          "type": "string",
+          "description": "Date string when sold"
+        },
+        "saleId": {
+          "type": "string",
+          "description": "ID of the sale record in the sales ledger"
+        }
+      },
+      "required": ["barcode", "vendorName", "cardName", "price", "status", "timestamp", "dateKey"]
     }
   },
   "firestore": {
     "/sales/{saleId}": {
       "schema": "Sale",
-      "description": "Collection of all sales ledger records (cash or card) across terminals"
+      "description": "Collection of all sales ledger records (cash, card, traded out, or online) across terminals"
     },
     "/salesmen/{salesmanId}": {
       "schema": "Vendor",
@@ -115,6 +180,10 @@
     "/trades/{tradeId}": {
       "schema": "Trade",
       "description": "Collection of trade-in records (cards traded in for cash or credit) across terminals"
+    },
+    "/online_cards/{cardId}": {
+      "schema": "OnlineCard",
+      "description": "Collection of online cards and barcodes synced in real-time across all devices"
     }
   }
 }
