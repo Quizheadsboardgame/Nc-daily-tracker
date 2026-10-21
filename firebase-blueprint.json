@@ -163,6 +163,11 @@
         "saleId": {
           "type": "string",
           "description": "ID of the sale record in the sales ledger"
+        },
+        "soldPaymentMethod": {
+          "type": "string",
+          "enum": ["online", "cash", "card", "traded_out"],
+          "description": "How the card was sold: online or in-person (cash, card, traded out)"
         }
       },
       "required": ["barcode", "vendorName", "cardName", "price", "status", "timestamp", "dateKey"]

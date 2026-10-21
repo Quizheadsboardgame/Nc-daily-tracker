@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X } from 'lucide-react';
+import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { cloudDb } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
@@ -109,7 +109,12 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       notes: notes.trim() || undefined,
     });
 
-    const methodDisplay = paymentMethod === 'traded_out' ? 'TRADE OUT' : paymentMethod.toUpperCase();
+    const methodDisplay =
+      paymentMethod === 'traded_out'
+        ? 'TRADE OUT'
+        : paymentMethod === 'online'
+        ? 'ONLINE SALE'
+        : paymentMethod.toUpperCase();
     setLastRecordedInfo(
       `${vendorName.trim()} • ${finalItemDesc} • £${numAmount.toFixed(2)} (${methodDisplay})`
     );
@@ -406,7 +411,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {/* Cash Button */}
               <button
                 type="button"
@@ -435,6 +440,22 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               >
                 <CreditCard className="w-4 h-4 shrink-0" />
                 <span>Card</span>
+              </button>
+
+              {/* Online Button */}
+              <button
+                type="button"
+                id="btn-payment-online"
+                onClick={() => setPaymentMethod('online')}
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  paymentMethod === 'online'
+                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black'
+                    : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300'
+                }`}
+                title="Sold online via website, socials, or marketplace"
+              >
+                <Globe className={`w-4 h-4 shrink-0 ${paymentMethod === 'online' ? 'text-violet-200' : 'text-violet-700'}`} />
+                <span>Online</span>
               </button>
 
               {/* Trade Out Button */}

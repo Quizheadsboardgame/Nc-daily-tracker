@@ -21,11 +21,14 @@ import {
   ArrowRight,
   Check,
   X,
-  Volume2,
   RefreshCw,
   Cloud,
+  Globe,
+  Banknote,
+  CreditCard,
+  ArrowLeftRight,
 } from 'lucide-react';
-import { OnlineCard, OnlineCardsSummary, SaleRecord } from '../types';
+import { OnlineCard, OnlineCardsSummary, SaleRecord, PaymentMethod } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
 import { downloadSingleLabelPdf, downloadBatchLabelsPdf, generateBarcodeDataUrl } from '../utils/labelPdf';
@@ -108,6 +111,11 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
   const [scannedCard, setScannedCard] = useState<OnlineCard | null>(null);
   const [lastSoldSale, setLastSoldSale] = useState<{ card: OnlineCard; sale: SaleRecord } | null>(null);
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  // Barcode Sale Channel & Settlement Method State (Online vs In-Person Cash / Card / Trade Out)
+  const [selectedSaleMethod, setSelectedSaleMethod] = useState<PaymentMethod>('online');
+  const [saleCustomPrice, setSaleCustomPrice] = useState<string>('');
+  const [saleNote, setSaleNote] = useState<string>('');
 
   // Edit Card Modal
   const [editingCard, setEditingCard] = useState<OnlineCard | null>(null);
@@ -214,29 +222,62 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
       return;
     }
 
-    // Found available card -> open confirmation
+    // Found available card -> open confirmation with sale channel options
     playScannerBeep(true);
     setScannedCard(found);
+    setSelectedSaleMethod('online');
+    setSaleCustomPrice(found.price.toFixed(2));
+    setSaleNote('');
     setScanMessage({
       type: 'info',
-      text: `Card identified: ${found.cardName} (${formatCurrency(found.price)}) - Vendor: ${found.vendorName}`,
+      text: `Card identified: ${found.cardName} (${formatCurrency(found.price)}) - Tick whether this sold Online or In-Person (Cash/Card/Trade) below.`,
     });
     setScanInput('');
   };
 
-  // Confirm selling the scanned card
+  // Initiate sale from table or card view
+  const handleInitiateSale = (card: OnlineCard) => {
+    setScannedCard(card);
+    setSelectedSaleMethod('online');
+    setSaleCustomPrice(card.price.toFixed(2));
+    setSaleNote('');
+    const box = document.getElementById('card-scanner-box');
+    if (box) {
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  // Confirm selling the scanned card with the selected settlement method
   const handleConfirmSale = async (cardToSell: OnlineCard) => {
     try {
+      const customPriceNum = parseFloat(saleCustomPrice);
+      const finalPrice = !isNaN(customPriceNum) && customPriceNum > 0 ? customPriceNum : cardToSell.price;
+
       const result = await cloudDb.sellOnlineCard(cardToSell.id, {
         targetDateKey: currentDateKey,
+        customPrice: finalPrice,
+        notes: saleNote.trim() || undefined,
+        paymentMethod: selectedSaleMethod,
       });
 
       playScannerBeep(true);
       setLastSoldSale(result);
       setScannedCard(null);
+      setSaleCustomPrice('');
+      setSaleNote('');
+
+      const methodLabel =
+        selectedSaleMethod === 'cash'
+          ? 'In-Person Cash Sale'
+          : selectedSaleMethod === 'card'
+          ? 'In-Person Card Sale'
+          : selectedSaleMethod === 'traded_out'
+          ? 'In-Person Trade Out'
+          : 'Online Sale';
+
       setScanMessage({
         type: 'success',
-        text: `Successfully logged online sale of "${result.card.cardName}" for ${formatCurrency(result.card.price)} into Daily Sales Report (${result.sale.dateKey})!`,
+        text: `Successfully logged ${methodLabel} of "${result.card.cardName}" for ${formatCurrency(finalPrice)} into Daily Sales Report (${result.sale.dateKey})!`,
       });
 
       // Clear after 8s
@@ -660,16 +701,17 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
           </button>
         </form>
 
-        {/* Scanned Card Confirmation Dialog / Panel */}
+        {/* Scanned Card Confirmation Dialog / Panel with Settlement Channel Selector */}
         {scannedCard && (
-          <div className="mt-4 p-4 rounded-2xl bg-violet-50 border-2 border-violet-500/80 animate-fade-in shadow-md">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-violet-50/90 to-white border-2 border-violet-500 shadow-lg animate-fade-in space-y-4">
+            {/* Card Summary Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-violet-200/80">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-violet-900 text-white">
+                  <span className="px-2.5 py-0.5 rounded font-mono font-bold text-xs bg-zinc-950 text-white shadow-2xs">
                     {scannedCard.barcode}
                   </span>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white border border-zinc-300 text-xs font-bold text-zinc-800">
+                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-zinc-300 text-xs font-bold text-zinc-800 shadow-2xs">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: cloudDb.getVendorColor(scannedCard.vendorName) }}
@@ -677,13 +719,13 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                     <span>Vendor: {scannedCard.vendorName}</span>
                   </div>
                   {scannedCard.status === 'sold' && (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
                       Already Sold ({scannedCard.soldDateKey})
                     </span>
                   )}
                 </div>
 
-                <h4 className="text-base font-black text-zinc-950 mt-1">
+                <h4 className="text-base sm:text-lg font-black text-zinc-950 mt-1">
                   {scannedCard.cardName}
                 </h4>
                 {scannedCard.notes && (
@@ -691,35 +733,259 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-3 self-end sm:self-auto">
+              <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <span className="text-[10px] uppercase font-bold text-zinc-500 block">Price</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 block">Listed Price</span>
                   <span className="text-xl font-black text-emerald-700 tabular-nums">
                     {formatCurrency(scannedCard.price)}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setScannedCard(null)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 cursor-pointer"
+                  title="Close lookup"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
 
-                {scannedCard.status === 'available' ? (
-                  <button
-                    type="button"
-                    id="btn-confirm-online-sale"
-                    onClick={() => handleConfirmSale(scannedCard)}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer animate-pulse"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirm Online Sale ({formatCurrency(scannedCard.price)})</span>
-                  </button>
-                ) : (
+            {scannedCard.status === 'available' ? (
+              <div className="space-y-4 pt-1">
+                {/* Sale Method / Channel Selection - "Option on how it was sold needs to be ticked" */}
+                <div>
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                    <label className="block text-xs font-black uppercase tracking-wider text-zinc-900">
+                      How was this card sold? <span className="text-rose-500">* (Tick Option)</span>
+                    </label>
+                    <span className="text-[11px] font-semibold text-zinc-500">
+                      Tick whether sold online or in person (cash, card, or trade out)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {/* Option 1: Online Sale */}
+                    <button
+                      type="button"
+                      id="opt-sale-method-online"
+                      onClick={() => setSelectedSaleMethod('online')}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                        selectedSaleMethod === 'online'
+                          ? 'border-violet-600 bg-violet-100/70 shadow-sm ring-2 ring-violet-500/20'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${selectedSaleMethod === 'online' ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-700'}`}>
+                            <Globe className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-zinc-900 block">Online Sale</span>
+                            <span className="text-[10px] text-zinc-500 font-medium">Website, eBay, Socials</span>
+                          </div>
+                        </div>
+                        {/* Radio Checkmark Circle */}
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                          selectedSaleMethod === 'online'
+                            ? 'border-violet-600 bg-violet-600 text-white'
+                            : 'border-zinc-300 bg-white'
+                        }`}>
+                          {selectedSaleMethod === 'online' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-violet-700 bg-violet-200/60 px-2 py-0.5 rounded-md inline-block self-start">
+                        Adds as Online Sale
+                      </span>
+                    </button>
+
+                    {/* Option 2: In-Person Cash */}
+                    <button
+                      type="button"
+                      id="opt-sale-method-cash"
+                      onClick={() => setSelectedSaleMethod('cash')}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                        selectedSaleMethod === 'cash'
+                          ? 'border-emerald-600 bg-emerald-100/70 shadow-sm ring-2 ring-emerald-500/20'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${selectedSaleMethod === 'cash' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <Banknote className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-zinc-900 block">In-Person: Cash</span>
+                            <span className="text-[10px] text-zinc-500 font-medium">Cash at counter or event</span>
+                          </div>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                          selectedSaleMethod === 'cash'
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-zinc-300 bg-white'
+                        }`}>
+                          {selectedSaleMethod === 'cash' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-200/60 px-2 py-0.5 rounded-md inline-block self-start">
+                        Adds as Cash Sale
+                      </span>
+                    </button>
+
+                    {/* Option 3: In-Person Card */}
+                    <button
+                      type="button"
+                      id="opt-sale-method-card"
+                      onClick={() => setSelectedSaleMethod('card')}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                        selectedSaleMethod === 'card'
+                          ? 'border-blue-600 bg-blue-100/70 shadow-sm ring-2 ring-blue-500/20'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${selectedSaleMethod === 'card' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'}`}>
+                            <CreditCard className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-zinc-900 block">In-Person: Card</span>
+                            <span className="text-[10px] text-zinc-500 font-medium">Card reader / PDQ terminal</span>
+                          </div>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                          selectedSaleMethod === 'card'
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-zinc-300 bg-white'
+                        }`}>
+                          {selectedSaleMethod === 'card' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-800 bg-blue-200/60 px-2 py-0.5 rounded-md inline-block self-start">
+                        Adds as Card Sale
+                      </span>
+                    </button>
+
+                    {/* Option 4: In-Person Trade Out */}
+                    <button
+                      type="button"
+                      id="opt-sale-method-traded-out"
+                      onClick={() => setSelectedSaleMethod('traded_out')}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                        selectedSaleMethod === 'traded_out'
+                          ? 'border-amber-600 bg-amber-100/70 shadow-sm ring-2 ring-amber-500/20'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${selectedSaleMethod === 'traded_out' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                            <ArrowLeftRight className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-zinc-900 block">In-Person: Trade Out</span>
+                            <span className="text-[10px] text-zinc-500 font-medium">Traded out in card deal</span>
+                          </div>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                          selectedSaleMethod === 'traded_out'
+                            ? 'border-amber-600 bg-amber-600 text-white'
+                            : 'border-zinc-300 bg-white'
+                        }`}>
+                          {selectedSaleMethod === 'traded_out' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-md inline-block self-start">
+                        Adds as Trade Out
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Optional Price & Note Customization */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                  <div className="sm:col-span-4">
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Sale Amount (£) <span className="text-zinc-400 font-normal">(Change if discounted)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-black text-zinc-500">£</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={saleCustomPrice}
+                        onChange={(e) => setSaleCustomPrice(e.target.value)}
+                        className="w-full pl-7 pr-3 py-1.5 text-xs font-black tabular-nums rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-violet-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-8">
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Sale Memo / Reference <span className="text-zinc-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={saleNote}
+                      onChange={(e) => setSaleNote(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:ring-2 focus:ring-violet-500"
+                      placeholder="e.g. Counter buyer, eBay order #1234, show discount, etc."
+                    />
+                  </div>
+                </div>
+
+                {/* Final Confirm Buttons */}
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-violet-200/60 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setScannedCard(null)}
-                    className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-xs font-bold cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold cursor-pointer"
                   >
-                    Dismiss
+                    Cancel
                   </button>
-                )}
+
+                  <button
+                    type="button"
+                    id="btn-confirm-selected-sale"
+                    onClick={() => handleConfirmSale(scannedCard)}
+                    className={`px-6 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer ${
+                      selectedSaleMethod === 'cash'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/30'
+                        : selectedSaleMethod === 'card'
+                        ? 'bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-500/30'
+                        : selectedSaleMethod === 'traded_out'
+                        ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-500/30'
+                        : 'bg-violet-600 hover:bg-violet-700 ring-2 ring-violet-500/30'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {selectedSaleMethod === 'cash'
+                        ? `Confirm In-Person Cash Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        : selectedSaleMethod === 'card'
+                        ? `Confirm In-Person Card Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        : selectedSaleMethod === 'traded_out'
+                        ? `Confirm In-Person Trade Out (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        : `Confirm Online Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`}
+                    </span>
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setScannedCard(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-xs font-bold cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1103,9 +1369,25 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                         {/* Status */}
                         <td className="py-3 px-4 text-center">
                           {isSold ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-300">
-                              <Check className="w-3 h-3 text-zinc-500" />
-                              <span>Sold Online</span>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                              card.soldPaymentMethod === 'cash'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : card.soldPaymentMethod === 'card'
+                                ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                : card.soldPaymentMethod === 'traded_out'
+                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                : 'bg-violet-50 text-violet-800 border-violet-300'
+                            }`}>
+                              <Check className="w-3 h-3" />
+                              <span>
+                                {card.soldPaymentMethod === 'cash'
+                                  ? 'Sold In-Person (Cash)'
+                                  : card.soldPaymentMethod === 'card'
+                                  ? 'Sold In-Person (Card)'
+                                  : card.soldPaymentMethod === 'traded_out'
+                                  ? 'Sold In-Person (Trade Out)'
+                                  : 'Sold Online'}
+                              </span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
@@ -1150,12 +1432,12 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                             {!isSold ? (
                               <button
                                 type="button"
-                                onClick={() => setScannedCard(card)}
+                                onClick={() => handleInitiateSale(card)}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer"
-                                title="Record sale now"
+                                title="Record sale now (choose Online or In-Person)"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Sell Online</span>
+                                <span>Sell Card</span>
                               </button>
                             ) : (
                               <button
@@ -1232,8 +1514,22 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
 
                       <div className="shrink-0">
                         {isSold ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-200">
-                            Sold
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            card.soldPaymentMethod === 'cash'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                              : card.soldPaymentMethod === 'card'
+                              ? 'bg-blue-50 text-blue-800 border-blue-300'
+                              : card.soldPaymentMethod === 'traded_out'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-violet-50 text-violet-800 border-violet-300'
+                          }`}>
+                            {card.soldPaymentMethod === 'cash'
+                              ? 'Sold (Cash)'
+                              : card.soldPaymentMethod === 'card'
+                              ? 'Sold (Card)'
+                              : card.soldPaymentMethod === 'traded_out'
+                              ? 'Sold (Trade)'
+                              : 'Sold Online'}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
@@ -1270,8 +1566,8 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                         {!isSold ? (
                           <button
                             type="button"
-                            onClick={() => setScannedCard(card)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-2xs"
+                            onClick={() => handleInitiateSale(card)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Sell</span>

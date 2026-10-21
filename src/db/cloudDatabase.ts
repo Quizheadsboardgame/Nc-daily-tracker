@@ -520,6 +520,7 @@ class CloudSalesDatabase {
               soldAt: data.soldAt || undefined,
               soldDateKey: data.soldDateKey || undefined,
               saleId: data.saleId || undefined,
+              soldPaymentMethod: data.soldPaymentMethod || undefined,
             });
           });
 
@@ -539,6 +540,7 @@ class CloudSalesDatabase {
                 soldAt: localCard.soldAt || null,
                 soldDateKey: localCard.soldDateKey || null,
                 saleId: localCard.saleId || null,
+                soldPaymentMethod: localCard.soldPaymentMethod || null,
               }).catch((e) => console.warn('Could not sync local card to Firestore:', e));
             }
           });
@@ -1699,6 +1701,7 @@ class CloudSalesDatabase {
       targetDateKey?: string;
       customPrice?: number;
       notes?: string;
+      paymentMethod?: PaymentMethod;
     }
   ): Promise<{ card: OnlineCard; sale: SaleRecord }> {
     const card = this.getOnlineCardByBarcode(barcodeOrId);
@@ -1713,32 +1716,56 @@ class CloudSalesDatabase {
     const soldPrice = options?.customPrice !== undefined ? Math.round(Number(options.customPrice) * 100) / 100 : card.price;
     const soldDateKey = options?.targetDateKey || getLocalDateKey();
     const soldAt = Date.now();
+    const paymentMethod: PaymentMethod = options?.paymentMethod || 'online';
+    const isOnlineSale = paymentMethod === 'online';
 
-    // 1. Record the sale in the Sales Ledger as an Online Sale
+    // 1. Record the sale in the Sales Ledger with the selected settlement method (Online vs In-Person Cash / Card / Trade Out)
+    const channelTag = isOnlineSale ? 'Online' : 'In-Person';
+    const methodDisplay =
+      paymentMethod === 'cash'
+        ? 'Cash'
+        : paymentMethod === 'card'
+        ? 'Card'
+        : paymentMethod === 'traded_out'
+        ? 'Trade Out'
+        : 'Online';
+
+    const saleDescription = `${card.cardName} (${channelTag} #${card.barcode})`;
+
+    const defaultNote = isOnlineSale
+      ? `Online Sale [${card.barcode}]`
+      : `In-Person Sale (${methodDisplay}) [${card.barcode}]`;
+
+    const saleNotes = options?.notes ? `${defaultNote}: ${options.notes}` : defaultNote;
+
     const sale = await this.insertSale({
       salesmanName: card.vendorName,
-      itemDescription: `${card.cardName} (Online #${card.barcode})`,
+      itemDescription: saleDescription,
       amount: soldPrice,
-      paymentMethod: 'online',
-      notes: options?.notes ? `Online Sale [${card.barcode}]: ${options.notes}` : `Online Sale [${card.barcode}]`,
+      paymentMethod,
+      notes: saleNotes,
       dateKey: soldDateKey,
       timestamp: soldAt,
-    });
-
-    // Also update sale record with online metadata
-    await this.updateSale(sale.id, {
-      isOnlineSale: true,
+      isOnlineSale,
       onlineCardId: card.id,
       onlineBarcode: card.barcode,
     });
 
-    // 2. Mark online card as sold
+    // Also update sale record with online metadata
+    await this.updateSale(sale.id, {
+      isOnlineSale,
+      onlineCardId: card.id,
+      onlineBarcode: card.barcode,
+    });
+
+    // 2. Mark online card as sold with the chosen payment method
     const updatedCard: OnlineCard = {
       ...card,
       status: 'sold',
       soldAt,
       soldDateKey,
       saleId: sale.id,
+      soldPaymentMethod: paymentMethod,
     };
 
     this.onlineCardsCache.set(card.id, updatedCard);
@@ -1750,6 +1777,7 @@ class CloudSalesDatabase {
         soldAt,
         soldDateKey,
         saleId: sale.id,
+        soldPaymentMethod: paymentMethod,
       });
     } catch (e) {
       console.warn('Marked card sold locally; Firestore sync pending:', e);
@@ -1772,6 +1800,7 @@ class CloudSalesDatabase {
       soldAt: undefined,
       soldDateKey: undefined,
       saleId: undefined,
+      soldPaymentMethod: undefined,
     };
 
     this.onlineCardsCache.set(cardId, updatedCard);
@@ -1783,6 +1812,7 @@ class CloudSalesDatabase {
         soldAt: null,
         soldDateKey: null,
         saleId: null,
+        soldPaymentMethod: null,
       });
     } catch (e) {
       console.warn('Returned card to stock locally; Firestore sync pending:', e);
@@ -1831,6 +1861,7 @@ class CloudSalesDatabase {
           soldAt: data.soldAt || undefined,
           soldDateKey: data.soldDateKey || undefined,
           saleId: data.saleId || undefined,
+          soldPaymentMethod: data.soldPaymentMethod || undefined,
         });
       });
 
@@ -1852,6 +1883,7 @@ class CloudSalesDatabase {
               soldAt: localCard.soldAt || null,
               soldDateKey: localCard.soldDateKey || null,
               saleId: localCard.saleId || null,
+              soldPaymentMethod: localCard.soldPaymentMethod || null,
             })
           );
         }

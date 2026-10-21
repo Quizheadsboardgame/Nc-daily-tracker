@@ -131,6 +131,7 @@ export interface OnlineCard {
   soldAt?: number; // Sold timestamp
   soldDateKey?: string; // Date sold (YYYY-MM-DD)
   saleId?: string; // Linked sale record ID in daily sales ledger
+  soldPaymentMethod?: PaymentMethod; // 'online' | 'cash' | 'card' | 'traded_out'
 }
 
 export interface OnlineCardsSummary {
