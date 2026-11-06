@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Globe, Save } from 'lucide-react';
+import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Globe, Save, Calendar } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { VendorDropdown } from './VendorDropdown';
 
@@ -23,6 +23,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
   const [isMiscellaneous, setIsMiscellaneous] = useState(false);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [dateKey, setDateKey] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
@@ -42,6 +43,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           ? 'online'
           : 'card'
       );
+      setDateKey(sale.dateKey || '');
       setNotes(sale.notes || '');
       setError('');
     }
@@ -70,6 +72,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
       isMiscellaneous,
       amount: numAmount,
       paymentMethod,
+      dateKey: dateKey.trim() || sale.dateKey,
       notes: notes.trim() || undefined,
     });
 
@@ -228,16 +231,33 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 mb-1">Notes / Memo</label>
-            <input
-              type="text"
-              id="edit-input-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes..."
-              className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">Transaction Date</label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 pointer-events-none" />
+                <input
+                  type="date"
+                  id="edit-input-date"
+                  value={dateKey}
+                  onChange={(e) => setDateKey(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs font-semibold rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-800"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">Notes / Memo</label>
+              <input
+                type="text"
+                id="edit-input-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional notes..."
+                className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900"
+              />
+            </div>
           </div>
 
           <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">

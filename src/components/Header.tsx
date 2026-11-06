@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
+import { useTotalSalesAuth } from '../utils/auth';
+import { PasscodeModal } from './PasscodeModal';
 
 export type AppTab = 'ledger' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -29,6 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenManageVendors,
   onOpenManageSalesmen,
 }) => {
+  const { isUnlocked, lock } = useTotalSalesAuth();
+  const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+
   const handleOpenVendors = () => {
     if (onTabChange) {
       onTabChange('manage-vendors');
@@ -221,6 +226,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Quick Actions */}
+            {isUnlocked && (
+              <button
+                type="button"
+                id="btn-header-lock-sales"
+                onClick={lock}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-300 bg-zinc-900 border border-zinc-750 hover:border-amber-500/60 rounded-xl hover:bg-zinc-800 transition-all cursor-pointer shadow-xs"
+                title="Lock screen and return to clerk register terminal"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Lock Screen</span>
+              </button>
+            )}
+
             <button
               type="button"
               id="btn-export-csv"
@@ -245,6 +263,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Header Passcode Modal */}
+      <PasscodeModal
+        isOpen={isPasscodeModalOpen}
+        onClose={() => setIsPasscodeModalOpen(false)}
+      />
     </header>
   );
 };

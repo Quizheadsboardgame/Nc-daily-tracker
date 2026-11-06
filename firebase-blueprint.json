@@ -171,6 +171,22 @@
         }
       },
       "required": ["barcode", "vendorName", "cardName", "price", "status", "timestamp", "dateKey"]
+    },
+    "RemovedVendor": {
+      "title": "RemovedVendor",
+      "description": "Tombstone record for a removed vendor to guarantee deletion synchronization across all devices",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Removed vendor name"
+        },
+        "removedAt": {
+          "type": "number",
+          "description": "Timestamp when removed"
+        }
+      },
+      "required": ["name", "removedAt"]
     }
   },
   "firestore": {
@@ -189,6 +205,10 @@
     "/online_cards/{cardId}": {
       "schema": "OnlineCard",
       "description": "Collection of online cards and barcodes synced in real-time across all devices"
+    },
+    "/removed_vendors/{vendorId}": {
+      "schema": "RemovedVendor",
+      "description": "Collection of removed vendors synced across all devices"
     }
   }
 }

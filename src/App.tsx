@@ -10,6 +10,8 @@ import { TradesTab } from './components/TradesTab';
 import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
 import { OnlineCardsTab } from './components/OnlineCardsTab';
+import { LockedRegisterScreen } from './components/LockedRegisterScreen';
+import { useTotalSalesAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
 import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag } from 'lucide-react';
@@ -126,6 +128,17 @@ export default function App() {
       }
     }, 100);
   };
+
+  const { isUnlocked } = useTotalSalesAuth();
+
+  if (!isUnlocked) {
+    return (
+      <LockedRegisterScreen
+        knownVendors={knownVendors}
+        onSaleRecorded={refreshFromDb}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-100/70 text-zinc-900 flex flex-col font-sans selection:bg-zinc-800 selection:text-white">

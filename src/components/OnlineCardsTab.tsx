@@ -143,6 +143,8 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+  const lastScannedRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
 
   const allVendors = useMemo(() => {
     return propKnownVendors && propKnownVendors.length > 0
@@ -175,6 +177,12 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
         .decodeFromVideoDevice(undefined, videoRef.current!, (result, err) => {
           if (result) {
             const text = result.getText();
+            const now = Date.now();
+            // Debounce camera frame reads to prevent rapid repeat triggers on the same barcode
+            if (text === lastScannedRef.current.code && now - lastScannedRef.current.time < 2500) {
+              return;
+            }
+            lastScannedRef.current = { code: text, time: now };
             handleProcessScannedCode(text);
           }
           if (err && err.name !== 'NotFoundException') {
@@ -212,11 +220,13 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
       return;
     }
 
-    if (found.status === 'sold') {
+    // Strict duplicate check: Is the card already marked as sold or already exists in sales ledger?
+    const isAlreadySold = found.status === 'sold' || cloudDb.isOnlineCardAlreadySold(clean);
+    if (isAlreadySold) {
       playScannerBeep(false);
       setScanMessage({
         type: 'error',
-        text: `Card "${found.cardName}" (${found.barcode}) was ALREADY SOLD on ${found.soldDateKey || 'a previous date'}!`,
+        text: `DUPLICATE PREVENTED: Card "${found.cardName}" (${found.barcode}) has ALREADY been sold and logged in sales! Duplicate sales are strictly blocked.`,
       });
       setScannedCard(found);
       return;
@@ -237,6 +247,16 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
 
   // Initiate sale from table or card view
   const handleInitiateSale = (card: OnlineCard) => {
+    const isAlreadySold = card.status === 'sold' || cloudDb.isOnlineCardAlreadySold(card.barcode);
+    if (isAlreadySold) {
+      playScannerBeep(false);
+      setScanMessage({
+        type: 'error',
+        text: `Duplicate blocked: Card "${card.cardName}" (${card.barcode}) is already sold and in sales!`,
+      });
+      return;
+    }
+
     setScannedCard(card);
     setSelectedSaleMethod('online');
     setSaleCustomPrice(card.price.toFixed(2));
@@ -249,6 +269,20 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
 
   // Confirm selling the scanned card with the selected settlement method
   const handleConfirmSale = async (cardToSell: OnlineCard) => {
+    if (isSubmittingSale) return;
+
+    // Strict duplicate prevention check before sending
+    if (cardToSell.status === 'sold' || cloudDb.isOnlineCardAlreadySold(cardToSell.barcode)) {
+      playScannerBeep(false);
+      setScanMessage({
+        type: 'error',
+        text: `Duplicate blocked: Card "${cardToSell.cardName}" (${cardToSell.barcode}) has already been recorded in sales!`,
+      });
+      setScannedCard(null);
+      return;
+    }
+
+    setIsSubmittingSale(true);
     try {
       const customPriceNum = parseFloat(saleCustomPrice);
       const finalPrice = !isNaN(customPriceNum) && customPriceNum > 0 ? customPriceNum : cardToSell.price;
@@ -290,6 +324,8 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
         type: 'error',
         text: err.message || 'Error recording sale',
       });
+    } finally {
+      setIsSubmittingSale(false);
     }
   };
 
@@ -951,8 +987,9 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                   <button
                     type="button"
                     id="btn-confirm-selected-sale"
+                    disabled={isSubmittingSale}
                     onClick={() => handleConfirmSale(scannedCard)}
-                    className={`px-6 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer ${
+                    className={`px-6 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                       selectedSaleMethod === 'cash'
                         ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/30'
                         : selectedSaleMethod === 'card'
@@ -964,7 +1001,9 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>
-                      {selectedSaleMethod === 'cash'
+                      {isSubmittingSale
+                        ? 'Logging Sale...'
+                        : selectedSaleMethod === 'cash'
                         ? `Confirm In-Person Cash Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
                         : selectedSaleMethod === 'card'
                         ? `Confirm In-Person Card Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`

@@ -18,10 +18,15 @@ import {
   X,
   CreditCard,
   Ticket,
+  Lock,
+  Unlock,
+  KeyRound,
 } from 'lucide-react';
 import { TradeRecord, TradeDaySummary, TradeType } from '../types';
 import { cloudDb, formatCurrency, formatDisplayDate, getLocalDateKey } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
+import { useTotalSalesAuth } from '../utils/auth';
+import { PasscodeModal } from './PasscodeModal';
 
 interface TradesTabProps {
   currentDateKey: string;
@@ -36,6 +41,9 @@ export const TradesTab: React.FC<TradesTabProps> = ({
   knownVendors,
   onSwitchToLedger,
 }) => {
+  const { isUnlocked, lock } = useTotalSalesAuth();
+  const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+
   // Form state
   const [vendorName, setVendorName] = useState<string>('');
   const [itemDescription, setItemDescription] = useState<string>('');
@@ -530,19 +538,63 @@ export const TradesTab: React.FC<TradesTabProps> = ({
       {/* INDEPENDENT TRADE KPI STATS (4 CARDS) - Locked to mobile screen */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 w-full max-w-full" id="section-trades-kpis">
         {/* Total Cards Traded In */}
-        <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
+        <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Total Cards Traded In
             </span>
-            <div className="p-2 rounded-xl bg-zinc-900 border border-zinc-700/80 text-white">
-              <ArrowLeftRight className="w-4 h-4 text-amber-400" />
-            </div>
+            {isUnlocked ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-950 border border-amber-500/40 px-2 py-0.5 rounded-md">
+                  Unlocked
+                </span>
+                <button
+                  type="button"
+                  id="btn-lock-trades-total"
+                  onClick={lock}
+                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
+                  title="Lock Trade Figures"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                id="btn-unlock-trades-total"
+                onClick={() => setIsPasscodeModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 border border-zinc-700/80 transition-all text-xs font-bold cursor-pointer"
+                title="Sign in to unlock trade sub-totals"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Locked</span>
+              </button>
+            )}
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black tracking-tight text-white tabular-nums">
-              {formatCurrency(summary.totalTradeValue)}
-            </div>
+            {isUnlocked ? (
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-white tabular-nums animate-fade-in">
+                {formatCurrency(summary.totalTradeValue)}
+              </div>
+            ) : (
+              <div
+                onClick={() => setIsPasscodeModalOpen(true)}
+                className="cursor-pointer group py-1"
+                title="Sign in with authorization code to view trade sub-totals"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-mono tracking-widest text-zinc-500 font-bold select-none group-hover:text-zinc-400 transition-colors">
+                    ••••••••
+                  </span>
+                  <span className="text-[10px] font-black uppercase text-amber-400 bg-amber-950/80 border border-amber-500/50 px-2 py-0.5 rounded-md group-hover:bg-amber-900 transition-colors flex items-center gap-1">
+                    <KeyRound className="w-3 h-3" /> Sign In
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1 font-medium group-hover:text-zinc-400 transition-colors">
+                  Tap to enter code & view
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-400 font-medium">
               <span>
                 <strong className="text-white font-bold">{summary.totalCount}</strong>{' '}
@@ -587,7 +639,11 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                 filterType === 'cash' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.cashTradeValue)}
+              {isUnlocked ? (
+                formatCurrency(summary.cashTradeValue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
@@ -634,7 +690,11 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                 filterType === 'credit' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.creditTradeValue)}
+              {isUnlocked ? (
+                formatCurrency(summary.creditTradeValue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
@@ -647,7 +707,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
         </button>
 
         {/* Average Trade Valuation */}
-        <div className="bg-white rounded-2xl border border-zinc-300 p-4 sm:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-white rounded-2xl border border-zinc-300 p-4 sm:p-5 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-600">
               Avg Trade Valuation
@@ -658,7 +718,11 @@ export const TradesTab: React.FC<TradesTabProps> = ({
           </div>
           <div className="mt-3">
             <div className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-950 tabular-nums">
-              {formatCurrency(summary.averageTradeValue)}
+              {isUnlocked ? (
+                formatCurrency(summary.averageTradeValue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500 font-medium">
               <span>Avg valuation per trade-in</span>

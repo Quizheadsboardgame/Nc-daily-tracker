@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe } from 'lucide-react';
+import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe, BookOpen, ShoppingBag, Boxes, Sparkles, Layers } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { cloudDb } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
@@ -70,6 +70,54 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       setTimeout(() => {
         itemInputRef.current?.focus();
       }, 50);
+    }
+  };
+
+  const resolveTargetVendor = (target: 'Kieron' | 'Newtons'): string => {
+    if (target === 'Kieron') {
+      const found = knownVendors.find(
+        (v) => v.toLowerCase() === 'kieron'
+      );
+      return found || '';
+    }
+    if (target === 'Newtons') {
+      const found = knownVendors.find(
+        (v) => v.toLowerCase().startsWith('newton')
+      );
+      return found || '';
+    }
+    return '';
+  };
+
+  const handleSelectQuickCategory = (category: 'misc' | 'comics' | 'accessories' | 'packs') => {
+    if (category === 'misc') {
+      setIsMiscellaneous(true);
+      setItemDescription('Miscellaneous');
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      setTimeout(() => amountInputRef.current?.focus(), 50);
+      return;
+    }
+
+    setIsMiscellaneous(false);
+
+    if (category === 'comics') {
+      setItemDescription('Comics');
+      const vendor = resolveTargetVendor('Kieron');
+      setVendorName(vendor);
+      if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      setTimeout(() => amountInputRef.current?.focus(), 50);
+    } else if (category === 'accessories') {
+      setItemDescription('Accessories');
+      const vendor = resolveTargetVendor('Newtons');
+      setVendorName(vendor);
+      if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      setTimeout(() => amountInputRef.current?.focus(), 50);
+    } else if (category === 'packs') {
+      setItemDescription('Packs');
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      setTimeout(() => amountInputRef.current?.focus(), 50);
     }
   };
 
@@ -226,6 +274,97 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       </div>
 
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {/* Quick Category Buttons: Miscellaneous, Comics (Kieron), Accessories (Newtons), Packs (Any Vendor) */}
+        <div className="space-y-1.5 pb-2 border-b border-zinc-100">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Quick Categories</span>
+            </span>
+            <span className="text-[10px] text-zinc-400 font-medium">
+              1-tap item & auto-vendor
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* 1. Miscellaneous */}
+            <button
+              type="button"
+              id="btn-form-quick-misc"
+              onClick={() => handleSelectQuickCategory('misc')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                isMiscellaneous
+                  ? 'bg-zinc-900 border-zinc-900 text-white shadow-xs ring-2 ring-zinc-900/20'
+                  : 'bg-zinc-50 border-zinc-200 hover:border-zinc-300 text-zinc-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">Miscellaneous</span>
+                <Layers className={`w-3.5 h-3.5 ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`} />
+              </div>
+              <span className={`text-[10px] font-semibold ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`}>Any vendor</span>
+            </button>
+
+            {/* 2. Comics (Auto Kieron) */}
+            <button
+              type="button"
+              id="btn-form-quick-comics"
+              onClick={() => handleSelectQuickCategory('comics')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
+                  ? 'bg-emerald-950 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-500/20'
+                  : 'bg-emerald-50/50 border-emerald-200 hover:border-emerald-300 text-zinc-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">Comics</span>
+                <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+              </div>
+              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 self-start">
+                Auto: Kieron
+              </span>
+            </button>
+
+            {/* 3. Accessories (Auto Newtons) */}
+            <button
+              type="button"
+              id="btn-form-quick-accessories"
+              onClick={() => handleSelectQuickCategory('accessories')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
+                  ? 'bg-purple-950 text-white border-purple-600 shadow-xs ring-2 ring-purple-500/20'
+                  : 'bg-purple-50/50 border-purple-200 hover:border-purple-300 text-zinc-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">Accessories</span>
+                <ShoppingBag className="w-3.5 h-3.5 text-purple-600" />
+              </div>
+              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-300 self-start">
+                Auto: Newtons
+              </span>
+            </button>
+
+            {/* 4. Packs (Any Vendor) */}
+            <button
+              type="button"
+              id="btn-form-quick-packs"
+              onClick={() => handleSelectQuickCategory('packs')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                !isMiscellaneous && itemDescription.toLowerCase() === 'packs'
+                  ? 'bg-blue-950 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/20'
+                  : 'bg-blue-50/50 border-blue-200 hover:border-blue-300 text-zinc-800'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">Packs</span>
+                <Boxes className="w-3.5 h-3.5 text-blue-600" />
+              </div>
+              <span className={`text-[10px] font-semibold ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-300' : 'text-zinc-500'}`}>Any vendor</span>
+            </button>
+          </div>
+        </div>
+
         {/* ROW 1: Vendor Selection & Item Description */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           {/* Vendor Selector */}

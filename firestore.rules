@@ -25,6 +25,10 @@ service cloud.firestore {
     match /inventory/{itemId} {
       allow read, write: if true;
     }
+    // Removed vendors list to synchronize vendor deletions across all devices
+    match /removed_vendors/{vendorId} {
+      allow read, write: if true;
+    }
     // Universal access rule to ensure all devices can read and write all application data
     match /{document=**} {
       allow read, write: if true;

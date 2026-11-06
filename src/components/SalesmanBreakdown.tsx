@@ -2,6 +2,7 @@ import React from 'react';
 import { Users, Banknote, CreditCard, ArrowLeftRight, Globe } from 'lucide-react';
 import { VendorStat } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
+import { useTotalSalesAuth } from '../utils/auth';
 
 interface VendorBreakdownProps {
   vendors?: VendorStat[];
@@ -22,6 +23,7 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
   onSelectSalesman,
   totalDayRevenue,
 }) => {
+  const { isUnlocked } = useTotalSalesAuth();
   const vendors = propVendors || propSalesmen || [];
   const selectedVendor = propSelectedVendor ?? propSelectedSalesman ?? 'all';
   const handleSelectVendor = onSelectVendor || onSelectSalesman || (() => {});
@@ -89,7 +91,7 @@ export const VendorBreakdown: React.FC<VendorBreakdownProps> = ({
                   {formatCurrency(vendor.totalAmount)}
                 </span>
                 <span className={`text-xs font-medium ${isSelected ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                  {shareOfTotal.toFixed(0)}% of sales
+                  {isUnlocked ? `${shareOfTotal.toFixed(0)}% of sales` : '••% of sales'}
                 </span>
               </div>
 

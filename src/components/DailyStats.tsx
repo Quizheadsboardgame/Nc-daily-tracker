@@ -1,7 +1,9 @@
-import React from 'react';
-import { Banknote, CreditCard, Receipt, TrendingUp, DollarSign, ArrowLeftRight, Globe } from 'lucide-react';
+import React, { useState } from 'react';
+import { Banknote, CreditCard, Receipt, TrendingUp, DollarSign, ArrowLeftRight, Globe, Lock, Unlock, KeyRound } from 'lucide-react';
 import { DaySummary } from '../types';
 import { formatCurrency } from '../db/cloudDatabase';
+import { useTotalSalesAuth } from '../utils/auth';
+import { PasscodeModal } from './PasscodeModal';
 
 interface DailyStatsProps {
   summary: DaySummary;
@@ -14,6 +16,9 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
   selectedPaymentFilter,
   onSelectPaymentFilter,
 }) => {
+  const { isUnlocked, lock } = useTotalSalesAuth();
+  const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+
   const cashPct = summary.totalRevenue > 0 ? (summary.cashRevenue / summary.totalRevenue) * 100 : 0;
   const cardPct = summary.totalRevenue > 0 ? (summary.cardRevenue / summary.totalRevenue) * 100 : 0;
   const onlinePct = summary.totalRevenue > 0 ? ((summary.onlineRevenue || 0) / summary.totalRevenue) * 100 : 0;
@@ -23,21 +28,70 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
     <div className="space-y-4" id="section-daily-stats">
       {/* 6 Sales Ledger KPI Cards - Locked securely to mobile screen */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5 w-full max-w-full">
-        {/* Total Day Gross Sales Revenue */}
-        <div className="col-span-2 sm:col-span-1 bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10">
+        {/* Total Day Gross Sales Revenue - Protected behind passcode */}
+        <div
+          id="card-total-sales-gross"
+          className="col-span-2 sm:col-span-1 bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10 flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Total Sales
             </span>
-            <div className="p-2 rounded-xl bg-zinc-900 border border-zinc-700/80 text-white">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-            </div>
+            {isUnlocked ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 bg-emerald-950 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                  Unlocked
+                </span>
+                <button
+                  type="button"
+                  id="btn-lock-total-sales"
+                  onClick={lock}
+                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
+                  title="Lock Total Sales"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                id="btn-unlock-total-sales"
+                onClick={() => setIsPasscodeModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 border border-zinc-700/80 transition-all text-xs font-bold cursor-pointer"
+                title="Sign in to unlock total sales"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Locked</span>
+              </button>
+            )}
           </div>
+
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black tracking-tight text-white tabular-nums break-words">
-              {formatCurrency(summary.totalRevenue)}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-400 font-medium flex-wrap">
+            {isUnlocked ? (
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-white tabular-nums break-words animate-fade-in">
+                {formatCurrency(summary.totalRevenue)}
+              </div>
+            ) : (
+              <div
+                onClick={() => setIsPasscodeModalOpen(true)}
+                className="cursor-pointer group py-1"
+                title="Sign in with authorization code to view total sales"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-mono tracking-widest text-zinc-500 font-bold select-none group-hover:text-zinc-400 transition-colors">
+                    ••••••••
+                  </span>
+                  <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-md group-hover:bg-emerald-900 transition-colors flex items-center gap-1">
+                    <KeyRound className="w-3 h-3" /> Sign In
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1 font-medium group-hover:text-zinc-400 transition-colors">
+                  Tap to enter code & view
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-zinc-400 font-medium flex-wrap">
               <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>
                 <strong className="text-white font-bold">{summary.totalCount}</strong>{' '}
@@ -82,14 +136,18 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
                 selectedPaymentFilter === 'cash' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.cashRevenue)}
+              {isUnlocked ? (
+                formatCurrency(summary.cashRevenue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
                 selectedPaymentFilter === 'cash' ? 'text-emerald-300' : 'text-emerald-700'
               }`}
             >
-              {cashPct.toFixed(1)}% volume
+              {isUnlocked ? `${cashPct.toFixed(1)}% volume` : '••% volume'}
             </div>
           </div>
         </button>
@@ -129,14 +187,18 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
                 selectedPaymentFilter === 'card' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.cardRevenue)}
+              {isUnlocked ? (
+                formatCurrency(summary.cardRevenue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
                 selectedPaymentFilter === 'card' ? 'text-blue-300' : 'text-blue-700'
               }`}
             >
-              {cardPct.toFixed(1)}% volume
+              {isUnlocked ? `${cardPct.toFixed(1)}% volume` : '••% volume'}
             </div>
           </div>
         </button>
@@ -176,14 +238,18 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
                 selectedPaymentFilter === 'online' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.onlineRevenue || 0)}
+              {isUnlocked ? (
+                formatCurrency(summary.onlineRevenue || 0)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
                 selectedPaymentFilter === 'online' ? 'text-violet-300' : 'text-violet-700'
               }`}
             >
-              {onlinePct.toFixed(1)}% volume
+              {isUnlocked ? `${onlinePct.toFixed(1)}% volume` : '••% volume'}
             </div>
           </div>
         </button>
@@ -223,20 +289,24 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
                 selectedPaymentFilter === 'traded_out' ? 'text-white' : 'text-zinc-950'
               }`}
             >
-              {formatCurrency(summary.tradedOutRevenue)}
+              {isUnlocked ? (
+                formatCurrency(summary.tradedOutRevenue)
+              ) : (
+                <span className="font-mono tracking-widest text-zinc-400 select-none">••••••••</span>
+              )}
             </div>
             <div
               className={`text-xs font-bold mt-1.5 ${
                 selectedPaymentFilter === 'traded_out' ? 'text-amber-300' : 'text-amber-700'
               }`}
             >
-              {tradedOutPct.toFixed(1)}% volume
+              {isUnlocked ? `${tradedOutPct.toFixed(1)}% volume` : '••% volume'}
             </div>
           </div>
         </button>
 
         {/* Average Ticket Card */}
-        <div className="bg-white rounded-2xl border border-zinc-300 p-4 sm:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-white rounded-2xl border border-zinc-300 p-4 sm:p-5 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-600">
               Avg Ticket
@@ -246,15 +316,39 @@ export const DailyStats: React.FC<DailyStatsProps> = ({
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black tracking-tight text-zinc-950 tabular-nums break-words">
-              {formatCurrency(summary.averageTicket)}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500 font-medium">
-              <span>Avg per recorded sale</span>
-            </div>
+            {isUnlocked ? (
+              <>
+                <div className="text-2xl font-black tracking-tight text-zinc-950 tabular-nums break-words animate-fade-in">
+                  {formatCurrency(summary.averageTicket)}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500 font-medium">
+                  <span>Avg per recorded sale</span>
+                </div>
+              </>
+            ) : (
+              <div
+                onClick={() => setIsPasscodeModalOpen(true)}
+                className="cursor-pointer group py-1"
+                title="Sign in with authorization code to view"
+              >
+                <div className="text-2xl font-mono tracking-widest text-zinc-400 select-none group-hover:text-zinc-600 transition-colors">
+                  ••••••••
+                </div>
+                <div className="flex items-center gap-1 text-[11px] text-zinc-400 mt-1 font-medium group-hover:text-emerald-700 transition-colors">
+                  <Lock className="w-3 h-3" />
+                  <span>Requires code</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Manager Passcode Modal */}
+      <PasscodeModal
+        isOpen={isPasscodeModalOpen}
+        onClose={() => setIsPasscodeModalOpen(false)}
+      />
     </div>
   );
 };

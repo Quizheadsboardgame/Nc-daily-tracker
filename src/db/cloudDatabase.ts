@@ -57,6 +57,7 @@ const STORAGE_TRADES_KEY = 'daily_sales_tracker_real_trades_v6';
 const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v6';
 const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v6';
 const STORAGE_ONLINE_CARDS_KEY = 'daily_sales_tracker_real_online_cards_v6';
+const STORAGE_REMOVED_VENDORS_KEY = 'daily_sales_tracker_removed_vendors_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -206,6 +207,7 @@ class CloudSalesDatabase {
   private onlineCardsCache: Map<string, OnlineCard> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
+  private removedVendors: Set<string> = new Set(['kerion']);
   private listeners: Set<() => void> = new Set();
   public isCloudConnected: boolean = false;
   public lastSyncTimestamp: number = Date.now();
@@ -229,25 +231,46 @@ class CloudSalesDatabase {
 
   private loadFromStorage() {
     try {
+      const storedRemoved = localStorage.getItem(STORAGE_REMOVED_VENDORS_KEY);
+      if (storedRemoved) {
+        try {
+          const parsed = JSON.parse(storedRemoved);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((n) => {
+              if (typeof n === 'string' && n.trim()) {
+                this.removedVendors.add(n.trim().toLowerCase());
+              }
+            });
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      this.removedVendors.add('kerion');
+
       const storedSalesmen = localStorage.getItem(STORAGE_SALESMEN_KEY);
       if (storedSalesmen) {
         const parsed = JSON.parse(storedSalesmen);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.salesmenList = Array.from(new Set([...DEFAULT_PRELOADED_SALESMEN, ...parsed])).sort();
+          this.salesmenList = parsed
+            .filter((n: string) => typeof n === 'string' && n.trim() && !this.removedVendors.has(n.trim().toLowerCase()))
+            .sort();
         }
       }
+      this.salesmenList = this.salesmenList.filter((n) => !this.removedVendors.has(n.trim().toLowerCase()));
 
       const storedColors = localStorage.getItem(STORAGE_VENDOR_COLORS_KEY);
       if (storedColors) {
         const parsedColors = JSON.parse(storedColors);
         if (typeof parsedColors === 'object' && parsedColors !== null) {
           Object.entries(parsedColors).forEach(([vendor, color]) => {
-            if (typeof color === 'string') {
+            if (typeof color === 'string' && !this.removedVendors.has(vendor.toLowerCase())) {
               this.vendorColors.set(vendor, color);
             }
           });
         }
       }
+      this.vendorColors.delete('Kerion');
 
       const storedSales = localStorage.getItem(STORAGE_SALES_KEY);
       if (storedSales) {
@@ -298,6 +321,7 @@ class CloudSalesDatabase {
   private saveToStorage() {
     try {
       localStorage.setItem(STORAGE_SALESMEN_KEY, JSON.stringify(this.salesmenList));
+      localStorage.setItem(STORAGE_REMOVED_VENDORS_KEY, JSON.stringify(Array.from(this.removedVendors)));
       const colorsObj: Record<string, string> = {};
       this.vendorColors.forEach((color, name) => {
         colorsObj[name] = color;
@@ -331,6 +355,29 @@ class CloudSalesDatabase {
 
   private initRealtimeListeners() {
     try {
+      // 0. Real-time listener for Removed/Deleted Vendors across all devices
+      const removedVendorsCol = collection(db, 'removed_vendors');
+      onSnapshot(
+        removedVendorsCol,
+        (snapshot) => {
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const name = data.name || docSnap.id;
+            if (name && typeof name === 'string') {
+              this.removedVendors.add(name.trim().toLowerCase());
+            }
+          });
+          const beforeCount = this.salesmenList.length;
+          this.salesmenList = this.salesmenList.filter((n) => !this.removedVendors.has(n.trim().toLowerCase()));
+          if (this.salesmenList.length !== beforeCount) {
+            this.notify();
+          }
+        },
+        (error) => {
+          console.warn('Removed vendors listener error:', error);
+        }
+      );
+
       // 1. Real-time listener for Salesmen Roster & Colors across all devices
       const salesmenCol = collection(db, 'salesmen');
       onSnapshot(
@@ -339,7 +386,9 @@ class CloudSalesDatabase {
           this.isCloudConnected = true;
           this.lastSyncTimestamp = Date.now();
           if (snapshot.empty) {
-            this.seedFirestoreSalesmen();
+            if (this.removedVendors.size <= 1) {
+              this.seedFirestoreSalesmen();
+            }
             return;
           }
 
@@ -347,17 +396,26 @@ class CloudSalesDatabase {
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (data.name) {
-              remoteNames.push(data.name);
+              const cleanName = data.name.trim();
+              if (cleanName.toLowerCase() === 'kerion') {
+                deleteDoc(docSnap.ref).catch(() => {});
+                return;
+              }
+              if (this.removedVendors.has(cleanName.toLowerCase())) {
+                return;
+              }
+              remoteNames.push(cleanName);
               if (data.color) {
-                this.vendorColors.set(data.name, data.color);
+                this.vendorColors.set(cleanName, data.color);
               }
             }
           });
 
-          if (remoteNames.length > 0) {
-            this.salesmenList = Array.from(new Set([...DEFAULT_PRELOADED_SALESMEN, ...remoteNames])).sort();
-            this.notify();
-          }
+          // Use remote documents from Firestore as authoritative active roster
+          this.salesmenList = Array.from(new Set(remoteNames))
+            .filter((n) => !this.removedVendors.has(n.toLowerCase()))
+            .sort();
+          this.notify();
         },
         (error) => {
           console.warn('Salesmen Firestore listener error:', error);
@@ -410,24 +468,13 @@ class CloudSalesDatabase {
             });
           });
 
-          // Sync any local sales that haven't reached Firestore yet (e.g. offline fallback)
-          this.salesCache.forEach((localSale, saleId) => {
-            if (!remoteSaleIds.has(saleId)) {
-              setDoc(doc(db, 'sales', saleId), {
-                salesmanName: localSale.salesmanName,
-                itemDescription: localSale.itemDescription,
-                isMiscellaneous: localSale.isMiscellaneous || false,
-                amount: localSale.amount,
-                paymentMethod: localSale.paymentMethod,
-                notes: localSale.notes || null,
-                timestamp: localSale.timestamp,
-                dateKey: localSale.dateKey,
-                isOnlineSale: Boolean(localSale.isOnlineSale),
-                onlineCardId: localSale.onlineCardId || null,
-                onlineBarcode: localSale.onlineBarcode || null,
-              }).catch((e) => console.warn('Could not sync local sale to Firestore:', e));
+          // Reconcile local cache with remote Firestore state:
+          // Remove any sale from local cache that was deleted on another device!
+          for (const localId of Array.from(this.salesCache.keys())) {
+            if (!remoteSaleIds.has(localId)) {
+              this.salesCache.delete(localId);
             }
-          });
+          }
 
           this.notify();
         },
@@ -468,25 +515,13 @@ class CloudSalesDatabase {
             });
           });
 
-          // Sync any local trades that haven't reached Firestore yet
-          this.tradesCache.forEach((localTrade, tradeId) => {
-            if (!remoteTradeIds.has(tradeId)) {
-              setDoc(doc(db, 'trades', tradeId), {
-                vendorName: localTrade.vendorName,
-                itemDescription: localTrade.itemDescription,
-                tradeValue: localTrade.tradeValue,
-                tradeType: localTrade.tradeType,
-                dateKey: localTrade.dateKey,
-                timestamp: localTrade.timestamp,
-                customerName: localTrade.customerName || null,
-                notes: localTrade.notes || null,
-                isStandalone: localTrade.isStandalone !== undefined ? Boolean(localTrade.isStandalone) : true,
-                soldItemDescription: localTrade.soldItemDescription || null,
-                saleAmount: localTrade.saleAmount !== undefined && localTrade.saleAmount !== null ? Number(localTrade.saleAmount) : null,
-                associatedSaleId: localTrade.associatedSaleId || null,
-              }).catch((e) => console.warn('Could not sync local trade to Firestore:', e));
+          // Reconcile local cache with remote Firestore state:
+          // Remove any trade that was deleted on another device!
+          for (const localId of Array.from(this.tradesCache.keys())) {
+            if (!remoteTradeIds.has(localId)) {
+              this.tradesCache.delete(localId);
             }
-          });
+          }
 
           this.notify();
         },
@@ -524,26 +559,13 @@ class CloudSalesDatabase {
             });
           });
 
-          // Sync any local cards that haven't reached Firestore yet (e.g. created offline or before rules deployment)
-          this.onlineCardsCache.forEach((localCard, cardId) => {
-            if (!remoteCardIds.has(cardId)) {
-              setDoc(doc(db, 'online_cards', cardId), {
-                id: localCard.id,
-                barcode: localCard.barcode,
-                vendorName: localCard.vendorName,
-                cardName: localCard.cardName,
-                price: localCard.price,
-                status: localCard.status,
-                notes: localCard.notes || null,
-                timestamp: localCard.timestamp,
-                dateKey: localCard.dateKey,
-                soldAt: localCard.soldAt || null,
-                soldDateKey: localCard.soldDateKey || null,
-                saleId: localCard.saleId || null,
-                soldPaymentMethod: localCard.soldPaymentMethod || null,
-              }).catch((e) => console.warn('Could not sync local card to Firestore:', e));
+          // Reconcile local cache with remote Firestore state:
+          // Remove any card that was deleted on another device!
+          for (const localId of Array.from(this.onlineCardsCache.keys())) {
+            if (!remoteCardIds.has(localId)) {
+              this.onlineCardsCache.delete(localId);
             }
-          });
+          }
 
           this.saveToStorage();
           this.notify();
@@ -575,57 +597,12 @@ class CloudSalesDatabase {
   // --- Vendors Roster & Color Methods ---
 
   public getKnownVendors(): string[] {
-    const vendorSet = new Set<string>();
-
-    // 1. Default preloaded vendors
-    for (const v of DEFAULT_PRELOADED_SALESMEN) {
-      if (v && v.trim()) vendorSet.add(v.trim());
-    }
-
-    // 2. Salesmen / Vendors roster from state
-    for (const v of this.salesmenList) {
-      if (v && v.trim()) vendorSet.add(v.trim());
-    }
-
-    // 3. Any vendor configured with an assigned color
-    this.vendorColors.forEach((_, name) => {
-      if (name && name.trim()) vendorSet.add(name.trim());
-    });
-
-    // 4. Any vendor that appears in any recorded sales
-    this.salesCache.forEach((sale) => {
-      if (sale.salesmanName && sale.salesmanName.trim()) {
-        vendorSet.add(sale.salesmanName.trim());
-      }
-      if (sale.tradeAcceptingVendor && sale.tradeAcceptingVendor.trim()) {
-        vendorSet.add(sale.tradeAcceptingVendor.trim());
-      }
-    });
-
-    // 5. Any vendor that appears in cards trades
-    this.tradesCache.forEach((trade) => {
-      if (trade.vendorName && trade.vendorName.trim()) {
-        vendorSet.add(trade.vendorName.trim());
-      }
-    });
-
-    // 6. Any vendor that has online cards registered
-    this.onlineCardsCache.forEach((card) => {
-      if (card.vendorName && card.vendorName.trim()) {
-        vendorSet.add(card.vendorName.trim());
-      }
-    });
-
-    // Keep this.salesmenList up to date with discovered vendors
-    const all = Array.from(vendorSet).filter(Boolean).sort((a, b) =>
+    const list = this.salesmenList.filter(
+      (v) => v && v.trim() && !this.removedVendors.has(v.trim().toLowerCase()) && v.trim().toLowerCase() !== 'kerion'
+    );
+    return Array.from(new Set(list)).sort((a, b) =>
       a.localeCompare(b, undefined, { sensitivity: 'base' })
     );
-
-    if (all.length > this.salesmenList.length) {
-      this.salesmenList = all;
-    }
-
-    return all;
   }
 
   public getKnownSalesmen(): string[] {
@@ -697,24 +674,34 @@ class CloudSalesDatabase {
 
   public async addVendor(name: string, color?: string): Promise<boolean> {
     const clean = name.trim();
-    if (!clean) return false;
+    if (!clean || clean.toLowerCase() === 'kerion') return false;
+
+    // Remove from removedVendors set
+    this.removedVendors.delete(clean.toLowerCase());
 
     const assignedColor = color || this.getVendorColor(clean);
     this.vendorColors.set(clean, assignedColor);
 
-    if (!this.salesmenList.includes(clean)) {
+    if (!this.salesmenList.some((n) => n.toLowerCase() === clean.toLowerCase())) {
       this.salesmenList.push(clean);
       this.salesmenList.sort();
       this.notify();
     }
 
     try {
-      const docId = clean.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36);
-      await setDoc(doc(db, 'salesmen', docId), {
-        name: clean,
-        color: assignedColor,
-        createdAt: Date.now(),
-      });
+      const docId = clean.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await Promise.all([
+        setDoc(
+          doc(db, 'salesmen', docId),
+          {
+            name: clean,
+            color: assignedColor,
+            createdAt: Date.now(),
+          },
+          { merge: true }
+        ),
+        deleteDoc(doc(db, 'removed_vendors', docId)).catch(() => {}),
+      ]);
       return true;
     } catch (e) {
       console.warn('Vendor saved locally; Firestore sync pending:', e);
@@ -730,19 +717,33 @@ class CloudSalesDatabase {
     const clean = name.trim();
     if (!clean) return false;
 
-    this.salesmenList = this.salesmenList.filter((n) => n !== clean);
+    this.removedVendors.add(clean.toLowerCase());
+    this.salesmenList = this.salesmenList.filter((n) => n.toLowerCase() !== clean.toLowerCase());
     this.vendorColors.delete(clean);
     this.notify();
 
     try {
+      const docId = clean.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const ops: Promise<void>[] = [];
+
+      // 1. Mark as removed in Firestore removed_vendors so all other devices update immediately
+      ops.push(
+        setDoc(doc(db, 'removed_vendors', docId), {
+          name: clean,
+          removedAt: Date.now(),
+        })
+      );
+
+      // 2. Delete document(s) in salesmen collection
       const snap = await getDocs(collection(db, 'salesmen'));
-      const deletes: Promise<void>[] = [];
       snap.forEach((docSnap) => {
-        if (docSnap.data().name?.toLowerCase() === clean.toLowerCase()) {
-          deletes.push(deleteDoc(docSnap.ref));
+        const val = docSnap.data().name?.trim().toLowerCase();
+        if (val === clean.toLowerCase() || docSnap.id === docId) {
+          ops.push(deleteDoc(docSnap.ref));
         }
       });
-      await Promise.all(deletes);
+
+      await Promise.all(ops);
       return true;
     } catch (e) {
       console.warn('Vendor removed locally; Firestore sync pending:', e);
@@ -784,6 +785,20 @@ class CloudSalesDatabase {
       : 'card';
 
     const isOnlineSale = Boolean(input.isOnlineSale) || paymentMethod === 'online';
+
+    // Strict duplicate prevention: Do not allow scanned cards to duplicate in sales
+    if (input.onlineCardId || input.onlineBarcode) {
+      const match = Array.from(this.salesCache.values()).find(
+        (s) =>
+          (input.onlineCardId && s.onlineCardId === input.onlineCardId) ||
+          (input.onlineBarcode && s.onlineBarcode && s.onlineBarcode.toLowerCase() === input.onlineBarcode.trim().toLowerCase())
+      );
+      if (match) {
+        throw new Error(
+          `Duplicate sale prevented: Card [${input.onlineBarcode || input.onlineCardId}] is already recorded in the sales ledger!`
+        );
+      }
+    }
 
     const record: SaleRecord = {
       id,
@@ -888,7 +903,52 @@ class CloudSalesDatabase {
   }
 
   public async deleteSale(id: string) {
+    const existing = this.salesCache.get(id);
     this.salesCache.delete(id);
+
+    // If this sale was linked to an online inventory card, revert card back to available stock
+    if (existing?.onlineCardId) {
+      const card = this.onlineCardsCache.get(existing.onlineCardId);
+      if (card && card.status === 'sold' && (card.saleId === id || !card.saleId)) {
+        const revertedCard: OnlineCard = {
+          ...card,
+          status: 'available',
+          soldAt: undefined,
+          soldDateKey: undefined,
+          saleId: undefined,
+          soldPaymentMethod: undefined,
+        };
+        this.onlineCardsCache.set(card.id, revertedCard);
+        updateDoc(doc(db, 'online_cards', card.id), {
+          status: 'available',
+          soldAt: null,
+          soldDateKey: null,
+          saleId: null,
+          soldPaymentMethod: null,
+        }).catch((e) => console.warn('Could not revert card status in Firestore:', e));
+      }
+    } else if (existing?.onlineBarcode) {
+      const card = this.getOnlineCardByBarcode(existing.onlineBarcode);
+      if (card && card.status === 'sold') {
+        const revertedCard: OnlineCard = {
+          ...card,
+          status: 'available',
+          soldAt: undefined,
+          soldDateKey: undefined,
+          saleId: undefined,
+          soldPaymentMethod: undefined,
+        };
+        this.onlineCardsCache.set(card.id, revertedCard);
+        updateDoc(doc(db, 'online_cards', card.id), {
+          status: 'available',
+          soldAt: null,
+          soldDateKey: null,
+          saleId: null,
+          soldPaymentMethod: null,
+        }).catch((e) => console.warn('Could not revert card status in Firestore:', e));
+      }
+    }
+
     this.notify();
 
     try {
@@ -1695,6 +1755,18 @@ class CloudSalesDatabase {
     }
   }
 
+  public isOnlineCardAlreadySold(barcodeOrId: string): boolean {
+    const clean = barcodeOrId.trim().toLowerCase();
+    if (!clean) return false;
+    const card = this.getOnlineCardByBarcode(clean);
+    if (card && card.status === 'sold') return true;
+    for (const s of this.salesCache.values()) {
+      if (s.onlineBarcode && s.onlineBarcode.toLowerCase() === clean) return true;
+      if (card && s.onlineCardId && s.onlineCardId === card.id) return true;
+    }
+    return false;
+  }
+
   public async sellOnlineCard(
     barcodeOrId: string,
     options?: {
@@ -1709,8 +1781,28 @@ class CloudSalesDatabase {
       throw new Error(`No card found with barcode or ID: "${barcodeOrId}"`);
     }
 
+    // 1. Strict duplicate check on card status
     if (card.status === 'sold') {
-      throw new Error(`This card (${card.cardName} - ${card.barcode}) was already sold on ${card.soldDateKey || 'a previous date'}!`);
+      throw new Error(
+        `This card (${card.cardName} - ${card.barcode}) was already sold on ${card.soldDateKey || 'a previous date'}! Duplicate sales are prevented.`
+      );
+    }
+
+    // 2. Strict duplicate check in sales ledger cache
+    const existingSale = Array.from(this.salesCache.values()).find(
+      (s) =>
+        (s.onlineBarcode && s.onlineBarcode.toLowerCase() === card.barcode.toLowerCase()) ||
+        (s.onlineCardId && s.onlineCardId === card.id)
+    );
+    if (existingSale) {
+      // Ensure local state synchronizes card status to sold
+      card.status = 'sold';
+      card.saleId = existingSale.id;
+      this.onlineCardsCache.set(card.id, card);
+      this.notify();
+      throw new Error(
+        `Duplicate prevented: Card "${card.cardName}" (${card.barcode}) is already recorded in the sales ledger!`
+      );
     }
 
     const soldPrice = options?.customPrice !== undefined ? Math.round(Number(options.customPrice) * 100) / 100 : card.price;
