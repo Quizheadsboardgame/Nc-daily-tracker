@@ -10,11 +10,12 @@ import { TradesTab } from './components/TradesTab';
 import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
 import { OnlineCardsTab } from './components/OnlineCardsTab';
+import { SalesSearchTab } from './components/SalesSearchTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { useTotalSalesAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -172,6 +173,20 @@ export default function App() {
             >
               <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'ledger' ? 'text-emerald-400' : 'text-zinc-500'}`} />
               <span>Sales Ledger</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-search"
+              onClick={() => setActiveTab('search')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'search'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <Search className={`w-4 h-4 ${activeTab === 'search' ? 'text-blue-400' : 'text-blue-600'}`} />
+              <span>Search Sales</span>
             </button>
 
             <button
@@ -365,6 +380,18 @@ export default function App() {
                 onDeleteSale={handleDeleteSale}
               />
             </div>
+          </div>
+        )}
+
+        {/* TAB: Dedicated Sales Search Tab (Vendor & Description Search across all records) */}
+        {activeTab === 'search' && (
+          <div className="animate-fade-in" id="tab-content-search">
+            <SalesSearchTab
+              knownVendors={knownVendors}
+              onEditSale={handleEditSale}
+              onDeleteSale={handleDeleteSale}
+              onNavigateToLedger={() => setActiveTab('ledger')}
+            />
           </div>
         )}
 

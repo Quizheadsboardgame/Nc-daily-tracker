@@ -24,6 +24,7 @@ import {
   OnlineCard,
   OnlineCardsSummary,
 } from '../types';
+import { playCheckoutSound, isSaleSoundRecentlyPlayed, markSaleSoundPlayed } from '../utils/sound';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 export const DEFAULT_PRELOADED_SALESMEN = DEFAULT_PRELOADED_VENDORS;
@@ -424,12 +425,29 @@ class CloudSalesDatabase {
 
       // 2. Real-time listener for Sales Records (Cash, Card, Traded Out, Online) across all devices
       const salesCol = collection(db, 'sales');
+      let isInitialSalesSnapshot = true;
       onSnapshot(
         salesCol,
         (snapshot) => {
           this.isCloudConnected = true;
           this.lastSyncTimestamp = Date.now();
           const remoteSaleIds = new Set<string>();
+
+          // Trigger changing till sound on all connected devices when any new sale is made
+          if (!isInitialSalesSnapshot) {
+            snapshot.docChanges().forEach((change) => {
+              if (change.type === 'added') {
+                const data = change.doc.data();
+                const saleId = change.doc.id;
+                const saleTimestamp = data.timestamp || 0;
+                // Only trigger sound for sales recorded recently (within the last 45 seconds) and not yet played locally
+                if (Date.now() - saleTimestamp < 45000 && !isSaleSoundRecentlyPlayed(saleId)) {
+                  playCheckoutSound(false, saleId);
+                }
+              }
+            });
+          }
+          isInitialSalesSnapshot = false;
 
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
@@ -817,6 +835,9 @@ class CloudSalesDatabase {
 
     // Store in cache & notify
     this.salesCache.set(id, record);
+
+    // Play changing till sound immediately on this device and mark ID to avoid double-firing from Firestore echo
+    playCheckoutSound(false, id);
 
     if (!this.salesmenList.includes(record.salesmanName)) {
       this.salesmenList.push(record.salesmanName);
@@ -1216,6 +1237,55 @@ class CloudSalesDatabase {
       }
     });
     return list.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public getAllSales(): SaleRecord[] {
+    return Array.from(this.salesCache.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public exportSalesListToCsv(salesList: SaleRecord[]): string {
+    const headers = [
+      'Sale ID',
+      'Date',
+      'Time',
+      'Vendor',
+      'Description',
+      'Amount (£)',
+      'Payment Method',
+      'Channel',
+      'Barcode',
+      'Notes',
+    ];
+
+    const rows = salesList.map((s) => {
+      const time = new Date(s.timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+
+      const escape = (val: string | number | undefined | null) => {
+        if (val === undefined || val === null) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      return [
+        escape(s.id),
+        escape(s.dateKey),
+        escape(time),
+        escape(s.salesmanName),
+        escape(s.itemDescription),
+        s.amount.toFixed(2),
+        escape(s.paymentMethod),
+        escape(s.isOnlineSale || s.paymentMethod === 'online' ? 'Online' : 'In-Person'),
+        escape(s.onlineBarcode || ''),
+        escape(s.notes || ''),
+      ].join(',');
+    });
+
+    return [headers.join(','), ...rows].join('\n');
   }
 
   public getAvailableDateKeys(): string[] {
