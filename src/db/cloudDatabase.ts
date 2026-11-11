@@ -433,16 +433,15 @@ class CloudSalesDatabase {
           this.lastSyncTimestamp = Date.now();
           const remoteSaleIds = new Set<string>();
 
-          // Trigger changing till sound on all connected devices when any new sale is made
+          // Trigger Mario Coin sound (or fanfare if > £100) on all connected devices when any new sale is made
           if (!isInitialSalesSnapshot) {
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
                 const data = change.doc.data();
                 const saleId = change.doc.id;
-                const saleTimestamp = data.timestamp || 0;
                 const saleAmount = Number(data.amount) || 0;
-                // Only trigger sound for sales recorded recently (within the last 45 seconds) and not yet played locally
-                if (Date.now() - saleTimestamp < 45000 && !isSaleSoundRecentlyPlayed(saleId)) {
+                // Play sound immediately on this device if not already played locally
+                if (!isSaleSoundRecentlyPlayed(saleId)) {
                   playCheckoutSound(false, saleId, saleAmount);
                 }
               }

@@ -3,7 +3,7 @@ import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight,
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
-import { useCheckoutSound } from '../utils/sound';
+import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
 export type AppTab = 'ledger' | 'search' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -34,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { isUnlocked, lock } = useTotalSalesAuth();
   const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
+  const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
 
   const handleOpenVendors = () => {
@@ -242,6 +243,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Quick Actions */}
+            {/* Audio Unlock Warning / Prompt if device browser blocked audio */}
+            {!isAudioActive && soundEnabled && (
+              <button
+                type="button"
+                id="btn-activate-audio-header"
+                onClick={unlockAudio}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition animate-pulse cursor-pointer shadow-xs"
+                title="Browser requires 1 tap to allow sound on this device. Click to activate!"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Tap to Enable Sound</span>
+              </button>
+            )}
+
             {/* Sound On / Off Toggle */}
             <button
               type="button"
@@ -267,6 +282,19 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </button>
+
+            {/* Test Sound Button */}
+            {soundEnabled && isAudioActive && (
+              <button
+                type="button"
+                id="btn-test-sound-header"
+                onClick={testMarioSound}
+                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                title="Test Mario Coin sound effect on this device"
+              >
+                <span>Test 🪙</span>
+              </button>
+            )}
 
             {isUnlocked && (
               <button

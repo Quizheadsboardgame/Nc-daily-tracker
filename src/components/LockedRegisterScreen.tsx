@@ -29,7 +29,7 @@ import {
 import { PaymentMethod, OnlineCard } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
-import { playSaleBeep, playCheckoutSound, useCheckoutSound } from '../utils/sound';
+import { playSaleBeep, playCheckoutSound, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
   onSaleRecorded?: () => void;
@@ -42,6 +42,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 }) => {
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
   const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
+  const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
   const currentDateKey = getLocalDateKey();
 
   // Sale form states
@@ -343,6 +344,20 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               <span>{formatDisplayDate(currentDateKey)}</span>
             </div>
 
+            {/* Audio Unlock Warning / Prompt if device browser blocked audio */}
+            {!isAudioActive && soundEnabled && (
+              <button
+                type="button"
+                id="btn-pos-activate-audio"
+                onClick={unlockAudio}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition animate-pulse cursor-pointer shadow-xs"
+                title="Browser requires 1 tap to allow sound on this device. Click to activate!"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Tap to Enable Sound</span>
+              </button>
+            )}
+
             {/* Checkout Sound Effect Toggle */}
             <button
               type="button"
@@ -368,6 +383,19 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 </>
               )}
             </button>
+
+            {/* Test Sound Button */}
+            {soundEnabled && isAudioActive && (
+              <button
+                type="button"
+                id="btn-pos-test-sound"
+                onClick={testMarioSound}
+                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                title="Test Mario Coin sound effect on this device"
+              >
+                <span>Test 🪙</span>
+              </button>
+            )}
 
             <button
               type="button"
