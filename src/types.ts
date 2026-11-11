@@ -142,3 +142,37 @@ export interface OnlineCardsSummary {
   soldValue: number;
 }
 
+export interface VendorLeaderboardEntry {
+  rank: number;
+  vendorName: string;
+  color: string;
+  totalRevenue: number;
+  salesCount: number;
+  averageTicket: number;
+  cashRevenue: number;
+  cashCount: number;
+  cardRevenue: number;
+  cardCount: number;
+  onlineRevenue: number;
+  onlineCount: number;
+  tradedOutRevenue: number;
+  tradedOutCount: number;
+  percentageOfTotal: number;
+  topSaleAmount?: number;
+  topSaleDescription?: string;
+}
+
+export interface VendorLeaderboardSummary {
+  periodType: 'weekly' | 'monthly' | 'all-time';
+  periodLabel: string;
+  startDateKey?: string;
+  endDateKey?: string;
+  totalRevenue: number;
+  totalSalesCount: number;
+  averageTicket: number;
+  activeVendorsCount: number;
+  leader?: VendorLeaderboardEntry;
+  entries: VendorLeaderboardEntry[];
+}
+
+

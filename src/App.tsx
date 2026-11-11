@@ -11,11 +11,12 @@ import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
 import { OnlineCardsTab } from './components/OnlineCardsTab';
 import { SalesSearchTab } from './components/SalesSearchTab';
+import { VendorLeaderboardTab } from './components/VendorLeaderboardTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { useTotalSalesAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search, Trophy } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -187,6 +188,20 @@ export default function App() {
             >
               <Search className={`w-4 h-4 ${activeTab === 'search' ? 'text-blue-400' : 'text-blue-600'}`} />
               <span>Search Sales</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-leaderboard"
+              onClick={() => setActiveTab('leaderboard')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'leaderboard'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <Trophy className={`w-4 h-4 ${activeTab === 'leaderboard' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span>Leaderboard</span>
             </button>
 
             <button
@@ -391,6 +406,15 @@ export default function App() {
               onEditSale={handleEditSale}
               onDeleteSale={handleDeleteSale}
               onNavigateToLedger={() => setActiveTab('ledger')}
+            />
+          </div>
+        )}
+
+        {/* TAB: Dedicated Vendor Sales Leaderboard (Weekly, Monthly, All-Time) */}
+        {activeTab === 'leaderboard' && (
+          <div className="animate-fade-in" id="tab-content-leaderboard">
+            <VendorLeaderboardTab
+              onNavigateToVendorPortal={() => setActiveTab('vendor-check')}
             />
           </div>
         )}

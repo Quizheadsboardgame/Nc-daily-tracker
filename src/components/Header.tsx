@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX, Search } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX, Search, Trophy } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
 import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
-export type AppTab = 'ledger' | 'search' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'search' | 'leaderboard' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -131,6 +131,20 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Search className={`w-4 h-4 ${activeTab === 'search' ? 'text-blue-600' : 'text-blue-400'}`} />
                 <span>Search Sales</span>
+              </button>
+
+              <button
+                type="button"
+                id="nav-tab-leaderboard"
+                onClick={() => onTabChange('leaderboard')}
+                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'leaderboard'
+                    ? 'bg-white text-zinc-950 shadow-sm font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <Trophy className={`w-4 h-4 ${activeTab === 'leaderboard' ? 'text-amber-600' : 'text-amber-400'}`} />
+                <span>Leaderboard</span>
               </button>
 
               <button

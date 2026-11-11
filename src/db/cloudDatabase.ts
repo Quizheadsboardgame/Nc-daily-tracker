@@ -23,6 +23,8 @@ import {
   TradeVendorStat,
   OnlineCard,
   OnlineCardsSummary,
+  VendorLeaderboardEntry,
+  VendorLeaderboardSummary,
 } from '../types';
 import { playCheckoutSound, isSaleSoundRecentlyPlayed, markSaleSoundPlayed } from '../utils/sound';
 
@@ -1286,6 +1288,219 @@ class CloudSalesDatabase {
     });
 
     return [headers.join(','), ...rows].join('\n');
+  }
+
+  public getVendorLeaderboard(options: {
+    period: 'weekly' | 'monthly' | 'all-time';
+    dateKey?: string;
+  }): VendorLeaderboardSummary {
+    const allSales = this.getAllSales();
+    const period = options.period;
+    let startDateKey: string | undefined = undefined;
+    let endDateKey: string | undefined = undefined;
+    let periodLabel = 'All-Time Sales History';
+
+    if (period === 'weekly') {
+      const weekInfo = getWeekRangeInfo(options.dateKey || getLocalDateKey());
+      startDateKey = weekInfo.startDateKey;
+      endDateKey = weekInfo.endDateKey;
+      periodLabel = `Week ${weekInfo.weekNumber} (${weekInfo.startDisplay} – ${weekInfo.endDisplay})`;
+    } else if (period === 'monthly') {
+      const refKey = options.dateKey || getLocalDateKey();
+      const [y, m] = refKey.split('-').map(Number);
+      const startD = new Date(y, m - 1, 1);
+      const endD = new Date(y, m, 0);
+      startDateKey = getLocalDateKey(startD);
+      endDateKey = getLocalDateKey(endD);
+      periodLabel = startD.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    }
+
+    const filteredSales = allSales.filter((s) => {
+      if (startDateKey && s.dateKey < startDateKey) return false;
+      if (endDateKey && s.dateKey > endDateKey) return false;
+      return true;
+    });
+
+    let totalPeriodRevenue = 0;
+    const vendorMap = new Map<string, {
+      totalAmount: number;
+      count: number;
+      cashAmount: number;
+      cashCount: number;
+      cardAmount: number;
+      cardCount: number;
+      onlineAmount: number;
+      onlineCount: number;
+      tradedOutAmount: number;
+      tradedOutCount: number;
+      topSaleAmount: number;
+      topSaleDescription: string;
+    }>();
+
+    // Initialize all known vendors
+    const known = this.getKnownVendors();
+    for (const v of known) {
+      vendorMap.set(v.toLowerCase(), {
+        totalAmount: 0,
+        count: 0,
+        cashAmount: 0,
+        cashCount: 0,
+        cardAmount: 0,
+        cardCount: 0,
+        onlineAmount: 0,
+        onlineCount: 0,
+        tradedOutAmount: 0,
+        tradedOutCount: 0,
+        topSaleAmount: 0,
+        topSaleDescription: '',
+      });
+    }
+
+    for (const s of filteredSales) {
+      totalPeriodRevenue += s.amount;
+      const key = s.salesmanName.trim().toLowerCase();
+      let stat = vendorMap.get(key);
+      if (!stat) {
+        stat = {
+          totalAmount: 0,
+          count: 0,
+          cashAmount: 0,
+          cashCount: 0,
+          cardAmount: 0,
+          cardCount: 0,
+          onlineAmount: 0,
+          onlineCount: 0,
+          tradedOutAmount: 0,
+          tradedOutCount: 0,
+          topSaleAmount: 0,
+          topSaleDescription: '',
+        };
+        vendorMap.set(key, stat);
+      }
+
+      stat.totalAmount += s.amount;
+      stat.count += 1;
+
+      if (s.amount > stat.topSaleAmount) {
+        stat.topSaleAmount = s.amount;
+        stat.topSaleDescription = s.itemDescription;
+      }
+
+      if (s.paymentMethod === 'cash') {
+        stat.cashAmount += s.amount;
+        stat.cashCount += 1;
+      } else if (s.paymentMethod === 'traded_out') {
+        stat.tradedOutAmount += s.amount;
+        stat.tradedOutCount += 1;
+      } else if (s.paymentMethod === 'online' || s.isOnlineSale) {
+        stat.onlineAmount += s.amount;
+        stat.onlineCount += 1;
+      } else {
+        stat.cardAmount += s.amount;
+        stat.cardCount += 1;
+      }
+    }
+
+    // Convert map to leaderboard entries
+    const entries: VendorLeaderboardEntry[] = [];
+    vendorMap.forEach((stat, key) => {
+      const matchingKnown = known.find((k) => k.toLowerCase() === key);
+      const name = matchingKnown || (key.charAt(0).toUpperCase() + key.slice(1));
+      const percentage = totalPeriodRevenue > 0 ? (stat.totalAmount / totalPeriodRevenue) * 100 : 0;
+      const averageTicket = stat.count > 0 ? stat.totalAmount / stat.count : 0;
+
+      entries.push({
+        rank: 0,
+        vendorName: name,
+        color: this.getVendorColor(name),
+        totalRevenue: Math.round(stat.totalAmount * 100) / 100,
+        salesCount: stat.count,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        cashRevenue: Math.round(stat.cashAmount * 100) / 100,
+        cashCount: stat.cashCount,
+        cardRevenue: Math.round(stat.cardAmount * 100) / 100,
+        cardCount: stat.cardCount,
+        onlineRevenue: Math.round(stat.onlineAmount * 100) / 100,
+        onlineCount: stat.onlineCount,
+        tradedOutRevenue: Math.round(stat.tradedOutAmount * 100) / 100,
+        tradedOutCount: stat.tradedOutCount,
+        percentageOfTotal: Math.round(percentage * 10) / 10,
+        topSaleAmount: stat.topSaleAmount > 0 ? Math.round(stat.topSaleAmount * 100) / 100 : undefined,
+        topSaleDescription: stat.topSaleDescription || undefined,
+      });
+    });
+
+    // Sort by revenue descending, then by sales count descending
+    entries.sort((a, b) => {
+      if (b.totalRevenue !== a.totalRevenue) return b.totalRevenue - a.totalRevenue;
+      return b.salesCount - a.salesCount;
+    });
+
+    // Assign rank
+    entries.forEach((e, idx) => {
+      e.rank = idx + 1;
+    });
+
+    const activeVendorsCount = entries.filter((e) => e.salesCount > 0).length;
+    const totalSalesCount = filteredSales.length;
+    const averageTicket = totalSalesCount > 0 ? totalPeriodRevenue / totalSalesCount : 0;
+
+    return {
+      periodType: period,
+      periodLabel,
+      startDateKey,
+      endDateKey,
+      totalRevenue: Math.round(totalPeriodRevenue * 100) / 100,
+      totalSalesCount,
+      averageTicket: Math.round(averageTicket * 100) / 100,
+      activeVendorsCount,
+      leader: entries.length > 0 && entries[0].totalRevenue > 0 ? entries[0] : undefined,
+      entries,
+    };
+  }
+
+  public exportLeaderboardToCsv(leaderboard: VendorLeaderboardSummary): string {
+    const headers = [
+      'Rank',
+      'Vendor',
+      'Total Sales (£)',
+      'Share of Store Sales (%)',
+      'Number of Sales',
+      'Average Sale (£)',
+      'Cash Sales (£)',
+      'Card Sales (£)',
+      'Online Sales (£)',
+      'Traded Out Sales (£)',
+      'Top Sale Amount (£)',
+      'Top Sale Description',
+    ];
+
+    const rows = leaderboard.entries.map((e) => {
+      const escape = (val: string | number | undefined | null) => {
+        if (val === undefined || val === null) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      return [
+        e.rank,
+        escape(e.vendorName),
+        e.totalRevenue.toFixed(2),
+        `${e.percentageOfTotal}%`,
+        e.salesCount,
+        e.averageTicket.toFixed(2),
+        e.cashRevenue.toFixed(2),
+        e.cardRevenue.toFixed(2),
+        e.onlineRevenue.toFixed(2),
+        e.tradedOutRevenue.toFixed(2),
+        e.topSaleAmount ? e.topSaleAmount.toFixed(2) : '0.00',
+        escape(e.topSaleDescription || 'N/A'),
+      ].join(',');
+    });
+
+    const titleLine = `# Vendor Leaderboard: ${leaderboard.periodLabel} (Total: £${leaderboard.totalRevenue.toFixed(2)}, ${leaderboard.totalSalesCount} sales)`;
+
+    return [titleLine, headers.join(','), ...rows].join('\n');
   }
 
   public getAvailableDateKeys(): string[] {
