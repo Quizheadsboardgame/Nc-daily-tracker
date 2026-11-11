@@ -33,6 +33,7 @@ import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../
 import { VendorDropdown } from './VendorDropdown';
 import { downloadSingleLabelPdf, downloadBatchLabelsPdf, generateBarcodeDataUrl } from '../utils/labelPdf';
 import { BrowserMultiFormatReader } from '@zxing/library';
+import { playCheckoutSound, playSaleBeep } from '../utils/sound';
 
 interface OnlineCardsTabProps {
   onNavigateToLedger?: () => void;
@@ -42,36 +43,7 @@ interface OnlineCardsTabProps {
 
 // Audio synthesizer for scanner beeps
 function playScannerBeep(isSuccess = true) {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (isSuccess) {
-      // Pleasant high double beep
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(987.77, ctx.currentTime); // B5
-      osc.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.08); // E6
-      gain.gain.setValueAtTime(0.18, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.28);
-    } else {
-      // Error low buzz
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(220, ctx.currentTime);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-    }
-  } catch (e) {
-    // Audio context not allowed or blocked
-  }
+  playSaleBeep(isSuccess);
 }
 
 export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
@@ -294,7 +266,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
         paymentMethod: selectedSaleMethod,
       });
 
-      playScannerBeep(true);
+      playCheckoutSound();
       setLastSoldSale(result);
       setScannedCard(null);
       setSaleCustomPrice('');

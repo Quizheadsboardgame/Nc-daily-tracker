@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
+import { useCheckoutSound } from '../utils/sound';
 
 export type AppTab = 'ledger' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenManageSalesmen,
 }) => {
   const { isUnlocked, lock } = useTotalSalesAuth();
+  const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
 
   const handleOpenVendors = () => {
@@ -226,6 +228,32 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Quick Actions */}
+            {/* Sound On / Off Toggle */}
+            <button
+              type="button"
+              id="btn-header-sound-toggle"
+              onClick={toggleSound}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-xs ${
+                soundEnabled
+                  ? 'bg-zinc-900 border-emerald-500/50 text-emerald-300 hover:bg-zinc-800'
+                  : 'bg-zinc-900 border-zinc-750 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+              }`}
+              title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
+              aria-label="Toggle checkout chime sound"
+            >
+              {soundEnabled ? (
+                <>
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Sound: ON</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-3.5 h-3.5 text-zinc-400" />
+                  <span className="hidden sm:inline">Sound: OFF</span>
+                </>
+              )}
+            </button>
+
             {isUnlocked && (
               <button
                 type="button"

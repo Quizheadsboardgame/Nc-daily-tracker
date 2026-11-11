@@ -22,12 +22,14 @@ import {
   Search,
   Plus,
   BookOpen,
-  Boxes
+  Boxes,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { PaymentMethod, OnlineCard } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
-import { playSaleBeep } from '../utils/sound';
+import { playSaleBeep, playCheckoutSound, useCheckoutSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
   onSaleRecorded?: () => void;
@@ -39,6 +41,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   knownVendors,
 }) => {
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+  const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
   const currentDateKey = getLocalDateKey();
 
   // Sale form states
@@ -268,7 +271,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         });
       }
 
-      playSaleBeep(true);
+      playCheckoutSound();
       setSuccessNotice({
         vendor: selectedVendor.trim(),
         item: finalItemDesc,
@@ -334,11 +337,37 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           </div>
 
           {/* Right Status & Log In Action */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="hidden md:flex items-center gap-2 text-xs text-zinc-400 font-medium">
               <Calendar className="w-3.5 h-3.5 text-zinc-400" />
               <span>{formatDisplayDate(currentDateKey)}</span>
             </div>
+
+            {/* Checkout Sound Effect Toggle */}
+            <button
+              type="button"
+              id="btn-pos-sound-toggle"
+              onClick={toggleSound}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-xs ${
+                soundEnabled
+                  ? 'bg-zinc-900 border-emerald-500/50 text-emerald-300 hover:bg-zinc-800'
+                  : 'bg-zinc-900 border-zinc-750 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+              }`}
+              title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
+              aria-label="Toggle checkout chime sound"
+            >
+              {soundEnabled ? (
+                <>
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>Sound: ON</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 text-zinc-400" />
+                  <span>Sound: OFF</span>
+                </>
+              )}
+            </button>
 
             <button
               type="button"

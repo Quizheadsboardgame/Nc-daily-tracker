@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe, BookOpen, ShoppingBag, Boxes, Sparkles, Layers } from 'lucide-react';
+import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe, BookOpen, ShoppingBag, Boxes, Sparkles, Layers, Volume2, VolumeX } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { cloudDb } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
+import { playCheckoutSound, useCheckoutSound } from '../utils/sound';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -37,6 +38,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const knownVendors = propKnownVendors || propKnownSalesmen || [];
   const handleAddVendor = onAddVendor || onAddSalesman;
   const handleOpenManageVendors = onOpenManageVendors || onOpenManageSalesmen;
+  const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
 
   const [vendorName, setVendorName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
@@ -156,6 +158,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       paymentMethod,
       notes: notes.trim() || undefined,
     });
+
+    playCheckoutSound();
 
     const methodDisplay =
       paymentMethod === 'traded_out'
@@ -637,6 +641,32 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Sound Toggle Button */}
+            <button
+              type="button"
+              id="btn-form-sound-toggle"
+              onClick={toggleSound}
+              className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                soundEnabled
+                  ? 'bg-zinc-100 text-emerald-800 border-emerald-300/80 hover:bg-emerald-50'
+                  : 'bg-zinc-100 text-zinc-400 border-zinc-200 hover:bg-zinc-200 hover:text-zinc-600'
+              }`}
+              title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
+              aria-label="Toggle checkout chime sound"
+            >
+              {soundEnabled ? (
+                <>
+                  <Volume2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-[11px] font-bold">Sound: ON</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 text-zinc-400" />
+                  <span className="text-[11px] font-bold">Sound: OFF</span>
+                </>
+              )}
+            </button>
+
             <button
               type="submit"
               id="btn-submit-new-sale"
