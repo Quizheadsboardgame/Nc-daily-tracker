@@ -440,9 +440,10 @@ class CloudSalesDatabase {
                 const data = change.doc.data();
                 const saleId = change.doc.id;
                 const saleTimestamp = data.timestamp || 0;
+                const saleAmount = Number(data.amount) || 0;
                 // Only trigger sound for sales recorded recently (within the last 45 seconds) and not yet played locally
                 if (Date.now() - saleTimestamp < 45000 && !isSaleSoundRecentlyPlayed(saleId)) {
-                  playCheckoutSound(false, saleId);
+                  playCheckoutSound(false, saleId, saleAmount);
                 }
               }
             });
@@ -836,8 +837,8 @@ class CloudSalesDatabase {
     // Store in cache & notify
     this.salesCache.set(id, record);
 
-    // Play changing till sound immediately on this device and mark ID to avoid double-firing from Firestore echo
-    playCheckoutSound(false, id);
+    // Play Mario coin sound (or fanfare if > £100) immediately on this device and mark ID to avoid double-firing
+    playCheckoutSound(false, id, record.amount);
 
     if (!this.salesmenList.includes(record.salesmanName)) {
       this.salesmenList.push(record.salesmanName);

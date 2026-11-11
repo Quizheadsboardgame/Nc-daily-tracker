@@ -271,7 +271,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         });
       }
 
-      playCheckoutSound();
+      playCheckoutSound(false, undefined, parsedAmount);
       setSuccessNotice({
         vendor: selectedVendor.trim(),
         item: finalItemDesc,

@@ -266,7 +266,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
         paymentMethod: selectedSaleMethod,
       });
 
-      playCheckoutSound();
+      playCheckoutSound(false, undefined, finalPrice);
       setLastSoldSale(result);
       setScannedCard(null);
       setSaleCustomPrice('');

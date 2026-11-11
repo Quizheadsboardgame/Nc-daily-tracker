@@ -159,7 +159,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       notes: notes.trim() || undefined,
     });
 
-    playCheckoutSound();
+    playCheckoutSound(false, undefined, numAmount);
 
     const methodDisplay =
       paymentMethod === 'traded_out'
