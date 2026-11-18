@@ -95,10 +95,10 @@ export const StoreCreditCheckoutPicker: React.FC<StoreCreditCheckoutPickerProps>
       className={`rounded-2xl border p-3 sm:p-3.5 transition-all ${
         selectedCustomer
           ? isDark
-            ? 'bg-purple-950/40 border-purple-500/60'
+            ? 'bg-purple-500/25 border-purple-400 shadow-md shadow-purple-500/20'
             : 'bg-purple-50/90 border-purple-300'
           : isDark
-          ? 'bg-zinc-950/80 border-zinc-800'
+          ? 'bg-purple-500/15 border-purple-400/60'
           : 'bg-zinc-50/80 border-zinc-200'
       }`}
     >
@@ -106,21 +106,21 @@ export const StoreCreditCheckoutPicker: React.FC<StoreCreditCheckoutPickerProps>
         <div className="flex items-center gap-2 min-w-0">
           <Ticket
             className={`w-4 h-4 shrink-0 ${
-              isDark ? 'text-purple-400' : 'text-purple-700'
+              isDark ? 'text-purple-300' : 'text-purple-700'
             }`}
           />
           <span
             className={`text-xs font-black uppercase tracking-wider ${
-              isDark ? 'text-purple-200' : 'text-purple-950'
+              isDark ? 'text-purple-100' : 'text-purple-950'
             }`}
           >
             Customer Store Credit
           </span>
           {!selectedCustomer && (
             <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                 isDark
-                  ? 'bg-purple-950 text-purple-300 border border-purple-700/60'
+                  ? 'bg-purple-400 text-zinc-950'
                   : 'bg-purple-100 text-purple-800 border border-purple-200'
               }`}
             >

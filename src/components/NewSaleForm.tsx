@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   Tag,
   Banknote,
@@ -98,6 +98,30 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   const itemInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
+
+  const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
+    () => cloudDb.getOnlineCardsSummary().availableCount
+  );
+  const hasOnlineCards = availableOnlineCardsCount > 0;
+
+  useEffect(() => {
+    const syncOnlineCards = () => {
+      setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
+    };
+    syncOnlineCards();
+    return cloudDb.subscribe(syncOnlineCards);
+  }, []);
+
+  useEffect(() => {
+    if (!hasOnlineCards) {
+      if (paymentMode === 'online') {
+        setPaymentMode('card');
+      }
+      if (splitAmounts.online) {
+        setSplitAmounts((prev) => ({ ...prev, online: '' }));
+      }
+    }
+  }, [hasOnlineCards, paymentMode, splitAmounts.online]);
 
   const basketSubtotal = useMemo(
     () => Math.round(basketItems.reduce((sum, item) => sum + item.amount, 0) * 100) / 100,
@@ -826,16 +850,31 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               <button
                 type="button"
                 id="btn-payment-online"
-                onClick={() => setPaymentMode('online')}
-                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-                  paymentMode === 'online'
-                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black'
-                    : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300'
+                disabled={!hasOnlineCards}
+                onClick={() => hasOnlineCards && setPaymentMode('online')}
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
+                  !hasOnlineCards
+                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 opacity-60 cursor-not-allowed'
+                    : paymentMode === 'online'
+                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black cursor-pointer'
+                    : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300 cursor-pointer'
                 }`}
-                title="Sold online via website, socials, or marketplace"
+                title={
+                  hasOnlineCards
+                    ? 'Sold online via website, socials, or marketplace'
+                    : 'Online sales disabled: add cards in Online Cards first'
+                }
               >
-                <Globe className={`w-4 h-4 shrink-0 ${paymentMode === 'online' ? 'text-violet-200' : 'text-violet-700'}`} />
-                <span>Online</span>
+                <Globe
+                  className={`w-4 h-4 shrink-0 ${
+                    !hasOnlineCards
+                      ? 'text-zinc-400'
+                      : paymentMode === 'online'
+                      ? 'text-violet-200'
+                      : 'text-violet-700'
+                  }`}
+                />
+                <span>{hasOnlineCards ? 'Online' : 'Online (Off)'}</span>
               </button>
 
               <button
@@ -1012,38 +1051,53 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                   { key: 'online', label: 'Online (£)', color: 'violet' },
                   { key: 'traded_out', label: 'Trade Out (£)', color: 'amber' },
                 ] as const
-              ).map(({ key, label }) => (
-                <div key={key} className="bg-white rounded-xl border border-cyan-200/80 p-2.5 space-y-1.5">
-                  <div className="flex items-center justify-between gap-1">
-                    <label className="text-[11px] font-bold text-zinc-700">{label}</label>
-                    {checkoutTargetTotal > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleFillRemainder(key)}
-                        className="text-[10px] font-extrabold text-cyan-700 hover:text-cyan-950 bg-cyan-50 hover:bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-200 cursor-pointer"
-                        title={`Put remaining balance into ${label}`}
-                      >
-                        Rem
-                      </button>
-                    )}
+              ).map(({ key, label }) => {
+                const isOnlineDisabled = key === 'online' && !hasOnlineCards;
+                return (
+                  <div
+                    key={key}
+                    className={`bg-white rounded-xl border p-2.5 space-y-1.5 ${
+                      isOnlineDisabled ? 'border-zinc-200 opacity-55' : 'border-cyan-200/80'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-bold text-zinc-700">
+                        {isOnlineDisabled ? 'Online (Off)' : label}
+                      </label>
+                      {checkoutTargetTotal > 0 && !isOnlineDisabled && (
+                        <button
+                          type="button"
+                          onClick={() => handleFillRemainder(key)}
+                          className="text-[10px] font-extrabold text-cyan-700 hover:text-cyan-950 bg-cyan-50 hover:bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-200 cursor-pointer"
+                          title={`Put remaining balance into ${label}`}
+                        >
+                          Rem
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        disabled={isOnlineDisabled}
+                        value={isOnlineDisabled ? '' : splitAmounts[key]}
+                        onChange={(e) => {
+                          setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }));
+                          if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
+                        }}
+                        placeholder={isOnlineDisabled ? '0 cards' : '0.00'}
+                        className={`w-full pl-6 pr-2 py-1 text-xs font-black tabular-nums rounded-lg border focus:outline-hidden text-zinc-950 ${
+                          isOnlineDisabled
+                            ? 'border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                            : 'border-zinc-300 focus:border-cyan-600'
+                        }`}
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={splitAmounts[key]}
-                      onChange={(e) => {
-                        setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }));
-                        if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
-                      }}
-                      placeholder="0.00"
-                      className="w-full pl-6 pr-2 py-1 text-xs font-black tabular-nums rounded-lg border border-zinc-300 focus:outline-hidden focus:border-cyan-600 text-zinc-950"
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {errors.split && <p className="text-[11px] font-bold text-rose-600">{errors.split}</p>}

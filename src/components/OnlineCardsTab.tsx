@@ -177,8 +177,24 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
     };
   }, [isCameraActive]);
 
+  const hasAvailableOnlineCards = summary.availableCount > 0;
+
+  // Auto-disable camera if no online cards remain available
+  useEffect(() => {
+    if (!hasAvailableOnlineCards && isCameraActive) {
+      setIsCameraActive(false);
+    }
+  }, [hasAvailableOnlineCards, isCameraActive]);
+
   // Handle barcode submission (from input gun or camera)
   const handleProcessScannedCode = async (barcodeText: string) => {
+    if (cloudDb.getOnlineCardsSummary().availableCount === 0) {
+      setScanMessage({
+        type: 'error',
+        text: 'Barcode scanning is disabled because no cards are currently listed online.',
+      });
+      return;
+    }
     const clean = barcodeText.trim();
     if (!clean) return;
 
@@ -628,14 +644,22 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {!hasAvailableOnlineCards && (
+              <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                Disabled (0 cards online)
+              </span>
+            )}
             <button
               type="button"
               id="btn-toggle-camera-scanner"
-              onClick={() => setIsCameraActive(!isCameraActive)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                isCameraActive
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
-                  : 'bg-violet-50 hover:bg-violet-100 text-violet-800 border border-violet-300'
+              disabled={!hasAvailableOnlineCards}
+              onClick={() => hasAvailableOnlineCards && setIsCameraActive(!isCameraActive)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                !hasAvailableOnlineCards
+                  ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
+                  : isCameraActive
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer'
+                  : 'bg-violet-50 hover:bg-violet-100 text-violet-800 border border-violet-300 cursor-pointer'
               }`}
             >
               {isCameraActive ? (
@@ -645,7 +669,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                 </>
               ) : (
                 <>
-                  <Camera className="w-4 h-4 text-violet-600" />
+                  <Camera className={`w-4 h-4 ${hasAvailableOnlineCards ? 'text-violet-600' : 'text-zinc-400'}`} />
                   <span>Use Camera Scanner</span>
                 </>
               )}
@@ -654,7 +678,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
         </div>
 
         {/* Camera Live Viewfinder */}
-        {isCameraActive && (
+        {isCameraActive && hasAvailableOnlineCards && (
           <div className="mb-4 bg-zinc-950 rounded-2xl p-4 border border-zinc-800 relative overflow-hidden animate-fade-in flex flex-col items-center">
             <div className="relative w-full max-w-sm aspect-video bg-black rounded-xl overflow-hidden border-2 border-violet-500 shadow-inner">
               <video
@@ -686,24 +710,33 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
           className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
         >
           <div className="relative flex-1 min-w-0">
-            <Barcode className="w-5 h-5 absolute left-3.5 top-3 text-zinc-400 pointer-events-none" />
+            <Barcode className={`w-5 h-5 absolute left-3.5 top-3 pointer-events-none ${hasAvailableOnlineCards ? 'text-zinc-400' : 'text-zinc-300'}`} />
             <input
               ref={scanInputRef}
               type="text"
               id="input-barcode-scanner"
+              disabled={!hasAvailableOnlineCards}
               value={scanInput}
               onChange={(e) => setScanInput(e.target.value)}
-              placeholder="Scan barcode or type code (ONL-...)"
-              className="w-full pl-11 pr-4 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border border-zinc-300 bg-zinc-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-zinc-900 shadow-inner"
-              autoFocus
+              placeholder={
+                hasAvailableOnlineCards
+                  ? 'Scan barcode or type code (ONL-...)'
+                  : 'Barcode scanning disabled — add cards online below first'
+              }
+              className={`w-full pl-11 pr-4 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border shadow-inner ${
+                hasAvailableOnlineCards
+                  ? 'border-zinc-300 bg-zinc-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-zinc-900'
+                  : 'border-zinc-200 bg-zinc-100 text-zinc-400 placeholder-zinc-400 cursor-not-allowed'
+              }`}
+              autoFocus={hasAvailableOnlineCards}
             />
           </div>
 
           <button
             type="submit"
             id="btn-scan-barcode-submit"
-            disabled={!scanInput.trim()}
-            className="w-full sm:w-auto min-h-[42px] px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap justify-center flex items-center"
+            disabled={!hasAvailableOnlineCards || !scanInput.trim()}
+            className="w-full sm:w-auto min-h-[42px] px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap justify-center flex items-center"
           >
             Lookup Barcode
           </button>

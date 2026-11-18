@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Globe, Save, Calendar } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { VendorDropdown } from './VendorDropdown';
+import { cloudDb } from '../db/cloudDatabase';
 
 interface EditSaleModalProps {
   sale: SaleRecord | null;
@@ -200,19 +201,42 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                   <CreditCard className="w-3.5 h-3.5 shrink-0" />
                   <span>Card</span>
                 </button>
-                <button
-                  type="button"
-                  id="edit-btn-payment-online"
-                  onClick={() => setPaymentMethod('online')}
-                  className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                    paymentMethod === 'online'
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-2xs'
-                      : 'bg-violet-50 hover:bg-violet-100 text-violet-900 border-violet-300'
-                  }`}
-                >
-                  <Globe className="w-3.5 h-3.5 shrink-0 text-violet-600" />
-                  <span>Online</span>
-                </button>
+                {(() => {
+                  const canUseOnline =
+                    cloudDb.getOnlineCardsSummary().availableCount > 0 ||
+                    sale?.paymentMethod === 'online';
+                  return (
+                    <button
+                      type="button"
+                      id="edit-btn-payment-online"
+                      disabled={!canUseOnline}
+                      onClick={() => canUseOnline && setPaymentMethod('online')}
+                      title={
+                        canUseOnline
+                          ? 'Mark as Online Sale'
+                          : 'Online sales disabled unless cards are listed online'
+                      }
+                      className={`py-2 px-1.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                        !canUseOnline
+                          ? 'bg-zinc-100 text-zinc-400 border-zinc-200 opacity-60 cursor-not-allowed'
+                          : paymentMethod === 'online'
+                          ? 'bg-violet-600 text-white border-violet-600 shadow-2xs cursor-pointer'
+                          : 'bg-violet-50 hover:bg-violet-100 text-violet-900 border-violet-300 cursor-pointer'
+                      }`}
+                    >
+                      <Globe
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          !canUseOnline
+                            ? 'text-zinc-400'
+                            : paymentMethod === 'online'
+                            ? 'text-violet-200'
+                            : 'text-violet-600'
+                        }`}
+                      />
+                      <span>Online</span>
+                    </button>
+                  );
+                })()}
                 <button
                   type="button"
                   id="edit-btn-payment-traded-out"

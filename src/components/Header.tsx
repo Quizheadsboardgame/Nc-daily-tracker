@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX, Search, Trophy, Vault, Ticket } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Volume2, VolumeX, Search, Trophy, Vault, Ticket, ChevronDown, Check } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth, useCashDrawerAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
-import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
+import { useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 export type AppTab = 'ledger' | 'trades' | 'cash-drawer' | 'store-credit' | 'search' | 'leaderboard' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -29,8 +29,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewSale,
   activeTab = 'ledger',
   onTabChange,
-  onOpenManageVendors,
-  onOpenManageSalesmen,
 }) => {
   const { isUnlocked, lock } = useTotalSalesAuth();
   const { isUnlocked: isCashDrawerUnlocked } = useCashDrawerAuth();
@@ -38,15 +36,35 @@ export const Header: React.FC<HeaderProps> = ({
   const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
 
-  const handleOpenVendors = () => {
-    if (onTabChange) {
-      onTabChange('manage-vendors');
-    } else if (onOpenManageVendors) {
-      onOpenManageVendors();
-    } else if (onOpenManageSalesmen) {
-      onOpenManageSalesmen();
-    }
-  };
+  // Dropdown state for tabs
+  const [isTabMenuOpen, setIsTabMenuOpen] = useState(false);
+  const tabMenuRef = useRef<HTMLDivElement>(null);
+
+  // Reactive badge counts from cloudDb
+  const [, setSyncTick] = useState(0);
+  useEffect(() => {
+    return cloudDb.subscribe(() => setSyncTick((t) => t + 1));
+  }, []);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (tabMenuRef.current && !tabMenuRef.current.contains(e.target as Node)) {
+        setIsTabMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsTabMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const todayKey = getLocalDateKey();
   const isToday = currentDateKey === todayKey;
   const [isHeaderSyncing, setIsHeaderSyncing] = useState(false);
@@ -59,13 +77,85 @@ export const Header: React.FC<HeaderProps> = ({
       const res = await cloudDb.syncNow();
       setSyncLabel(`Synced (${res.onlineCards} cards)!`);
       setTimeout(() => setSyncLabel(null), 3000);
-    } catch (e: any) {
+    } catch {
       setSyncLabel('Sync failed');
       setTimeout(() => setSyncLabel(null), 3000);
     } finally {
       setIsHeaderSyncing(false);
     }
   };
+
+  const dayTradesCount = cloudDb.getTradesForDay(currentDateKey).length;
+  const activeCreditCustomers = cloudDb.getStoreCreditOverview().activeCustomersCount;
+  const availableOnlineCards = cloudDb.getOnlineCardsSummary().availableCount;
+
+  const tabItems: {
+    id: AppTab;
+    label: string;
+    icon: React.ReactNode;
+    badge?: string | number;
+    badgeClass?: string;
+    locked?: boolean;
+  }[] = [
+    {
+      id: 'ledger',
+      label: 'Sales Ledger',
+      icon: <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />,
+    },
+    {
+      id: 'trades',
+      label: 'Trade In',
+      icon: <ArrowLeftRight className="w-4 h-4 text-amber-400 shrink-0" />,
+      badge: dayTradesCount > 0 ? dayTradesCount : undefined,
+      badgeClass: 'bg-amber-400/20 text-amber-300 border border-amber-500/40',
+    },
+    {
+      id: 'cash-drawer',
+      label: 'Cash Drawer',
+      icon: <Vault className="w-4 h-4 text-emerald-400 shrink-0" />,
+      locked: !isCashDrawerUnlocked,
+    },
+    {
+      id: 'store-credit',
+      label: 'Store Credit',
+      icon: <Ticket className="w-4 h-4 text-purple-400 shrink-0" />,
+      badge: activeCreditCustomers > 0 ? activeCreditCustomers : undefined,
+      badgeClass: 'bg-purple-400/20 text-purple-300 border border-purple-500/40',
+    },
+    {
+      id: 'search',
+      label: 'Search Sales',
+      icon: <Search className="w-4 h-4 text-sky-400 shrink-0" />,
+    },
+    {
+      id: 'leaderboard',
+      label: 'Leaderboard',
+      icon: <Trophy className="w-4 h-4 text-amber-400 shrink-0" />,
+    },
+    {
+      id: 'online-cards',
+      label: 'Online Cards',
+      icon: <ShoppingBag className="w-4 h-4 text-violet-400 shrink-0" />,
+      badge: availableOnlineCards > 0 ? `${availableOnlineCards} live` : undefined,
+      badgeClass: 'bg-violet-400/20 text-violet-300 border border-violet-500/40',
+    },
+    {
+      id: 'vendor-check',
+      label: 'Vendor Portal',
+      icon: <Building2 className="w-4 h-4 text-amber-400 shrink-0" />,
+      badge: 'Weekly',
+      badgeClass: 'bg-amber-400/15 text-amber-300 border border-amber-500/30',
+    },
+    {
+      id: 'manage-vendors',
+      label: 'Manage Vendors',
+      icon: <Users className="w-4 h-4 text-emerald-400 shrink-0" />,
+      badge: 'Colors',
+      badgeClass: 'bg-emerald-400/15 text-emerald-300 border border-emerald-500/30',
+    },
+  ];
+
+  const currentTabItem = tabItems.find((t) => t.id === activeTab) || tabItems[0];
 
   return (
     <header className="bg-zinc-950 text-white border-b border-zinc-850 lg:sticky lg:top-0 z-30 shadow-md" id="app-header">
@@ -97,174 +187,107 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>{syncLabel || (isHeaderSyncing ? 'Syncing...' : 'Cloud Synced')}</span>
                 </button>
               </div>
-              <p className="hidden sm:block text-xs text-zinc-400 font-medium mt-0.5">
-                Multi-vendor sales ledger (cash/card), cards trade-ins (cash/credit) & vendor portal
+              <p className="hidden sm:block text-xs text-zinc-400 font-medium mt-0.5 truncate">
+                Multi-vendor sales ledger, trade-ins, store credit &amp; vendor portal
               </p>
             </div>
           </div>
 
-          {/* Center / Navigation Bar (Desktop; mobile uses responsive grid bar below header) */}
+          {/* Center: Responsive Tabs Dropdown Menu (Mobile & Desktop) */}
           {onTabChange && (
-            <nav className="hidden lg:flex items-center p-1 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs font-bold overflow-x-auto shadow-inner">
+            <div className="relative w-full lg:w-auto" ref={tabMenuRef}>
               <button
                 type="button"
-                id="nav-tab-ledger"
-                onClick={() => onTabChange('ledger')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'ledger'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
+                id="btn-tabs-dropdown"
+                aria-haspopup="listbox"
+                aria-expanded={isTabMenuOpen}
+                onClick={() => setIsTabMenuOpen((prev) => !prev)}
+                className="w-full lg:w-64 min-h-[42px] px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-700 hover:border-zinc-500 text-xs font-bold text-white flex items-center justify-between gap-2.5 shadow-inner transition-all cursor-pointer"
               >
-                <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'ledger' ? 'text-zinc-950' : 'text-zinc-400'}`} />
-                <span>Sales Ledger</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  {currentTabItem.icon}
+                  <span className="truncate font-extrabold text-sm lg:text-xs">{currentTabItem.label}</span>
+                  {currentTabItem.locked && (
+                    <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                  )}
+                  {currentTabItem.badge !== undefined && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 ${
+                        currentTabItem.badgeClass || 'bg-zinc-800 text-zinc-200'
+                      }`}
+                    >
+                      {currentTabItem.badge}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 text-zinc-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider hidden sm:inline">Menu</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-zinc-300 transition-transform duration-150 ${
+                      isTabMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
               </button>
 
-              <button
-                type="button"
-                id="nav-tab-trades"
-                onClick={() => onTabChange('trades')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'trades'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
-                <span>Trade In</span>
-              </button>
+              {isTabMenuOpen && (
+                <div
+                  id="menu-tabs-dropdown"
+                  role="listbox"
+                  aria-label="Select section"
+                  className="absolute left-0 right-0 lg:right-auto lg:w-72 top-full mt-2 z-50 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-1.5 space-y-0.5 max-h-[75vh] overflow-y-auto animate-scale-up"
+                >
+                  {tabItems.map((tab) => {
+                    const isSelected = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        id={`nav-tab-${tab.id}`}
+                        onClick={() => {
+                          onTabChange(tab.id);
+                          setIsTabMenuOpen(false);
+                        }}
+                        className={`w-full min-h-[40px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer whitespace-nowrap ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 font-black shadow-xs'
+                            : 'text-zinc-200 hover:text-white hover:bg-zinc-800/80'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className={isSelected ? 'brightness-90' : ''}>{tab.icon}</span>
+                          <span className="truncate">{tab.label}</span>
+                          {tab.locked && (
+                            <Lock
+                              className={`w-3 h-3 shrink-0 ${
+                                isSelected ? 'text-amber-600' : 'text-amber-400'
+                              }`}
+                            />
+                          )}
+                        </div>
 
-              <button
-                type="button"
-                id="nav-tab-cash-drawer"
-                onClick={() => onTabChange('cash-drawer')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'cash-drawer'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Vault className={`w-4 h-4 ${activeTab === 'cash-drawer' ? 'text-emerald-700' : 'text-emerald-400'}`} />
-                <span>Cash Drawer</span>
-                {!isCashDrawerUnlocked && (
-                  <Lock className={`w-3 h-3 ${activeTab === 'cash-drawer' ? 'text-zinc-600' : 'text-zinc-400'}`} />
-                )}
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-store-credit"
-                onClick={() => onTabChange('store-credit')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'store-credit'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Ticket className={`w-4 h-4 ${activeTab === 'store-credit' ? 'text-purple-700' : 'text-purple-400'}`} />
-                <span>Store Credit</span>
-                {cloudDb.getStoreCreditOverview().activeCustomersCount > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${
-                    activeTab === 'store-credit'
-                      ? 'bg-purple-100 text-purple-900'
-                      : 'bg-purple-950/60 text-purple-300 border border-purple-800/60'
-                  }`}>
-                    {cloudDb.getStoreCreditOverview().activeCustomersCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-search"
-                onClick={() => onTabChange('search')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'search'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Search className={`w-4 h-4 ${activeTab === 'search' ? 'text-blue-600' : 'text-blue-400'}`} />
-                <span>Search Sales</span>
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-leaderboard"
-                onClick={() => onTabChange('leaderboard')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'leaderboard'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Trophy className={`w-4 h-4 ${activeTab === 'leaderboard' ? 'text-amber-600' : 'text-amber-400'}`} />
-                <span>Leaderboard</span>
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-online-cards"
-                onClick={() => onTabChange('online-cards')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'online-cards'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <ShoppingBag className={`w-4 h-4 ${activeTab === 'online-cards' ? 'text-violet-600' : 'text-violet-400'}`} />
-                <span>Online Cards</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${
-                  activeTab === 'online-cards'
-                    ? 'bg-violet-100 text-violet-900'
-                    : 'bg-violet-950/60 text-violet-300 border border-violet-800/60'
-                }`}>
-                  Barcodes
-                </span>
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-vendor-check"
-                onClick={() => onTabChange('vendor-check')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'vendor-check'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Building2 className={`w-4 h-4 ${activeTab === 'vendor-check' ? 'text-amber-600' : 'text-amber-400'}`} />
-                <span>Vendor Portal</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wide ${
-                  activeTab === 'vendor-check'
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
-                }`}>
-                  Weekly (Sun–Sat)
-                </span>
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-manage-vendors"
-                onClick={() => onTabChange('manage-vendors')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'manage-vendors'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <Users className={`w-4 h-4 ${activeTab === 'manage-vendors' ? 'text-emerald-700' : 'text-emerald-400'}`} />
-                <span>Manage Vendors</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${
-                  activeTab === 'manage-vendors'
-                    ? 'bg-emerald-100 text-emerald-900'
-                    : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
-                }`}>
-                  Colors
-                </span>
-              </button>
-            </nav>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {tab.badge !== undefined && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold ${
+                                isSelected
+                                  ? 'bg-zinc-900 text-white'
+                                  : tab.badgeClass || 'bg-zinc-800 text-zinc-300'
+                              }`}
+                            >
+                              {tab.badge}
+                            </span>
+                          )}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Date Selector & Quick Actions */}

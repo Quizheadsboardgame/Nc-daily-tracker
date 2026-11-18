@@ -128,6 +128,34 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     v.toLowerCase().includes(tradeVendorSearch.toLowerCase().trim())
   );
 
+  // Reactive online cards availability (disables Online sale & Barcode scanning unless cards are online)
+  const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
+    () => cloudDb.getOnlineCardsSummary().availableCount
+  );
+  const hasOnlineCards = availableOnlineCardsCount > 0;
+
+  useEffect(() => {
+    const syncOnlineCards = () => {
+      setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
+    };
+    syncOnlineCards();
+    return cloudDb.subscribe(syncOnlineCards);
+  }, []);
+
+  useEffect(() => {
+    if (!hasOnlineCards) {
+      if (paymentMode === 'online') {
+        setPaymentMode('card');
+      }
+      if (splitAmounts.online) {
+        setSplitAmounts((prev) => ({ ...prev, online: '' }));
+      }
+      if (scannedCardInfo) {
+        setScannedCardInfo(null);
+      }
+    }
+  }, [hasOnlineCards, paymentMode, splitAmounts.online, scannedCardInfo]);
+
   // Close vendor dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -144,6 +172,11 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
   // Handle Barcode Scan / Lookup
   const handleBarcodeLookup = (codeToLookup?: string) => {
+    if (!hasOnlineCards) {
+      setFormError('Barcode scanning is disabled because no cards are currently listed online.');
+      return;
+    }
+
     const code = (codeToLookup || barcodeInput).trim();
     if (!code) return;
 
@@ -662,36 +695,36 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           {/* Brand & Locked Badge */}
           <div className="flex items-center justify-between gap-2.5 min-w-0">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700/80 text-white flex items-center justify-center shadow-inner shrink-0">
-                <Database className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-emerald-500/35 to-teal-500/25 border border-emerald-400/70 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                <Database className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-sm sm:text-lg font-black tracking-tight text-white truncate">
                     Daily Sales Tracker
                   </h1>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-extrabold bg-amber-950/80 text-amber-300 border border-amber-600/40 whitespace-nowrap shrink-0">
-                    <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400" />
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black bg-amber-400 text-zinc-950 shadow-sm shadow-amber-500/30 whitespace-nowrap shrink-0">
+                    <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-zinc-950" />
                     <span className="sm:hidden">Locked</span>
                     <span className="hidden sm:inline">Register Terminal (Locked)</span>
                   </span>
                 </div>
-                <p className="hidden sm:block text-[11px] text-zinc-400 font-medium">
-                  Fast counter sale entry • Ledger information & reports hidden
+                <p className="hidden sm:block text-[11px] text-zinc-300 font-medium">
+                  Fast counter sale entry • Ledger information &amp; reports hidden
                 </p>
               </div>
             </div>
 
-            <div className="flex sm:hidden items-center gap-1 text-[11px] text-zinc-400 font-semibold shrink-0 whitespace-nowrap">
-              <Calendar className="w-3 h-3 text-zinc-400" />
+            <div className="flex sm:hidden items-center gap-1 text-[11px] text-cyan-300 font-bold shrink-0 whitespace-nowrap">
+              <Calendar className="w-3 h-3 text-cyan-400" />
               <span>{currentDateKey}</span>
             </div>
           </div>
 
           {/* Right Status & Log In Action */}
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:justify-end">
-            <div className="hidden md:flex items-center gap-2 text-xs text-zinc-400 font-medium whitespace-nowrap">
-              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+            <div className="hidden md:flex items-center gap-2 text-xs text-cyan-200 font-semibold whitespace-nowrap">
+              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
               <span>{formatDisplayDate(currentDateKey)}</span>
             </div>
 
@@ -701,10 +734,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 type="button"
                 id="btn-pos-activate-audio"
                 onClick={unlockAudio}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-black rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition animate-pulse cursor-pointer shadow-xs whitespace-nowrap"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-black rounded-xl bg-amber-400 text-zinc-950 border border-amber-200 hover:bg-amber-300 transition animate-pulse cursor-pointer shadow-lg shadow-amber-500/30 whitespace-nowrap"
                 title="Browser requires 1 tap to allow sound on this device. Click to activate!"
               >
-                <Volume2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <Volume2 className="w-3.5 h-3.5 text-zinc-950 shrink-0" />
                 <span>Tap to Enable Sound</span>
               </button>
             )}
@@ -714,17 +747,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               type="button"
               id="btn-pos-sound-toggle"
               onClick={toggleSound}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-xs whitespace-nowrap ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-extrabold rounded-xl border transition-all cursor-pointer shadow-sm whitespace-nowrap ${
                 soundEnabled
-                  ? 'bg-zinc-900 border-emerald-500/50 text-emerald-300 hover:bg-zinc-800'
-                  : 'bg-zinc-900 border-zinc-750 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 hover:bg-emerald-500/30 shadow-emerald-500/15'
+                  : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white'
               }`}
               title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
               aria-label="Toggle checkout chime sound"
             >
               {soundEnabled ? (
                 <>
-                  <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <Volume2 className="w-4 h-4 text-emerald-300 shrink-0" />
                   <span>Sound: ON</span>
                 </>
               ) : (
@@ -741,7 +774,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 type="button"
                 id="btn-pos-test-sound"
                 onClick={testMarioSound}
-                className="inline-flex items-center justify-center gap-1 px-3 min-h-[40px] text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 transition cursor-pointer whitespace-nowrap shrink-0"
+                className="inline-flex items-center justify-center gap-1 px-3 min-h-[40px] text-xs font-extrabold rounded-xl border border-cyan-400/60 bg-cyan-500/20 text-cyan-200 hover:text-white hover:bg-cyan-500/30 transition cursor-pointer whitespace-nowrap shrink-0"
                 title="Test Mario Coin sound effect on this device"
               >
                 <span>Test 🪙</span>
@@ -752,7 +785,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               type="button"
               id="btn-login-full-experience"
               onClick={() => setIsPasscodeModalOpen(true)}
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[40px] text-xs font-black text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:scale-98 rounded-xl shadow-md shadow-emerald-950/50 transition-all cursor-pointer whitespace-nowrap"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[40px] text-xs font-black text-zinc-950 bg-gradient-to-r from-emerald-400 via-green-400 to-lime-400 hover:from-emerald-300 hover:to-lime-300 active:scale-98 rounded-xl shadow-lg shadow-emerald-500/30 transition-all cursor-pointer whitespace-nowrap"
               title="Enter passcode to unlock full dashboard and tabs"
             >
               <KeyRound className="w-4 h-4 text-zinc-950 shrink-0" />
@@ -766,23 +799,23 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       {/* Main Terminal Body */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
         {/* Security & Terminal Mode Banner */}
-        <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-300 shadow-sm flex items-start sm:items-center justify-between gap-3 flex-wrap">
+        <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-700/80 text-zinc-200 shadow-md flex items-start sm:items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0">
+            <div className="p-2 rounded-xl bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/25 shrink-0">
               <Lock className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">
+              <h2 className="text-sm font-black text-white">
                 Locked Register Mode Active
               </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className="text-xs text-zinc-300 mt-0.5">
                 Record counter sales and card trade-ins here. Historical totals, ledgers, and reports remain hidden until a manager logs in.
               </p>
             </div>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-500/40 shrink-0">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/25 text-emerald-200 border border-emerald-400/70 shadow-sm shrink-0">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+            <Cloud className="w-3.5 h-3.5 text-emerald-300" />
             <span>Cloud Synced</span>
           </div>
         </div>
@@ -798,8 +831,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
             }}
             className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
               terminalMode === 'sale'
-                ? 'bg-emerald-500 text-zinc-950 shadow-md'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
+                ? 'bg-gradient-to-r from-emerald-400 to-green-400 text-zinc-950 shadow-lg shadow-emerald-500/30'
+                : 'text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/25'
             }`}
           >
             <PlusCircle className={`w-4 h-4 shrink-0 ${terminalMode === 'sale' ? 'text-zinc-950' : 'text-emerald-400'}`} />
@@ -815,8 +848,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
             }}
             className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
               terminalMode === 'trade'
-                ? 'bg-amber-400 text-zinc-950 shadow-md'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
+                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-zinc-950 shadow-lg shadow-amber-500/30'
+                : 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 border border-amber-500/25'
             }`}
           >
             <ArrowLeftRight className={`w-4 h-4 shrink-0 ${terminalMode === 'trade' ? 'text-zinc-950' : 'text-amber-400'}`} />
@@ -890,17 +923,33 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         {/* Sale Entry Terminal Card */}
         {terminalMode === 'sale' && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-7 shadow-2xl relative overflow-hidden ring-1 ring-white/5">
-          {/* Optional Barcode Quick-Scan Input */}
+          {/* Optional Barcode Quick-Scan Input (Disabled unless cards are online) */}
           <div className="mb-5 pb-5 border-b border-zinc-800">
-            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
-              Scan Barcode or Enter Card Code <span className="text-zinc-500 font-normal">(Optional)</span>
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-violet-300">
+                Scan Barcode or Enter Card Code{' '}
+                <span className="text-zinc-400 font-normal">
+                  {hasOnlineCards ? `(${availableOnlineCardsCount} online)` : '(Disabled)'}
+                </span>
+              </label>
+              {!hasOnlineCards && (
+                <span className="text-[11px] font-bold text-amber-300 bg-amber-500/15 border border-amber-400/50 px-2.5 py-0.5 rounded-md">
+                  No cards online — scanner disabled
+                </span>
+              )}
+            </div>
             <div className="flex items-stretch gap-2">
               <div className="relative flex-1 min-w-0">
-                <Barcode className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                <Barcode
+                  className={`w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                    hasOnlineCards ? 'text-violet-400' : 'text-zinc-600'
+                  }`}
+                />
                 <input
                   ref={barcodeInputRef}
                   type="text"
+                  id="input-pos-barcode"
+                  disabled={!hasOnlineCards}
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -909,23 +958,32 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                       handleBarcodeLookup();
                     }
                   }}
-                  placeholder="Scan barcode or type code..."
-                  className="w-full pl-10 pr-3 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder={
+                    hasOnlineCards
+                      ? 'Scan barcode or type code...'
+                      : 'Barcode scanning disabled (add cards online first)'
+                  }
+                  className={`w-full pl-10 pr-3 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border ${
+                    hasOnlineCards
+                      ? 'border-violet-500/60 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-violet-400 focus:border-violet-400'
+                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-500 placeholder-zinc-600 cursor-not-allowed opacity-60'
+                  }`}
                 />
               </div>
               <button
                 type="button"
+                id="btn-pos-barcode-lookup"
                 onClick={() => handleBarcodeLookup()}
-                disabled={!barcodeInput.trim()}
-                className="px-3.5 sm:px-4 min-h-[44px] rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-white font-bold text-xs border border-zinc-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                disabled={!hasOnlineCards || !barcodeInput.trim()}
+                className="px-3.5 sm:px-4 min-h-[44px] rounded-xl bg-violet-500 hover:bg-violet-400 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs border border-violet-300 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm shadow-violet-500/20"
               >
                 Lookup
               </button>
             </div>
-            {scannedCardInfo && (
-              <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-xs flex items-center justify-between text-emerald-300">
+            {scannedCardInfo && hasOnlineCards && (
+              <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400 text-xs flex items-center justify-between text-emerald-200">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
                   <span>
                     Card loaded: <strong>{scannedCardInfo.cardName}</strong> ({scannedCardInfo.barcode})
                   </span>
@@ -933,7 +991,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setScannedCardInfo(null)}
-                  className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
+                  className="text-xs text-emerald-200 hover:text-white underline cursor-pointer"
                 >
                   Clear card
                 </button>
@@ -1094,17 +1152,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-quick-cat-misc"
                   onClick={() => handleSelectQuickCategory('misc')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     isMiscellaneous
-                      ? 'bg-zinc-800 border-zinc-500 ring-2 ring-zinc-500/30 text-white shadow-sm'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-cyan-400 to-sky-400 border-cyan-200 ring-2 ring-cyan-400/40 text-zinc-950 shadow-lg shadow-cyan-500/30'
+                      : 'bg-cyan-500/15 border-cyan-400/60 text-cyan-100 hover:bg-cyan-500/25 hover:border-cyan-300'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] sm:text-xs font-black truncate">Miscellaneous</span>
-                    <Layers className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <Layers className={`w-3.5 h-3.5 shrink-0 ${isMiscellaneous ? 'text-zinc-950' : 'text-cyan-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-semibold truncate">Any vendor</span>
+                  <span className={`text-[10px] font-bold truncate ${isMiscellaneous ? 'text-zinc-900' : 'text-cyan-300'}`}>Any vendor</span>
                 </button>
 
                 {/* 2. Comics (Auto Kieron) */}
@@ -1112,17 +1170,21 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-quick-cat-comics"
                   onClick={() => handleSelectQuickCategory('comics')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
-                      ? 'bg-emerald-950/80 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-sm'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-emerald-500/50 hover:text-white'
+                      ? 'bg-gradient-to-br from-emerald-400 to-green-400 border-emerald-200 ring-2 ring-emerald-400/40 text-zinc-950 shadow-lg shadow-emerald-500/30'
+                      : 'bg-emerald-500/15 border-emerald-400/60 text-emerald-100 hover:bg-emerald-500/25 hover:border-emerald-300'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] sm:text-xs font-black truncate">Comics</span>
-                    <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <BookOpen className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'comics' ? 'text-zinc-950' : 'text-emerald-300'}`} />
                   </div>
-                  <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/40 self-start truncate max-w-full">
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded self-start truncate max-w-full ${
+                    !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
+                      ? 'bg-zinc-950 text-emerald-300'
+                      : 'bg-emerald-400 text-zinc-950'
+                  }`}>
                     Auto: Kieron
                   </span>
                 </button>
@@ -1132,17 +1194,21 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-quick-cat-accessories"
                   onClick={() => handleSelectQuickCategory('accessories')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
-                      ? 'bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/30 text-white shadow-sm'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-purple-500/50 hover:text-white'
+                      ? 'bg-gradient-to-br from-fuchsia-500 to-purple-500 border-fuchsia-300 ring-2 ring-fuchsia-400/40 text-white shadow-lg shadow-fuchsia-500/30'
+                      : 'bg-fuchsia-500/15 border-fuchsia-400/60 text-fuchsia-100 hover:bg-fuchsia-500/25 hover:border-fuchsia-300'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] sm:text-xs font-black truncate">Accessories</span>
-                    <ShoppingBag className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'accessories' ? 'text-white' : 'text-fuchsia-300'}`} />
                   </div>
-                  <span className="text-[10px] font-extrabold text-purple-300 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40 self-start truncate max-w-full">
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded self-start truncate max-w-full ${
+                    !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
+                      ? 'bg-zinc-950 text-fuchsia-300'
+                      : 'bg-fuchsia-400 text-zinc-950'
+                  }`}>
                     Auto: Newtons
                   </span>
                 </button>
@@ -1152,17 +1218,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-quick-cat-packs"
                   onClick={() => handleSelectQuickCategory('packs')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     !isMiscellaneous && itemDescription.toLowerCase() === 'packs'
-                      ? 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-500/30 text-white shadow-sm'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-blue-500/50 hover:text-white'
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-500 border-blue-300 ring-2 ring-blue-400/40 text-white shadow-lg shadow-blue-500/30'
+                      : 'bg-blue-500/15 border-blue-400/60 text-blue-100 hover:bg-blue-500/25 hover:border-blue-300'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] sm:text-xs font-black truncate">Packs</span>
-                    <Boxes className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <Boxes className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-white' : 'text-blue-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-semibold truncate">Any vendor</span>
+                  <span className={`text-[10px] font-bold truncate ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-100' : 'text-blue-300'}`}>Any vendor</span>
                 </button>
               </div>
             </div>
@@ -1228,10 +1294,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-pos-add-to-basket"
                   onClick={handleAddToBasket}
-                  className="min-h-[48px] px-4 py-3 rounded-2xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/60 text-indigo-200 font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                  className="min-h-[48px] px-4 py-3 rounded-2xl bg-indigo-500 hover:bg-indigo-400 border border-indigo-300 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-lg shadow-indigo-500/30"
                   title="Add item to multi-item basket before checkout"
                 >
-                  <ShoppingCart className="w-4 h-4 text-indigo-300 shrink-0" />
+                  <ShoppingCart className="w-4 h-4 text-white shrink-0" />
                   <span>+ Add to Basket</span>
                 </button>
               </div>
@@ -1298,7 +1364,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
             {/* 4. Payment Method Selection (Cash, Card, Online, Trade Out, Split) */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-200 mb-2">
                 Payment Method <span className="text-emerald-400">*</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -1308,15 +1374,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setPaymentMode('cash')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     paymentMode === 'cash'
-                      ? 'bg-emerald-950/80 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-emerald-400 to-green-500 border-emerald-200 ring-2 ring-emerald-400/40 text-zinc-950 shadow-lg shadow-emerald-500/35'
+                      : 'bg-emerald-500/15 border-emerald-400/60 text-emerald-100 hover:bg-emerald-500/25 hover:border-emerald-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider">Cash</span>
-                    <Banknote className="w-4 h-4 text-emerald-400" />
+                    <Banknote className={`w-4 h-4 ${paymentMode === 'cash' ? 'text-zinc-950' : 'text-emerald-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-medium">Till / Notes</span>
+                  <span className={`text-[10px] font-bold ${paymentMode === 'cash' ? 'text-zinc-900' : 'text-emerald-300'}`}>Till / Notes</span>
                 </button>
 
                 <button
@@ -1325,32 +1391,58 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setPaymentMode('card')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     paymentMode === 'card'
-                      ? 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-sky-400 to-blue-500 border-sky-200 ring-2 ring-sky-400/40 text-zinc-950 shadow-lg shadow-sky-500/35'
+                      : 'bg-sky-500/15 border-sky-400/60 text-sky-100 hover:bg-sky-500/25 hover:border-sky-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider">Card</span>
-                    <CreditCard className="w-4 h-4 text-blue-400" />
+                    <CreditCard className={`w-4 h-4 ${paymentMode === 'card' ? 'text-zinc-950' : 'text-sky-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-medium">PDQ / Reader</span>
+                  <span className={`text-[10px] font-bold ${paymentMode === 'card' ? 'text-zinc-900' : 'text-sky-300'}`}>PDQ / Reader</span>
                 </button>
 
                 <button
                   type="button"
                   id="btn-pos-method-online"
-                  onClick={() => setPaymentMode('online')}
-                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    paymentMode === 'online'
-                      ? 'bg-violet-950/80 border-violet-500 ring-2 ring-violet-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                  disabled={!hasOnlineCards}
+                  onClick={() => hasOnlineCards && setPaymentMode('online')}
+                  title={
+                    hasOnlineCards
+                      ? 'Sold online via website, socials, or marketplace'
+                      : 'Disabled: add cards in Online Cards first to record online sales'
+                  }
+                  className={`p-3 rounded-2xl border-2 text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    !hasOnlineCards
+                      ? 'bg-zinc-950 border-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed'
+                      : paymentMode === 'online'
+                      ? 'bg-gradient-to-br from-violet-400 to-purple-500 border-violet-200 ring-2 ring-violet-400/40 text-zinc-950 shadow-lg shadow-violet-500/35 cursor-pointer'
+                      : 'bg-violet-500/15 border-violet-400/60 text-violet-100 hover:bg-violet-500/25 hover:border-violet-300 cursor-pointer'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider">Online</span>
-                    <Globe className="w-4 h-4 text-violet-400" />
+                    <Globe
+                      className={`w-4 h-4 ${
+                        !hasOnlineCards
+                          ? 'text-zinc-600'
+                          : paymentMode === 'online'
+                          ? 'text-zinc-950'
+                          : 'text-violet-300'
+                      }`}
+                    />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-medium">Web order</span>
+                  <span
+                    className={`text-[10px] font-bold ${
+                      !hasOnlineCards
+                        ? 'text-zinc-500'
+                        : paymentMode === 'online'
+                        ? 'text-zinc-900'
+                        : 'text-violet-300'
+                    }`}
+                  >
+                    {hasOnlineCards ? 'Web order' : 'No cards online'}
+                  </span>
                 </button>
 
                 <button
@@ -1359,15 +1451,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setPaymentMode('traded_out')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     paymentMode === 'traded_out'
-                      ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-amber-400 to-orange-500 border-amber-200 ring-2 ring-amber-400/40 text-zinc-950 shadow-lg shadow-amber-500/35'
+                      : 'bg-amber-500/15 border-amber-400/60 text-amber-100 hover:bg-amber-500/25 hover:border-amber-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider">Trade Out</span>
-                    <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+                    <ArrowLeftRight className={`w-4 h-4 ${paymentMode === 'traded_out' ? 'text-zinc-950' : 'text-amber-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-medium">Card deal trade</span>
+                  <span className={`text-[10px] font-bold ${paymentMode === 'traded_out' ? 'text-zinc-900' : 'text-amber-300'}`}>Card deal trade</span>
                 </button>
 
                 <button
@@ -1376,15 +1468,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setPaymentMode('split')}
                   className={`col-span-2 sm:col-span-1 p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     paymentMode === 'split'
-                      ? 'bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-400/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-cyan-400 to-teal-400 border-cyan-200 ring-2 ring-cyan-400/40 text-zinc-950 shadow-lg shadow-cyan-500/35'
+                      : 'bg-cyan-500/15 border-cyan-400/60 text-cyan-100 hover:bg-cyan-500/25 hover:border-cyan-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider">Split Pay</span>
-                    <Split className="w-4 h-4 text-cyan-400" />
+                    <Split className={`w-4 h-4 ${paymentMode === 'split' ? 'text-zinc-950' : 'text-cyan-300'}`} />
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-medium">Cash + Card mix</span>
+                  <span className={`text-[10px] font-bold ${paymentMode === 'split' ? 'text-zinc-900' : 'text-cyan-300'}`}>Cash + Card mix</span>
                 </button>
               </div>
             </div>
@@ -1393,25 +1485,25 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
             {paymentMode === 'split' && (
               <div
                 id="panel-pos-split-payment"
-                className="rounded-2xl bg-cyan-950/35 border border-cyan-500/40 p-3.5 sm:p-4 space-y-3 animate-fade-in"
+                className="rounded-2xl bg-cyan-500/15 border border-cyan-400/60 p-3.5 sm:p-4 space-y-3 animate-fade-in"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-300">
-                    <Split className="w-4 h-4 text-cyan-400" />
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-200">
+                    <Split className="w-4 h-4 text-cyan-300" />
                     <span>Split Breakdown</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-zinc-400">
+                    <span className="text-cyan-100">
                       Target: <strong className="text-white tabular-nums">{formatCurrency(checkoutTargetTotal)}</strong>
                     </span>
                     {checkoutTargetTotal > 0 && (
                       <span
                         className={`px-2 py-0.5 rounded-md font-extrabold text-[11px] tabular-nums border ${
                           isSplitBalanced
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            ? 'bg-emerald-400 text-zinc-950 border-emerald-200'
                             : splitRemaining > 0
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                            : 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                            ? 'bg-amber-400 text-zinc-950 border-amber-200'
+                            : 'bg-rose-500 text-white border-rose-300'
                         }`}
                       >
                         {isSplitBalanced
@@ -1432,34 +1524,49 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                       { key: 'online', label: 'Online (£)' },
                       { key: 'traded_out', label: 'Trade Out (£)' },
                     ] as const
-                  ).map(({ key, label }) => (
-                    <div key={key} className="bg-zinc-950 rounded-xl border border-zinc-800 p-2.5 space-y-1.5">
-                      <div className="flex items-center justify-between gap-1">
-                        <label className="text-[11px] font-bold text-zinc-300">{label}</label>
-                        {checkoutTargetTotal > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => handleFillRemainder(key)}
-                            className="text-[10px] font-extrabold text-cyan-300 hover:text-white bg-cyan-950/70 px-1.5 py-0.5 rounded border border-cyan-500/40 cursor-pointer"
-                          >
-                            Rem
-                          </button>
-                        )}
+                  ).map(({ key, label }) => {
+                    const isOnlineDisabled = key === 'online' && !hasOnlineCards;
+                    return (
+                      <div
+                        key={key}
+                        className={`bg-zinc-950 rounded-xl border p-2.5 space-y-1.5 ${
+                          isOnlineDisabled ? 'border-zinc-800 opacity-50' : 'border-cyan-500/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <label className="text-[11px] font-bold text-zinc-200">
+                            {isOnlineDisabled ? 'Online (Off)' : label}
+                          </label>
+                          {checkoutTargetTotal > 0 && !isOnlineDisabled && (
+                            <button
+                              type="button"
+                              onClick={() => handleFillRemainder(key)}
+                              className="text-[10px] font-extrabold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 px-1.5 py-0.5 rounded cursor-pointer"
+                            >
+                              Rem
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-2 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            disabled={isOnlineDisabled}
+                            value={isOnlineDisabled ? '' : splitAmounts[key]}
+                            onChange={(e) => setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
+                            placeholder={isOnlineDisabled ? '0 cards' : '0.00'}
+                            className={`w-full pl-6 pr-2 py-1.5 text-sm font-black tabular-nums rounded-lg border bg-zinc-900 text-white focus:outline-hidden ${
+                              isOnlineDisabled
+                                ? 'border-zinc-800 text-zinc-500 cursor-not-allowed'
+                                : 'border-zinc-700 focus:border-cyan-400'
+                            }`}
+                          />
+                        </div>
                       </div>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-2 text-xs font-bold text-zinc-500 pointer-events-none">£</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={splitAmounts[key]}
-                          onChange={(e) => setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
-                          placeholder="0.00"
-                          className="w-full pl-6 pr-2 py-1.5 text-sm font-black tabular-nums rounded-lg border border-zinc-700 bg-zinc-900 text-white focus:outline-hidden focus:border-cyan-400"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1475,7 +1582,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
             {/* 5. Optional Notes / Memo */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
                 Memo / Customer Reference <span className="text-zinc-500 font-normal">(Optional)</span>
               </label>
               <input
@@ -1483,7 +1590,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional memo, order number, counter notes..."
-                className="w-full px-4 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-emerald-500"
+                className="w-full px-4 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-emerald-400"
               />
             </div>
 
@@ -1492,7 +1599,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               type="submit"
               id="btn-terminal-submit-sale"
               disabled={isSubmitting}
-              className="w-full min-h-[48px] px-4 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 disabled:opacity-50 text-zinc-950 font-black text-sm sm:text-base shadow-xl shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer text-center"
+              className="w-full min-h-[48px] px-4 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 disabled:opacity-50 text-zinc-950 font-black text-sm sm:text-base shadow-xl shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer text-center"
             >
               <PlusCircle className="w-5 h-5 text-zinc-950 shrink-0" />
               <span className="truncate">
@@ -1516,9 +1623,9 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-7 shadow-2xl relative overflow-hidden ring-1 ring-white/5 space-y-5"
         >
           {/* Trade-In Banner */}
-          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/30 flex items-start gap-2.5">
-            <ArrowLeftRight className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs text-amber-200/90 leading-relaxed">
+          <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/60 flex items-start gap-2.5">
+            <ArrowLeftRight className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-100 leading-relaxed">
               <strong className="text-amber-300">Cards Trade-In Entry:</strong> Log cards traded in for <strong>Cash Payout</strong> or <strong>Vendor&apos;s Credit</strong>. All valuations are gross amounts before commission reductions.
             </div>
           </div>
@@ -1686,7 +1793,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                       key={inc}
                       type="button"
                       onClick={() => handleQuickAddTradeValue(inc)}
-                      className="text-[11px] font-bold px-2.5 py-1.5 sm:py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors cursor-pointer text-center"
+                      className="text-[11px] font-black px-2.5 py-1.5 sm:py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/50 transition-colors cursor-pointer text-center"
                     >
                       +£{inc}
                     </button>
@@ -1712,7 +1819,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
             {/* 4. Traded In For: Cash Payout vs Vendor's Credit */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-200 mb-2">
                 Cards Traded In For <span className="text-amber-400">*</span>
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1722,18 +1829,18 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setTradeType('cash')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center gap-3 ${
                     tradeType === 'cash'
-                      ? 'bg-emerald-950/80 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-emerald-400 to-green-500 border-emerald-200 ring-2 ring-emerald-400/40 text-zinc-950 shadow-lg shadow-emerald-500/30'
+                      : 'bg-emerald-500/15 border-emerald-400/60 text-emerald-100 hover:bg-emerald-500/25 hover:border-emerald-300'
                   }`}
                 >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    tradeType === 'cash' ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-emerald-400'
+                    tradeType === 'cash' ? 'bg-zinc-950 text-emerald-300' : 'bg-emerald-500/25 text-emerald-300'
                   }`}>
                     <Banknote className="w-5 h-5" />
                   </div>
                   <div>
                     <span className="block text-sm font-black">Cash Payout</span>
-                    <span className="text-[11px] text-zinc-400 font-medium">Cash paid out to customer</span>
+                    <span className={`text-[11px] font-semibold ${tradeType === 'cash' ? 'text-zinc-900' : 'text-emerald-300'}`}>Cash paid out to customer</span>
                   </div>
                 </button>
 
@@ -1743,18 +1850,18 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   onClick={() => setTradeType('credit')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center gap-3 ${
                     tradeType === 'credit'
-                      ? 'bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/30 text-white shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-gradient-to-br from-fuchsia-500 to-purple-500 border-fuchsia-300 ring-2 ring-fuchsia-400/40 text-white shadow-lg shadow-fuchsia-500/30'
+                      : 'bg-fuchsia-500/15 border-fuchsia-400/60 text-fuchsia-100 hover:bg-fuchsia-500/25 hover:border-fuchsia-300'
                   }`}
                 >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    tradeType === 'credit' ? 'bg-purple-400 text-zinc-950' : 'bg-zinc-800 text-purple-400'
+                    tradeType === 'credit' ? 'bg-zinc-950 text-fuchsia-300' : 'bg-fuchsia-500/25 text-fuchsia-300'
                   }`}>
                     <Ticket className="w-5 h-5" />
                   </div>
                   <div>
                     <span className="block text-sm font-black">Vendor&apos;s Credit</span>
-                    <span className="text-[11px] text-zinc-400 font-medium">Store / vendor credit issued</span>
+                    <span className={`text-[11px] font-semibold ${tradeType === 'credit' ? 'text-fuchsia-100' : 'text-fuchsia-300'}`}>Store / vendor credit issued</span>
                   </div>
                 </button>
               </div>
@@ -1866,7 +1973,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               type="submit"
               id="btn-terminal-submit-trade"
               disabled={isSubmitting}
-              className="w-full min-h-[48px] px-4 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 disabled:opacity-50 text-zinc-950 font-black text-sm sm:text-base shadow-xl shadow-amber-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer text-center"
+              className="w-full min-h-[48px] px-4 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-300 hover:to-orange-300 disabled:opacity-50 text-zinc-950 font-black text-sm sm:text-base shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer text-center"
             >
               <ArrowLeftRight className="w-5 h-5 text-zinc-950 shrink-0" />
               <span className="truncate">
