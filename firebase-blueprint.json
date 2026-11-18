@@ -9,13 +9,29 @@
           "type": "string",
           "description": "Vendor name recording the sale"
         },
+        "operatorName": {
+          "type": "string",
+          "description": "Counter operator vendor who rang up the sale on the device"
+        },
         "itemDescription": {
           "type": "string",
           "description": "Description of item sold"
         },
         "amount": {
           "type": "number",
-          "description": "Sale value in GBP"
+          "description": "Net sale value collected in GBP"
+        },
+        "originalAmount": {
+          "type": "number",
+          "description": "Original pre-discount amount in GBP"
+        },
+        "discountAmount": {
+          "type": "number",
+          "description": "Total discount applied in GBP"
+        },
+        "discountLabel": {
+          "type": "string",
+          "description": "Human-readable discount or bundle label"
         },
         "paymentMethod": {
           "type": "string",
@@ -77,6 +93,10 @@
         "storeCreditAmount": {
           "type": "number",
           "description": "Amount paid using customer store credit in GBP"
+        },
+        "relatedHoldId": {
+          "type": "string",
+          "description": "Linked layaway or customer hold document ID"
         }
       },
       "required": ["salesmanName", "itemDescription", "amount", "paymentMethod", "timestamp", "dateKey"]
@@ -109,6 +129,10 @@
         "vendorName": {
           "type": "string",
           "description": "Vendor taking in the cards"
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Counter operator who rang up the trade-in on this device"
         },
         "itemDescription": {
           "type": "string",
@@ -352,6 +376,79 @@
         }
       },
       "required": ["customerId", "customerName", "type", "amount", "delta", "balanceAfter", "description", "dateKey", "timestamp"]
+    },
+    "Hold": {
+      "title": "Hold",
+      "description": "Customer hold / layaway record tracking reserved items, deposits, installment payments, and balance due",
+      "type": "object",
+      "properties": {
+        "customerName": {
+          "type": "string",
+          "description": "Customer full name"
+        },
+        "customerPhone": {
+          "type": "string",
+          "description": "Optional customer phone number or social handle"
+        },
+        "vendorName": {
+          "type": "string",
+          "description": "Vendor owning the held item"
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Counter operator who created the hold"
+        },
+        "itemDescription": {
+          "type": "string",
+          "description": "Description of held cards or items"
+        },
+        "totalPrice": {
+          "type": "number",
+          "description": "Agreed total price in GBP"
+        },
+        "depositPaid": {
+          "type": "number",
+          "description": "Cumulative deposits paid so far in GBP"
+        },
+        "remainingBalance": {
+          "type": "number",
+          "description": "Remaining balance due in GBP"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "completed", "cancelled", "expired"],
+          "description": "Current hold lifecycle status"
+        },
+        "dueDateKey": {
+          "type": "string",
+          "description": "Target pickup or hold expiry date YYYY-MM-DD"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional hold notes"
+        },
+        "payments": {
+          "type": "array",
+          "description": "Installment payments recorded toward this hold"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Epoch milliseconds when created"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Creation date YYYY-MM-DD"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update epoch milliseconds"
+        },
+        "completedAt": {
+          "type": "number",
+          "description": "Epoch milliseconds when paid off & picked up"
+        }
+      },
+      "required": ["customerName", "vendorName", "itemDescription", "totalPrice", "depositPaid", "remainingBalance", "status", "createdAt", "dateKey", "updatedAt"]
     }
   },
   "firestore": {
@@ -386,6 +483,10 @@
     "/store_credit_transactions/{txId}": {
       "schema": "StoreCreditTransaction",
       "description": "Audit log of all store credit issuances, redemptions, and adjustments synced across terminals"
+    },
+    "/holds/{holdId}": {
+      "schema": "Hold",
+      "description": "Customer holds, deposits, and layaway plans synced across terminals"
     }
   }
 }

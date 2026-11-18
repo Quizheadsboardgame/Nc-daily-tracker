@@ -17,6 +17,9 @@ import {
   Award,
   CheckCircle2,
   Users,
+  Ticket,
+  Store,
+  MapPin,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -27,8 +30,8 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
-import { cloudDb, formatCurrency, getLocalDateKey } from '../db/cloudDatabase';
-import { VendorLeaderboardSummary, DailySalesTrendPoint } from '../types';
+import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
+import { VendorLeaderboardSummary, DailySalesTrendPoint, EventVsShopComparison } from '../types';
 
 interface VendorLeaderboardTabProps {
   onNavigateToVendorPortal?: (vendorName?: string) => void;
@@ -69,6 +72,15 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
     void dataVersion;
     return cloudDb.getSalesTrendLastDays(30);
   }, [dataVersion]);
+
+  // Compute Card Show / Event vs Regular Shop Days comparison for selected timeframe
+  const eventComparison: EventVsShopComparison = useMemo(() => {
+    void dataVersion;
+    return cloudDb.getEventVsShopComparison(
+      summary.startDateKey || undefined,
+      summary.endDateKey || undefined
+    );
+  }, [summary.startDateKey, summary.endDateKey, dataVersion]);
 
   const trendStats = useMemo(() => {
     const total = trend30Days.reduce((acc, p) => acc + p.totalRevenue, 0);
@@ -387,6 +399,216 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Card Shows / Events vs. Regular Shop Days Comparison */}
+      <div
+        id="leaderboard-event-vs-shop-card"
+        className="bg-white rounded-2xl border border-zinc-200 p-4 sm:p-5 shadow-xs space-y-4"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-zinc-900 flex items-center gap-2">
+              <Ticket className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Card Shows / Events vs. Regular Shop Days</span>
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Compare average daily sales, trade volume, and event table ROI ({summary.periodLabel}).
+            </p>
+          </div>
+          <span className="text-[11px] font-bold text-zinc-600 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+            {eventComparison.eventStats.daysCount} Event {eventComparison.eventStats.daysCount === 1 ? 'Day' : 'Days'} •{' '}
+            {eventComparison.shopStats.daysCount} Shop {eventComparison.shopStats.daysCount === 1 ? 'Day' : 'Days'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 tabular-nums">
+          {/* Card Shows / Events Bucket */}
+          <div className="rounded-xl border border-amber-300/80 bg-amber-50/50 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-200/80 text-amber-900">
+                  <Ticket className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-950 block">
+                    Card Shows & Events
+                  </span>
+                  <span className="text-[11px] text-amber-800 font-medium">
+                    {eventComparison.eventStats.daysCount}{' '}
+                    {eventComparison.eventStats.daysCount === 1 ? 'tagged event day' : 'tagged event days'}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold uppercase text-amber-800 block">Avg / Event Day</span>
+                <span className="text-base font-black text-amber-950">
+                  {formatCurrency(eventComparison.eventStats.avgDailyRevenue)}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-amber-200/80 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase block">Total Sales</span>
+                <span className="font-black text-zinc-950">
+                  {formatCurrency(eventComparison.eventStats.totalRevenue)}
+                </span>
+                <span className="text-[10px] text-amber-800 block">
+                  {eventComparison.eventStats.salesCount} sales
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase block">Trades Taken</span>
+                <span className="font-black text-zinc-950">
+                  {formatCurrency(eventComparison.eventStats.totalTradesValue)}
+                </span>
+                <span className="text-[10px] text-amber-800 block">
+                  Avg sale: {formatCurrency(eventComparison.eventStats.averageTicket)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase block">Table Costs</span>
+                <span className="font-black text-rose-700">
+                  -{formatCurrency(eventComparison.eventStats.totalTableCost)}
+                </span>
+                <span className="text-[10px] text-amber-800 block">Stall fees</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase block">After Table Cost</span>
+                <span className="font-black text-emerald-700">
+                  {formatCurrency(eventComparison.eventStats.netAfterTableCost)}
+                </span>
+                <span className="text-[10px] text-amber-800 block">Gross minus fees</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Regular Shop Days Bucket */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-zinc-200 text-zinc-800">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-zinc-900 block">
+                    Regular Shop Days
+                  </span>
+                  <span className="text-[11px] text-zinc-500 font-medium">
+                    {eventComparison.shopStats.daysCount}{' '}
+                    {eventComparison.shopStats.daysCount === 1 ? 'active shop day' : 'active shop days'}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold uppercase text-zinc-500 block">Avg / Shop Day</span>
+                <span className="text-base font-black text-zinc-950">
+                  {formatCurrency(eventComparison.shopStats.avgDailyRevenue)}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-200 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block">Total Sales</span>
+                <span className="font-black text-zinc-950">
+                  {formatCurrency(eventComparison.shopStats.totalRevenue)}
+                </span>
+                <span className="text-[10px] text-zinc-500 block">
+                  {eventComparison.shopStats.salesCount} sales
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block">Trades Taken</span>
+                <span className="font-black text-zinc-950">
+                  {formatCurrency(eventComparison.shopStats.totalTradesValue)}
+                </span>
+                <span className="text-[10px] text-zinc-500 block">
+                  Avg sale: {formatCurrency(eventComparison.shopStats.averageTicket)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block">Day Uplift</span>
+                {eventComparison.eventStats.daysCount > 0 && eventComparison.shopStats.avgDailyRevenue > 0 ? (
+                  (() => {
+                    const diffPct = Math.round(
+                      ((eventComparison.eventStats.avgDailyRevenue - eventComparison.shopStats.avgDailyRevenue) /
+                        eventComparison.shopStats.avgDailyRevenue) *
+                        100
+                    );
+                    return (
+                      <>
+                        <span className={`font-black ${diffPct >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                          {diffPct >= 0 ? `+${diffPct}%` : `${diffPct}%`}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 block">Event vs Shop</span>
+                      </>
+                    );
+                  })()
+                ) : (
+                  <span className="text-zinc-400 font-semibold">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tagged Event Breakdown List */}
+        {eventComparison.recentEvents.length > 0 ? (
+          <div className="rounded-xl border border-zinc-200 overflow-hidden">
+            <div className="px-3.5 py-2 bg-zinc-50 border-b border-zinc-200 text-[11px] font-bold uppercase tracking-wider text-zinc-600">
+              Tagged Events in Period ({eventComparison.recentEvents.length})
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {eventComparison.recentEvents.slice(0, 6).map((ev) => (
+                <div
+                  key={ev.dateKey}
+                  className="px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs tabular-nums"
+                >
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-black text-zinc-900">{ev.eventName}</span>
+                    <span className="text-zinc-500 font-medium">{formatDisplayDate(ev.dateKey)}</span>
+                    {ev.location && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-md">
+                        <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
+                        {ev.location}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <span>
+                      <span className="text-zinc-400">Sales: </span>
+                      <strong className="text-zinc-950">{formatCurrency(ev.revenue)}</strong>
+                    </span>
+                    {ev.tradesValue > 0 && (
+                      <span>
+                        <span className="text-zinc-400">Trades: </span>
+                        <strong className="text-amber-700">{formatCurrency(ev.tradesValue)}</strong>
+                      </span>
+                    )}
+                    {(ev.tableCost || 0) > 0 && (
+                      <span>
+                        <span className="text-zinc-400">Table: </span>
+                        <strong className="text-rose-700">-{formatCurrency(ev.tableCost || 0)}</strong>
+                      </span>
+                    )}
+                    <span>
+                      <span className="text-zinc-400">Net: </span>
+                      <strong className="text-emerald-700">
+                        {formatCurrency(ev.revenue - (ev.tableCost || 0))}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] text-zinc-500 bg-zinc-50 border border-zinc-200/80 rounded-xl px-3 py-2">
+            No Card Show / Event days tagged in this period yet — use <strong>Tag Card Show / Event</strong> on the Sales Ledger to compare event days against regular shop days.
+          </p>
+        )}
       </div>
 
       {/* 30-Day Total Sales Trend Line Chart (Recharts) */}
