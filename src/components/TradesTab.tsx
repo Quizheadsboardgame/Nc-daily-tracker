@@ -339,6 +339,51 @@ export const TradesTab: React.FC<TradesTabProps> = ({
               {formErrors.vendorName && (
                 <p className="text-[11px] font-semibold text-rose-600">{formErrors.vendorName}</p>
               )}
+
+              {/* 1-Tap Top 3 Vendor Quick Buttons (Full width matching dropdown) */}
+              {(() => {
+                const top3 = cloudDb.getFrequentVendors(3);
+                if (top3.length === 0) return null;
+                return (
+                  <div
+                    className={`grid gap-1.5 w-full pt-1 ${
+                      top3.length === 1
+                        ? 'grid-cols-1'
+                        : top3.length === 2
+                        ? 'grid-cols-2'
+                        : 'grid-cols-3'
+                    }`}
+                    aria-label="Top 3 frequent trade vendors"
+                  >
+                    {top3.map((vendor) => {
+                      const isSelected = vendorName.toLowerCase() === vendor.toLowerCase();
+                      const color = cloudDb.getVendorColor(vendor);
+                      return (
+                        <button
+                          key={vendor}
+                          type="button"
+                          id={`btn-trade-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                          onClick={() => {
+                            setVendorName(vendor);
+                            if (formErrors.vendorName) setFormErrors((prev) => ({ ...prev, vendorName: '' }));
+                          }}
+                          className={`min-w-0 min-h-[34px] px-2 py-1 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                              : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border-zinc-200'
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="truncate">{vendor}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Cards Traded In description */}

@@ -102,15 +102,19 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
     () => cloudDb.getOnlineCardsSummary().availableCount
   );
+  const [frequentVendors, setFrequentVendors] = useState<string[]>(
+    () => cloudDb.getFrequentVendors(3)
+  );
   const hasOnlineCards = availableOnlineCardsCount > 0;
 
   useEffect(() => {
-    const syncOnlineCards = () => {
+    const syncDbState = () => {
       setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
+      setFrequentVendors(cloudDb.getFrequentVendors(3));
     };
-    syncOnlineCards();
-    return cloudDb.subscribe(syncOnlineCards);
-  }, []);
+    syncDbState();
+    return cloudDb.subscribe(syncDbState);
+  }, [knownVendors]);
 
   useEffect(() => {
     if (!hasOnlineCards) {
@@ -693,6 +697,52 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             )}
 
             {errors.vendor && <p className="text-[11px] font-semibold text-rose-600">{errors.vendor}</p>}
+
+            {/* 1-Tap Top 3 Vendor Quick Buttons (Full width matching dropdown) */}
+            {frequentVendors.length > 0 && !isAddingInline && (
+              <div
+                className={`grid gap-1.5 w-full pt-1 ${
+                  frequentVendors.length === 1
+                    ? 'grid-cols-1'
+                    : frequentVendors.length === 2
+                    ? 'grid-cols-2'
+                    : 'grid-cols-3'
+                }`}
+                aria-label="Top 3 frequent vendors"
+              >
+                {frequentVendors.map((vendor) => {
+                  const isSelected = vendorName.toLowerCase() === vendor.toLowerCase();
+                  const color = cloudDb.getVendorColor(vendor);
+                  return (
+                    <button
+                      key={vendor}
+                      type="button"
+                      id={`btn-form-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                      onClick={() => {
+                        setVendorName(vendor);
+                        if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
+                        if (isMiscellaneous || itemDescription.trim()) {
+                          amountInputRef.current?.focus();
+                        } else {
+                          itemInputRef.current?.focus();
+                        }
+                      }}
+                      className={`min-w-0 min-h-[34px] px-2 py-1 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                          : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border-zinc-200'
+                      }`}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="truncate">{vendor}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Item Sold Description */}

@@ -893,6 +893,46 @@ class CloudSalesDatabase {
     return this.getKnownVendors();
   }
 
+  public getFrequentVendors(limit = 5): string[] {
+    const known = this.getKnownVendors();
+    if (known.length === 0) return [];
+
+    const canonicalByLower = new Map<string, string>();
+    const scores = new Map<string, number>();
+
+    for (const name of known) {
+      const lower = name.toLowerCase();
+      canonicalByLower.set(lower, name);
+      scores.set(name, 0);
+    }
+
+    // Weight sales and trades so the busiest counter vendors bubble to the front
+    const now = Date.now();
+    const recentWindowMs = 14 * 24 * 60 * 60 * 1000;
+
+    this.salesCache.forEach((sale) => {
+      const canonical = canonicalByLower.get((sale.salesmanName || '').trim().toLowerCase());
+      if (!canonical) return;
+      const weight = now - sale.timestamp <= recentWindowMs ? 2 : 1;
+      scores.set(canonical, (scores.get(canonical) || 0) + weight);
+    });
+
+    this.tradesCache.forEach((trade) => {
+      const canonical = canonicalByLower.get((trade.vendorName || '').trim().toLowerCase());
+      if (!canonical) return;
+      const weight = now - trade.timestamp <= recentWindowMs ? 2 : 1;
+      scores.set(canonical, (scores.get(canonical) || 0) + weight);
+    });
+
+    return [...known]
+      .sort((a, b) => {
+        const diff = (scores.get(b) || 0) - (scores.get(a) || 0);
+        if (diff !== 0) return diff;
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+      })
+      .slice(0, Math.max(1, limit));
+  }
+
   public getVendorColor(name: string): string {
     if (!name) return '#64748b';
     const clean = name.trim();

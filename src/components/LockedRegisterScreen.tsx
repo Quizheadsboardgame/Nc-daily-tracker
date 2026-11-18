@@ -132,15 +132,19 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
     () => cloudDb.getOnlineCardsSummary().availableCount
   );
+  const [frequentVendors, setFrequentVendors] = useState<string[]>(
+    () => cloudDb.getFrequentVendors(3)
+  );
   const hasOnlineCards = availableOnlineCardsCount > 0;
 
   useEffect(() => {
-    const syncOnlineCards = () => {
+    const syncDbState = () => {
       setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
+      setFrequentVendors(cloudDb.getFrequentVendors(3));
     };
-    syncOnlineCards();
-    return cloudDb.subscribe(syncOnlineCards);
-  }, []);
+    syncDbState();
+    return cloudDb.subscribe(syncDbState);
+  }, [knownVendors]);
 
   useEffect(() => {
     if (!hasOnlineCards) {
@@ -1017,6 +1021,53 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 </button>
               </div>
 
+              {/* 1-Tap Top 3 Vendor Quick Buttons (Full width matching dropdown) */}
+              {frequentVendors.length > 0 && (
+                <div
+                  className={`grid gap-2 w-full mb-2.5 ${
+                    frequentVendors.length === 1
+                      ? 'grid-cols-1'
+                      : frequentVendors.length === 2
+                      ? 'grid-cols-2'
+                      : 'grid-cols-3'
+                  }`}
+                  aria-label="Top 3 frequent vendors"
+                >
+                  {frequentVendors.map((vendor) => {
+                    const isSelected = selectedVendor.toLowerCase() === vendor.toLowerCase();
+                    const color = cloudDb.getVendorColor(vendor);
+                    return (
+                      <button
+                        key={vendor}
+                        type="button"
+                        id={`btn-pos-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                        onClick={() => {
+                          setSelectedVendor(vendor);
+                          setIsVendorDropdownOpen(false);
+                          setFormError(null);
+                          if (isMiscellaneous || itemDescription.trim()) {
+                            amountInputRef.current?.focus();
+                          } else {
+                            itemInputRef.current?.focus();
+                          }
+                        }}
+                        className={`min-w-0 min-h-[40px] px-2.5 py-1.5 rounded-xl border-2 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 border-emerald-400 ring-2 ring-emerald-400/50 shadow-md'
+                            : 'bg-zinc-950/90 text-zinc-100 border-zinc-700 hover:border-emerald-400/70 hover:bg-zinc-800'
+                        }`}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/40 shadow-2xs"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="truncate">{vendor}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Vendor Selector Dropdown */}
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -1646,6 +1697,49 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   <span>Add New Vendor</span>
                 </button>
               </div>
+
+              {/* 1-Tap Top 3 Vendor Quick Buttons (Trade-In, full width matching dropdown) */}
+              {frequentVendors.length > 0 && (
+                <div
+                  className={`grid gap-2 w-full mb-2.5 ${
+                    frequentVendors.length === 1
+                      ? 'grid-cols-1'
+                      : frequentVendors.length === 2
+                      ? 'grid-cols-2'
+                      : 'grid-cols-3'
+                  }`}
+                  aria-label="Top 3 frequent trade vendors"
+                >
+                  {frequentVendors.map((vendor) => {
+                    const isSelected = tradeVendor.toLowerCase() === vendor.toLowerCase();
+                    const color = cloudDb.getVendorColor(vendor);
+                    return (
+                      <button
+                        key={`trade-${vendor}`}
+                        type="button"
+                        id={`btn-pos-trade-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                        onClick={() => {
+                          setTradeVendor(vendor);
+                          setIsTradeVendorDropdownOpen(false);
+                          setFormError(null);
+                          tradeItemInputRef.current?.focus();
+                        }}
+                        className={`min-w-0 min-h-[40px] px-2.5 py-1.5 rounded-xl border-2 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                            : 'bg-zinc-950/90 text-zinc-100 border-zinc-700 hover:border-amber-400/70 hover:bg-zinc-800'
+                        }`}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/40 shadow-2xs"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="truncate">{vendor}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="relative" ref={tradeDropdownRef}>
                 <button
