@@ -313,14 +313,14 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-none min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5 shrink-0" />
                 <span>Reset Filters</span>
               </button>
             )}
@@ -329,14 +329,14 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
               type="button"
               onClick={handleExportCsv}
               disabled={filteredSales.length === 0}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm ${
+              className={`flex-1 sm:flex-none min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm whitespace-nowrap ${
                 filteredSales.length === 0
                   ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
               }`}
             >
-              <Download className="w-4 h-4" />
-              <span>Export Results ({filteredSales.length})</span>
+              <Download className="w-4 h-4 shrink-0" />
+              <span>Export ({filteredSales.length})</span>
             </button>
           </div>
         </div>
@@ -405,23 +405,23 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
 
         {/* Custom Date Range Picker (shown only when custom is selected) */}
         {dateScope === 'custom' && (
-          <div className="mt-3 p-3 bg-zinc-950/70 border border-zinc-700/80 rounded-xl flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-400 font-medium">From:</span>
+          <div className="mt-3 p-3 bg-zinc-950/70 border border-zinc-700/80 rounded-xl flex flex-col sm:flex-row sm:items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-0">
+              <span className="text-xs text-zinc-400 font-medium shrink-0">From:</span>
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:ring-1 focus:ring-blue-500"
+                className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:ring-1 focus:ring-blue-500 flex-1 min-w-0 [color-scheme:dark]"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-400 font-medium">To:</span>
+            <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-0">
+              <span className="text-xs text-zinc-400 font-medium shrink-0">To:</span>
               <input
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:ring-1 focus:ring-blue-500"
+                className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:ring-1 focus:ring-blue-500 flex-1 min-w-0 [color-scheme:dark]"
               />
             </div>
             {(customStartDate || customEndDate) && (
@@ -431,7 +431,7 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                   setCustomStartDate('');
                   setCustomEndDate('');
                 }}
-                className="text-xs text-zinc-400 hover:text-white underline"
+                className="text-xs text-zinc-400 hover:text-white underline self-start sm:self-auto"
               >
                 Clear Dates
               </button>
@@ -440,73 +440,79 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
         )}
 
         {/* Secondary Filters Bar: Payment, Channel, Sort */}
-        <div className="mt-4 pt-4 border-t border-zinc-800/60 flex items-center justify-between gap-3 flex-wrap text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-zinc-400 font-medium flex items-center gap-1">
-              <Filter className="w-3.5 h-3.5" />
-              <span>Payment:</span>
-            </span>
-            <div className="inline-flex rounded-lg bg-zinc-950 p-1 border border-zinc-800">
-              {(['all', 'cash', 'card', 'online', 'traded_out'] as const).map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setPaymentFilter(method)}
-                  className={`px-2.5 py-1 rounded-md capitalize font-semibold transition cursor-pointer ${
-                    paymentFilter === method
-                      ? 'bg-blue-600 text-white'
-                      : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  {method === 'traded_out' ? 'Traded Out' : method}
-                </button>
-              ))}
+        <div className="mt-4 pt-4 border-t border-zinc-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-wrap w-full lg:w-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                <Filter className="w-3.5 h-3.5" />
+                <span>Payment:</span>
+              </span>
+              <div className="grid grid-cols-3 sm:inline-flex gap-1 rounded-xl bg-zinc-950 p-1 border border-zinc-800 w-full sm:w-auto">
+                {(['all', 'cash', 'card', 'online', 'traded_out'] as const).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setPaymentFilter(method)}
+                    className={`min-h-[36px] px-2.5 py-1 rounded-lg capitalize font-semibold transition cursor-pointer text-center whitespace-nowrap ${
+                      method === 'traded_out' ? 'col-span-2 sm:col-span-1' : ''
+                    } ${
+                      paymentFilter === method
+                        ? 'bg-blue-600 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {method === 'traded_out' ? 'Trade Out' : method}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <span className="text-zinc-400 font-medium ml-2 flex items-center gap-1">
-              <Store className="w-3.5 h-3.5" />
-              <span>Channel:</span>
-            </span>
-            <div className="inline-flex rounded-lg bg-zinc-950 p-1 border border-zinc-800">
-              <button
-                type="button"
-                onClick={() => setChannelFilter('all')}
-                className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
-                  channelFilter === 'all' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setChannelFilter('in_person')}
-                className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
-                  channelFilter === 'in_person' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                In-Person
-              </button>
-              <button
-                type="button"
-                onClick={() => setChannelFilter('online')}
-                className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
-                  channelFilter === 'online' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Online
-              </button>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                <Store className="w-3.5 h-3.5" />
+                <span>Channel:</span>
+              </span>
+              <div className="grid grid-cols-3 sm:inline-flex gap-1 rounded-xl bg-zinc-950 p-1 border border-zinc-800 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setChannelFilter('all')}
+                  className={`min-h-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
+                    channelFilter === 'all' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChannelFilter('in_person')}
+                  className={`min-h-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
+                    channelFilter === 'in_person' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  In-Person
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChannelFilter('online')}
+                  className={`min-h-[36px] px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer text-center whitespace-nowrap ${
+                    channelFilter === 'online' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Online
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-400 font-medium flex items-center gap-1">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-zinc-400 font-medium flex items-center gap-1 shrink-0">
               <ArrowUpDown className="w-3.5 h-3.5" />
               <span>Sort:</span>
             </span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none cursor-pointer"
+              className="flex-1 sm:flex-none min-h-[36px] bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none cursor-pointer"
             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
@@ -809,17 +815,17 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                         <button
                           type="button"
                           onClick={() => onEditSale(sale)}
-                          className="px-2.5 py-1 rounded-md text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer flex items-center gap-1"
+                          className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer flex items-center gap-1"
                         >
-                          <Edit2 className="w-3 h-3" />
+                          <Edit2 className="w-3.5 h-3.5" />
                           <span>Edit</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setDeleteConfirmId(sale.id)}
-                          className="px-2.5 py-1 rounded-md text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 cursor-pointer flex items-center gap-1"
+                          className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 cursor-pointer flex items-center gap-1"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                           <span>Delete</span>
                         </button>
                       </div>

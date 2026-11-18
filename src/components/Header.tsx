@@ -67,24 +67,24 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="bg-zinc-950 text-white border-b border-zinc-850 sticky top-0 z-30 shadow-md" id="app-header">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
+    <header className="bg-zinc-950 text-white border-b border-zinc-850 lg:sticky lg:top-0 z-30 shadow-md" id="app-header">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           {/* Brand & Database Status */}
-          <div className="flex items-center gap-3.5">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700/80 text-white flex items-center justify-center shadow-inner shrink-0 ring-1 ring-white/10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700/80 text-white flex items-center justify-center shadow-inner shrink-0 ring-1 ring-white/10">
               <Database className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
+                <h1 className="text-base sm:text-xl font-extrabold text-white tracking-tight truncate">
                   Daily Sales Tracker
                 </h1>
                 <button
                   type="button"
                   id="btn-header-cloud-sync"
                   onClick={handleHeaderSync}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/40 shadow-xs cursor-pointer transition-all"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/40 shadow-xs cursor-pointer transition-all whitespace-nowrap shrink-0"
                   title="Synchronized in real-time across all devices via Cloud Firestore. Click to force instant sync."
                 >
                   <span className={`w-2 h-2 rounded-full ${isHeaderSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`} />
@@ -96,15 +96,15 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>{syncLabel || (isHeaderSyncing ? 'Syncing...' : 'Cloud Synced')}</span>
                 </button>
               </div>
-              <p className="text-xs text-zinc-400 font-medium mt-0.5">
+              <p className="hidden sm:block text-xs text-zinc-400 font-medium mt-0.5">
                 Multi-vendor sales ledger (cash/card), cards trade-ins (cash/credit) & vendor portal
               </p>
             </div>
           </div>
 
-          {/* Center / Navigation Bar */}
+          {/* Center / Navigation Bar (Desktop; mobile uses responsive grid bar below header) */}
           {onTabChange && (
-            <nav className="flex items-center p-1 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs font-bold overflow-x-auto shadow-inner">
+            <nav className="hidden lg:flex items-center p-1 bg-zinc-900/90 rounded-xl border border-zinc-800 text-xs font-bold overflow-x-auto shadow-inner">
               <button
                 type="button"
                 id="nav-tab-ledger"
@@ -226,14 +226,14 @@ export const Header: React.FC<HeaderProps> = ({
             </nav>
           )}
 
-          {/* Date Selector & Day Navigation */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center bg-zinc-900 rounded-xl p-1 border border-zinc-800 shadow-inner">
+          {/* Date Selector & Quick Actions */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
+            <div className="flex items-center justify-between sm:justify-start bg-zinc-900 rounded-xl p-1 border border-zinc-800 shadow-inner w-full sm:w-auto min-w-0">
               <button
                 type="button"
                 id="btn-select-today"
                 onClick={() => onDateChange(todayKey)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-3 min-h-[36px] text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   isToday
                     ? 'bg-white text-zinc-950 shadow-xs font-black'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -242,8 +242,8 @@ export const Header: React.FC<HeaderProps> = ({
                 Today
               </button>
 
-              <div className="flex items-center gap-1.5 px-2.5 border-l border-zinc-800 ml-1">
-                <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+              <div className="flex items-center gap-1.5 px-2.5 border-l border-zinc-800 ml-1 min-w-0">
+                <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                 <input
                   type="date"
                   id="date-picker-input"
@@ -251,99 +251,103 @@ export const Header: React.FC<HeaderProps> = ({
                   onChange={(e) => {
                     if (e.target.value) onDateChange(e.target.value);
                   }}
-                  className="text-xs font-bold text-white bg-transparent border-none focus:outline-none cursor-pointer [color-scheme:dark]"
+                  className="text-xs font-bold text-white bg-transparent border-none focus:outline-none cursor-pointer [color-scheme:dark] min-w-0"
                 />
               </div>
             </div>
 
-            {/* Quick Actions */}
-            {/* Audio Unlock Warning / Prompt if device browser blocked audio */}
-            {!isAudioActive && soundEnabled && (
-              <button
-                type="button"
-                id="btn-activate-audio-header"
-                onClick={unlockAudio}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition animate-pulse cursor-pointer shadow-xs"
-                title="Browser requires 1 tap to allow sound on this device. Click to activate!"
-              >
-                <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                <span>Tap to Enable Sound</span>
-              </button>
-            )}
-
-            {/* Sound On / Off Toggle */}
-            <button
-              type="button"
-              id="btn-header-sound-toggle"
-              onClick={toggleSound}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-xs ${
-                soundEnabled
-                  ? 'bg-zinc-900 border-emerald-500/50 text-emerald-300 hover:bg-zinc-800'
-                  : 'bg-zinc-900 border-zinc-750 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-              }`}
-              title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
-              aria-label="Toggle checkout chime sound"
-            >
-              {soundEnabled ? (
-                <>
-                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="hidden sm:inline">Sound: ON</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="hidden sm:inline">Sound: OFF</span>
-                </>
+            {/* Quick Actions Grid on Mobile / Inline Flex on Desktop */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Audio Unlock Warning / Prompt if device browser blocked audio */}
+              {!isAudioActive && soundEnabled && (
+                <button
+                  type="button"
+                  id="btn-activate-audio-header"
+                  onClick={unlockAudio}
+                  className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-black rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition animate-pulse cursor-pointer shadow-xs whitespace-nowrap"
+                  title="Browser requires 1 tap to allow sound on this device. Click to activate!"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Tap to Enable Sound</span>
+                </button>
               )}
-            </button>
 
-            {/* Test Sound Button */}
-            {soundEnabled && isAudioActive && (
+              {/* Sound On / Off Toggle */}
               <button
                 type="button"
-                id="btn-test-sound-header"
-                onClick={testMarioSound}
-                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
-                title="Test Mario Coin sound effect on this device"
+                id="btn-header-sound-toggle"
+                onClick={toggleSound}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-xs whitespace-nowrap ${
+                  soundEnabled
+                    ? 'bg-zinc-900 border-emerald-500/50 text-emerald-300 hover:bg-zinc-800'
+                    : 'bg-zinc-900 border-zinc-750 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                }`}
+                title={soundEnabled ? 'Checkout sound is ON (click to mute)' : 'Checkout sound is OFF (click to turn on)'}
+                aria-label="Toggle checkout chime sound"
               >
-                <span>Test 🪙</span>
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Sound: ON</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span>Sound: OFF</span>
+                  </>
+                )}
               </button>
-            )}
 
-            {isUnlocked && (
+              {/* Test Sound Button */}
+              {soundEnabled && isAudioActive && (
+                <button
+                  type="button"
+                  id="btn-test-sound-header"
+                  onClick={testMarioSound}
+                  className="inline-flex items-center justify-center gap-1 px-2.5 min-h-[40px] text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 transition cursor-pointer whitespace-nowrap"
+                  title="Test Mario Coin sound effect on this device"
+                >
+                  <span>Test 🪙</span>
+                </button>
+              )}
+
+              {isUnlocked && (
+                <button
+                  type="button"
+                  id="btn-header-lock-sales"
+                  onClick={lock}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-bold text-amber-300 bg-zinc-900 border border-zinc-750 hover:border-amber-500/60 rounded-xl hover:bg-zinc-800 transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                  title="Lock screen and return to clerk register terminal"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="sm:hidden">Lock</span>
+                  <span className="hidden sm:inline">Lock Screen</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                id="btn-header-lock-sales"
-                onClick={lock}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-300 bg-zinc-900 border border-zinc-750 hover:border-amber-500/60 rounded-xl hover:bg-zinc-800 transition-all cursor-pointer shadow-xs"
-                title="Lock screen and return to clerk register terminal"
+                id="btn-export-csv"
+                onClick={onExportCsv}
+                disabled={totalSalesCount === 0}
+                className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-bold text-zinc-200 bg-zinc-900 border border-zinc-750 rounded-xl hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                title="Download day sales as CSV"
               >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Lock Screen</span>
+                <Download className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span className="sm:hidden">CSV</span>
+                <span className="hidden sm:inline">Export CSV</span>
               </button>
-            )}
 
-            <button
-              type="button"
-              id="btn-export-csv"
-              onClick={onExportCsv}
-              disabled={totalSalesCount === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-zinc-200 bg-zinc-900 border border-zinc-750 rounded-xl hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
-              title="Download day sales as CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-zinc-400" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-header-new-sale"
-              onClick={onOpenNewSale}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:scale-98 rounded-xl shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4 text-zinc-950" />
-              <span>Record Sale</span>
-            </button>
+              <button
+                type="button"
+                id="btn-header-new-sale"
+                onClick={onOpenNewSale}
+                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-4 min-h-[42px] text-xs font-black text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:scale-98 rounded-xl shadow-md shadow-emerald-950/40 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <PlusCircle className="w-4 h-4 text-zinc-950 shrink-0" />
+                <span>Record Sale</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

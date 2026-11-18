@@ -175,98 +175,103 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
             <button
               type="button"
               onClick={handleExportCsv}
               disabled={summary.entries.length === 0}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm ${
+              className={`w-full sm:w-auto justify-center min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm ${
                 summary.entries.length === 0
                   ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
               }`}
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 shrink-0" />
               <span>Export Leaderboard (CSV)</span>
             </button>
           </div>
         </div>
 
         {/* Timeframe Toggle Buttons (Weekly / Monthly / All-Time) */}
-        <div className="mt-6 pt-5 border-t border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="inline-flex rounded-xl bg-zinc-950 p-1 border border-zinc-800 shadow-inner">
+        <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="grid grid-cols-3 sm:inline-flex gap-1 rounded-xl bg-zinc-950 p-1 border border-zinc-800 shadow-inner w-full sm:w-auto">
             <button
               type="button"
               id="btn-leaderboard-weekly"
               onClick={() => setPeriod('weekly')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-2 sm:px-4 py-2 min-h-[40px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-w-0 ${
                 period === 'weekly'
                   ? 'bg-white text-zinc-950 shadow-sm font-black'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              <Crown className={`w-3.5 h-3.5 ${period === 'weekly' ? 'text-amber-600' : 'text-amber-400'}`} />
-              <span>Weekly Leaderboard</span>
+              <Crown className={`w-3.5 h-3.5 shrink-0 ${period === 'weekly' ? 'text-amber-600' : 'text-amber-400'}`} />
+              <span className="sm:hidden truncate">Weekly</span>
+              <span className="hidden sm:inline">Weekly Leaderboard</span>
             </button>
 
             <button
               type="button"
               id="btn-leaderboard-monthly"
               onClick={() => setPeriod('monthly')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-2 sm:px-4 py-2 min-h-[40px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-w-0 ${
                 period === 'monthly'
                   ? 'bg-white text-zinc-950 shadow-sm font-black'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              <Calendar className={`w-3.5 h-3.5 ${period === 'monthly' ? 'text-blue-600' : 'text-blue-400'}`} />
-              <span>Monthly Leaderboard</span>
+              <Calendar className={`w-3.5 h-3.5 shrink-0 ${period === 'monthly' ? 'text-blue-600' : 'text-blue-400'}`} />
+              <span className="sm:hidden truncate">Monthly</span>
+              <span className="hidden sm:inline">Monthly Leaderboard</span>
             </button>
 
             <button
               type="button"
               id="btn-leaderboard-all-time"
               onClick={() => setPeriod('all-time')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-2 sm:px-4 py-2 min-h-[40px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-w-0 ${
                 period === 'all-time'
                   ? 'bg-white text-zinc-950 shadow-sm font-black'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              <Trophy className={`w-3.5 h-3.5 ${period === 'all-time' ? 'text-amber-500' : 'text-amber-400'}`} />
-              <span>All-Time Leaderboard</span>
+              <Trophy className={`w-3.5 h-3.5 shrink-0 ${period === 'all-time' ? 'text-amber-500' : 'text-amber-400'}`} />
+              <span className="sm:hidden truncate">All-Time</span>
+              <span className="hidden sm:inline">All-Time Leaderboard</span>
             </button>
           </div>
 
           {/* Period Selector & Date Controls */}
           {period !== 'all-time' && (
-            <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800 text-xs">
-              <button
-                type="button"
-                onClick={period === 'weekly' ? handlePrevWeek : handlePrevMonth}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
-                title={period === 'weekly' ? 'Previous Week' : 'Previous Month'}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+            <div className="flex items-center justify-between sm:justify-start gap-2 bg-zinc-950 px-3 py-1.5 min-h-[40px] rounded-xl border border-zinc-800 text-xs w-full sm:w-auto flex-wrap">
+              <div className="flex items-center gap-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={period === 'weekly' ? handlePrevWeek : handlePrevMonth}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                  title={period === 'weekly' ? 'Previous Week' : 'Previous Month'}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
 
-              <span className="font-bold text-white px-2">
-                {summary.periodLabel}
-              </span>
+                <span className="font-bold text-white px-1.5 truncate">
+                  {summary.periodLabel}
+                </span>
 
-              <button
-                type="button"
-                onClick={period === 'weekly' ? handleNextWeek : handleNextMonth}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
-                title={period === 'weekly' ? 'Next Week' : 'Next Month'}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                <button
+                  type="button"
+                  onClick={period === 'weekly' ? handleNextWeek : handleNextMonth}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                  title={period === 'weekly' ? 'Next Week' : 'Next Month'}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={handleResetToCurrent}
-                className="ml-1 text-[11px] font-bold text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                className="px-2 py-1 rounded-md text-[11px] font-bold text-blue-400 hover:text-blue-300 underline cursor-pointer"
               >
                 Current
               </button>
@@ -278,40 +283,40 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Period Revenue */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-zinc-200 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Total Sales Volume</span>
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-zinc-200 shadow-xs flex flex-col justify-between min-w-0">
+          <span className="text-[11px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="truncate">Total Volume</span>
           </span>
-          <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600">
+          <div className="mt-2.5 sm:mt-3 min-w-0">
+            <div className="text-lg sm:text-3xl font-black text-emerald-600 tabular-nums truncate">
               {formatCurrency(summary.totalRevenue)}
             </div>
-            <div className="text-xs text-zinc-400 mt-0.5 font-medium">
-              Across all vendors in period
+            <div className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 font-medium">
+              Across all vendors
             </div>
           </div>
         </div>
 
         {/* Current Champion / Leader */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-zinc-200 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Crown className="w-3.5 h-3.5 text-amber-500" />
-            <span>#1 Top Vendor</span>
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-zinc-200 shadow-xs flex flex-col justify-between min-w-0">
+          <span className="text-[11px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="truncate">#1 Top Vendor</span>
           </span>
-          <div className="mt-3">
+          <div className="mt-2.5 sm:mt-3 min-w-0">
             {summary.leader ? (
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className="w-4 h-4 rounded-full shrink-0 shadow-xs"
+                  className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full shrink-0 shadow-xs"
                   style={{ backgroundColor: summary.leader.color }}
                 />
-                <div>
-                  <div className="text-xl sm:text-2xl font-black text-zinc-900 truncate">
+                <div className="min-w-0">
+                  <div className="text-base sm:text-2xl font-black text-zinc-900 truncate">
                     {summary.leader.vendorName}
                   </div>
-                  <div className="text-xs font-bold text-amber-600">
-                    {formatCurrency(summary.leader.totalRevenue)} ({summary.leader.percentageOfTotal}% share)
+                  <div className="text-[11px] sm:text-xs font-bold text-amber-600 truncate">
+                    {formatCurrency(summary.leader.totalRevenue)} ({summary.leader.percentageOfTotal}%)
                   </div>
                 </div>
               </div>

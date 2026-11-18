@@ -80,8 +80,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-zinc-200 animate-fade-in relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-zinc-200 animate-fade-in relative">
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-zinc-900">Edit Sales Record</h3>
@@ -260,18 +260,18 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             </div>
           </div>
 
-          <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+          <div className="pt-3 border-t border-zinc-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+              className="w-full sm:w-auto min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               id="btn-save-edit-sale"
-              className="px-4 py-2 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="w-full sm:w-auto min-h-[42px] px-4 py-2 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Save Changes</span>

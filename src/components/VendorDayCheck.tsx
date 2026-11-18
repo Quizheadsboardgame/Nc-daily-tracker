@@ -203,59 +203,61 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
           </div>
 
           {/* Period View Mode (Weekly vs Daily) & Export Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
             {/* Segmented Toggle: Weekly vs Daily */}
-            <div className="bg-zinc-100 p-1 rounded-xl flex items-center border border-zinc-200/80 shadow-2xs">
+            <div className="bg-zinc-100 p-1 rounded-xl grid grid-cols-2 sm:inline-flex items-center border border-zinc-200/80 shadow-2xs w-full sm:w-auto">
               <button
                 type="button"
                 id="btn-vendor-view-weekly"
                 onClick={() => setViewMode('weekly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 py-2 min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'weekly'
                     ? 'bg-white text-zinc-900 shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
-                <span>Weekly (Sun–Sat)</span>
+                <CalendarDays className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="truncate">Weekly (Sun–Sat)</span>
               </button>
 
               <button
                 type="button"
                 id="btn-vendor-view-daily"
                 onClick={() => setViewMode('daily')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 py-2 min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'daily'
                     ? 'bg-white text-zinc-900 shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>Daily</span>
               </button>
             </div>
 
-            <button
-              type="button"
-              id="btn-vendor-export-csv"
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-              title="Download CSV for this vendor"
-            >
-              <Download className="w-3.5 h-3.5 text-zinc-500" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                id="btn-vendor-export-csv"
+                onClick={handleExportCsv}
+                className="flex-1 sm:flex-none justify-center min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+                title="Download CSV for this vendor"
+              >
+                <Download className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <span>CSV</span>
+              </button>
 
-            <button
-              type="button"
-              id="btn-vendor-print-slip"
-              onClick={handlePrintSummary}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
-              title="Print summary slip"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Print Slip</span>
-            </button>
+              <button
+                type="button"
+                id="btn-vendor-print-slip"
+                onClick={handlePrintSummary}
+                className="flex-1 sm:flex-none justify-center min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+                title="Print summary slip"
+              >
+                <Printer className="w-3.5 h-3.5 shrink-0" />
+                <span>Print</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -264,7 +266,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
           <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">
             Select Vendor:
           </span>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap">
             {allVendors.map((vendor) => {
               const isSelected = vendor === activeVendor;
               const color = cloudDb.getVendorColor(vendor);
@@ -274,19 +276,21 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   type="button"
                   id={`btn-vendor-tab-${vendor.toLowerCase()}`}
                   onClick={() => setSelectedVendorName(vendor)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2.5 transition-all shrink-0 cursor-pointer border ${
+                  className={`px-3 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition-all cursor-pointer border min-w-0 ${
                     isSelected
                       ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-2 ring-zinc-900/15'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
                   }`}
                 >
-                  <span
-                    className="w-3.5 h-3.5 rounded-full ring-2 ring-white shrink-0 shadow-2xs"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span>{vendor}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full ring-2 ring-white shrink-0 shadow-2xs"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="truncate">{vendor}</span>
+                  </span>
                   {isSelected && (
-                    <span className="text-[10px] uppercase font-bold text-emerald-400 bg-zinc-800 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
                       Active
                     </span>
                   )}
@@ -301,43 +305,45 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
           /* Sunday-to-Saturday Week Navigator */
           <div className="pt-2 border-t border-zinc-100 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  id="btn-week-prev"
-                  onClick={handlePrevWeek}
-                  className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
-                  title="Previous Week"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+              <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  <button
+                    type="button"
+                    id="btn-week-prev"
+                    onClick={handlePrevWeek}
+                    className="p-2 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                    title="Previous Week"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
 
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs font-extrabold">
-                    Week {currentWeek.weekNumber} ({currentWeek.year})
-                  </span>
-                  <span className="text-xs font-bold text-zinc-900">
-                    {currentWeek.startDisplay} – {currentWeek.endDisplay}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs font-extrabold">
+                      Wk {currentWeek.weekNumber} ({currentWeek.year})
+                    </span>
+                    <span className="text-xs font-bold text-zinc-900">
+                      {currentWeek.startDisplay} – {currentWeek.endDisplay}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    id="btn-week-next"
+                    onClick={handleNextWeek}
+                    className="p-2 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
+                    title="Next Week"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  id="btn-week-next"
-                  onClick={handleNextWeek}
-                  className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer"
-                  title="Next Week"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
 
                 {!isCurrentWeekActive && (
                   <button
                     type="button"
                     onClick={handleCurrentWeek}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer ml-1"
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                   >
-                    Jump to Current Week
+                    Current Week
                   </button>
                 )}
               </div>
@@ -348,64 +354,62 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             </div>
 
             {/* Sunday-to-Saturday 7-Day Filter & Status Strip */}
-            <div className="overflow-x-auto pb-1.5 -mx-1 px-1">
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 min-w-[580px] sm:min-w-0">
-                {currentWeek.days.map((day) => {
-                  const dayStat = weekData?.dayBreakdown.find((d) => d.dateKey === day.dateKey);
-                  const isDaySelected = weekFilterDayKey === day.dateKey;
-                  const hasSales = (dayStat?.totalRevenue || 0) > 0;
-                  const hasTrade = (dayStat?.tradeTakenInAmount || 0) > 0;
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 sm:gap-2">
+              {currentWeek.days.map((day) => {
+                const dayStat = weekData?.dayBreakdown.find((d) => d.dateKey === day.dateKey);
+                const isDaySelected = weekFilterDayKey === day.dateKey;
+                const hasSales = (dayStat?.totalRevenue || 0) > 0;
+                const hasTrade = (dayStat?.tradeTakenInAmount || 0) > 0;
 
-                  return (
-                    <button
-                      key={day.dateKey}
-                      type="button"
-                      onClick={() => setWeekFilterDayKey(isDaySelected ? 'all' : day.dateKey)}
-                      className={`p-2 rounded-xl text-center transition-all cursor-pointer border ${
-                        isDaySelected
-                          ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-500/30 shadow-xs'
-                          : day.isToday
-                          ? 'bg-blue-50/80 border-blue-300 text-blue-950 font-bold'
-                          : 'bg-zinc-50/80 hover:bg-zinc-100/80 border-zinc-200 text-zinc-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        <span className={`text-[11px] font-extrabold uppercase ${isDaySelected ? 'text-white' : 'text-zinc-600'}`}>
-                          {day.dayName}
-                        </span>
-                        {day.isToday && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Today" />
-                        )}
-                      </div>
-                      <span className={`text-[10px] block font-medium ${isDaySelected ? 'text-blue-200' : 'text-zinc-500'}`}>
-                        {day.formattedDate}
+                return (
+                  <button
+                    key={day.dateKey}
+                    type="button"
+                    onClick={() => setWeekFilterDayKey(isDaySelected ? 'all' : day.dateKey)}
+                    className={`p-2 min-h-[60px] rounded-xl text-center transition-all cursor-pointer border min-w-0 ${
+                      isDaySelected
+                        ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-500/30 shadow-xs'
+                        : day.isToday
+                        ? 'bg-blue-50/80 border-blue-300 text-blue-950 font-bold'
+                        : 'bg-zinc-50/80 hover:bg-zinc-100/80 border-zinc-200 text-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span className={`text-[11px] font-extrabold uppercase ${isDaySelected ? 'text-white' : 'text-zinc-600'}`}>
+                        {day.dayName}
+                      </span>
+                      {day.isToday && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Today" />
+                      )}
+                    </div>
+                    <span className={`text-[10px] block font-medium ${isDaySelected ? 'text-blue-200' : 'text-zinc-500'}`}>
+                      {day.formattedDate}
+                    </span>
+
+                    <div className="mt-1">
+                      <span className={`text-xs font-black block leading-tight truncate ${
+                        isDaySelected 
+                          ? 'text-white' 
+                          : hasSales 
+                          ? 'text-emerald-700' 
+                          : 'text-zinc-400'
+                      }`}>
+                        {hasSales ? formatCurrency(dayStat!.totalRevenue) : '—'}
                       </span>
 
-                      <div className="mt-1">
-                        <span className={`text-xs font-black block leading-tight ${
-                          isDaySelected 
-                            ? 'text-white' 
-                            : hasSales 
-                            ? 'text-emerald-700' 
-                            : 'text-zinc-400'
-                        }`}>
-                          {hasSales ? formatCurrency(dayStat!.totalRevenue) : '—'}
+                      {hasTrade && (
+                        <span className={`text-[9px] font-extrabold px-1 rounded block mt-0.5 truncate ${
+                          isDaySelected
+                            ? 'bg-amber-400 text-zinc-900'
+                            : 'bg-amber-100 text-amber-900'
+                        }`} title={`Trade taken in: ${formatCurrency(dayStat!.tradeTakenInAmount)}`}>
+                          Trade: {formatCurrency(dayStat!.tradeTakenInAmount)}
                         </span>
-
-                        {hasTrade && (
-                          <span className={`text-[9px] font-extrabold px-1 rounded block mt-0.5 ${
-                            isDaySelected
-                              ? 'bg-amber-400 text-zinc-900'
-                              : 'bg-amber-100 text-amber-900'
-                          }`} title={`Trade taken in: ${formatCurrency(dayStat!.tradeTakenInAmount)}`}>
-                            Trade: {formatCurrency(dayStat!.tradeTakenInAmount)}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {weekFilterDayKey !== 'all' && (
@@ -697,7 +701,8 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               )}
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 uppercase tracking-wider font-semibold">
@@ -809,6 +814,85 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            {/* Mobile Day-by-Day Cards */}
+            <div className="md:hidden divide-y divide-zinc-100">
+              {weekData.dayBreakdown.map((day) => {
+                const isSelected = weekFilterDayKey === day.dateKey;
+                const hasActivity = day.salesCount > 0 || day.tradeTakenInCount > 0;
+
+                return (
+                  <div
+                    key={`mobile-day-${day.dateKey}`}
+                    className={`p-3.5 space-y-2 ${
+                      isSelected
+                        ? 'bg-blue-50/80'
+                        : day.isToday
+                        ? 'bg-blue-50/30'
+                        : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span className="text-xs font-black text-zinc-900">{day.fullDayName}</span>
+                        <span className="text-[11px] text-zinc-500 font-medium">{day.formattedDate}</span>
+                        {day.isToday && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800">
+                            Today
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-black text-zinc-900 tabular-nums">
+                          {formatCurrency(day.totalRevenue)}
+                        </span>
+                        {hasActivity && (
+                          <button
+                            type="button"
+                            onClick={() => setWeekFilterDayKey(isSelected ? 'all' : day.dateKey)}
+                            className={`text-xs px-3 py-1.5 min-h-[34px] rounded-lg font-bold transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-zinc-900 text-white'
+                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200'
+                            }`}
+                          >
+                            {isSelected ? 'Viewing' : 'View'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {hasActivity ? (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-600">
+                        <span>{day.salesCount} {day.salesCount === 1 ? 'sale' : 'sales'}</span>
+                        {day.cashRevenue > 0 && (
+                          <span className="text-emerald-700 font-semibold">Cash: {formatCurrency(day.cashRevenue)}</span>
+                        )}
+                        {day.cardRevenue > 0 && (
+                          <span className="text-blue-700 font-semibold">Card: {formatCurrency(day.cardRevenue)}</span>
+                        )}
+                        {(day.tradedOutRevenue || 0) > 0 && (
+                          <span className="text-amber-700 font-semibold">Trade Out: {formatCurrency(day.tradedOutRevenue)}</span>
+                        )}
+                        {day.tradeTakenInAmount > 0 && (
+                          <span className="text-amber-800 font-bold">
+                            Traded In: {formatCurrency(day.tradeTakenInAmount)} ({day.tradeTakenInCount})
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-zinc-400">No sales or trade-ins logged</div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="p-3.5 bg-zinc-100/80 flex items-center justify-between text-xs font-black text-zinc-900">
+                <span>Week {currentWeek.weekNumber} Total ({weekData.salesCount} sales)</span>
+                <span className="text-sm tabular-nums">{formatCurrency(weekData.totalRevenue)}</span>
+              </div>
             </div>
           </div>
 

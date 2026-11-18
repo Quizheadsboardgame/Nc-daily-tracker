@@ -227,22 +227,22 @@ export const TradesTab: React.FC<TradesTabProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
           {/* Date Picker */}
-          <div className="flex items-center gap-1.5 bg-zinc-50 px-2.5 py-1.5 rounded-xl border border-zinc-200 text-xs font-semibold">
-            <Calendar className="w-4 h-4 text-zinc-500" />
+          <div className="flex items-center gap-1.5 bg-zinc-50 px-2.5 py-1.5 min-h-[38px] rounded-xl border border-zinc-200 text-xs font-semibold flex-1 sm:flex-none min-w-0">
+            <Calendar className="w-4 h-4 text-zinc-500 shrink-0" />
             <input
               type="date"
               id="input-trade-date-picker"
               value={currentDateKey}
               onChange={(e) => onDateChange(e.target.value || getLocalDateKey())}
-              className="bg-transparent text-zinc-900 focus:outline-hidden cursor-pointer"
+              className="bg-transparent text-zinc-900 focus:outline-hidden cursor-pointer min-w-0"
             />
             {currentDateKey !== getLocalDateKey() && (
               <button
                 type="button"
                 onClick={() => onDateChange(getLocalDateKey())}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 ml-1 cursor-pointer"
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 ml-1 cursor-pointer shrink-0"
               >
                 Today
               </button>
@@ -254,9 +254,9 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             type="button"
             id="btn-export-trades-csv"
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+            className="min-h-[38px] inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors whitespace-nowrap"
           >
-            <Download className="w-3.5 h-3.5 text-zinc-500" />
+            <Download className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
             <span>Export CSV</span>
           </button>
 
@@ -264,7 +264,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
           <button
             type="button"
             onClick={onSwitchToLedger}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+            className="min-h-[38px] inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold cursor-pointer shadow-2xs transition-colors whitespace-nowrap flex-1 sm:flex-none"
           >
             <span>Go to Sales Ledger</span>
           </button>
@@ -422,29 +422,29 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                 Cards Traded In For <span className="text-rose-500">*</span>
               </label>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {/* For Cash Button */}
                 <button
                   type="button"
                   id="btn-trade-type-cash"
                   onClick={() => setTradeType('cash')}
-                  className={`py-2 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                  className={`min-h-[52px] py-2.5 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
                     tradeType === 'cash'
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-600/30'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                       tradeType === 'cash' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
                     }`}
                   >
                     <Banknote className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="block text-xs font-black leading-tight">Cash Payout</span>
                     <span
-                      className={`text-[10px] block leading-tight ${
+                      className={`text-[10px] block leading-tight truncate ${
                         tradeType === 'cash' ? 'text-emerald-100' : 'text-zinc-500'
                       }`}
                     >
@@ -458,23 +458,23 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                   type="button"
                   id="btn-trade-type-credit"
                   onClick={() => setTradeType('credit')}
-                  className={`py-2 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                  className={`min-h-[52px] py-2.5 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
                     tradeType === 'credit'
                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm ring-2 ring-purple-600/30'
                       : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                   }`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                       tradeType === 'credit' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-800'
                     }`}
                   >
                     <Ticket className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="block text-xs font-black leading-tight">Vendor's Credit</span>
                     <span
-                      className={`text-[10px] block leading-tight ${
+                      className={`text-[10px] block leading-tight truncate ${
                         tradeType === 'credit' ? 'text-purple-100' : 'text-zinc-500'
                       }`}
                     >
@@ -523,10 +523,10 @@ export const TradesTab: React.FC<TradesTabProps> = ({
               <button
                 type="submit"
                 id="btn-submit-trade-entry"
-                className="w-full py-2 px-4 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+                className="w-full min-h-[44px] py-2.5 px-4 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
               >
-                <PlusCircle className="w-4 h-4 text-amber-400" />
-                <span>
+                <PlusCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">
                   Log Cards Trade {tradeValue && !isNaN(parseFloat(tradeValue)) ? `(£${parseFloat(tradeValue).toFixed(2)})` : ''}
                 </span>
               </button>
@@ -538,7 +538,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
       {/* INDEPENDENT TRADE KPI STATS (4 CARDS) - Locked to mobile screen */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 w-full max-w-full" id="section-trades-kpis">
         {/* Total Cards Traded In */}
-        <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10 flex flex-col justify-between">
+        <div className="col-span-2 sm:col-span-1 bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-4 sm:p-5 shadow-md relative overflow-hidden ring-1 ring-white/10 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Total Cards Traded In
@@ -857,39 +857,44 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             </div>
 
             {/* Filter by Compensation: All, Cash, Credit */}
-            <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs">
+            <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs w-full md:w-auto">
               <button
                 type="button"
                 onClick={() => setFilterType('all')}
-                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                className={`min-h-[36px] px-2 sm:px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer text-center whitespace-nowrap ${
                   filterType === 'all'
                     ? 'bg-white text-zinc-900 shadow-xs font-bold'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                All Trades
+                <span className="sm:hidden">All</span>
+                <span className="hidden sm:inline">All Trades</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFilterType('cash')}
-                className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                className={`min-h-[36px] px-2 sm:px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                   filterType === 'cash'
                     ? 'bg-emerald-600 text-white shadow-xs font-bold'
                     : 'text-zinc-600 hover:text-emerald-700'
                 }`}
               >
-                <Banknote className="w-3 h-3" /> Traded for Cash
+                <Banknote className="w-3 h-3 shrink-0" />
+                <span className="sm:hidden">Cash</span>
+                <span className="hidden sm:inline">Traded for Cash</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFilterType('credit')}
-                className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                className={`min-h-[36px] px-2 sm:px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                   filterType === 'credit'
                     ? 'bg-purple-600 text-white shadow-xs font-bold'
                     : 'text-zinc-600 hover:text-purple-700'
                 }`}
               >
-                <Ticket className="w-3 h-3" /> Traded for Credit
+                <Ticket className="w-3 h-3 shrink-0" />
+                <span className="sm:hidden">Credit</span>
+                <span className="hidden sm:inline">Traded for Credit</span>
               </button>
             </div>
 

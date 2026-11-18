@@ -164,65 +164,65 @@ export default function App() {
 
       {/* Main Container - Locked to mobile viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 overflow-x-hidden">
-        {/* Navigation Tabs Bar for easy switching */}
-        <div className="flex items-center justify-between border-b border-zinc-250 pb-3.5 gap-2.5 flex-wrap w-full max-w-full">
-          <div className="flex items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs overflow-x-auto max-w-full no-scrollbar">
+        {/* Navigation Tabs Bar - Wraps cleanly into a 2-col mobile grid so every tab button fits inside the screen */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between border-b border-zinc-250 pb-3.5 gap-2.5 w-full max-w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs w-full lg:w-auto">
             <button
               type="button"
               id="tab-btn-ledger"
               onClick={() => setActiveTab('ledger')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'ledger'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'ledger' ? 'text-emerald-400' : 'text-zinc-500'}`} />
-              <span>Sales Ledger</span>
+              <FileSpreadsheet className={`w-4 h-4 shrink-0 ${activeTab === 'ledger' ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <span className="truncate">Sales Ledger</span>
             </button>
 
             <button
               type="button"
               id="tab-btn-search"
               onClick={() => setActiveTab('search')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'search'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <Search className={`w-4 h-4 ${activeTab === 'search' ? 'text-blue-400' : 'text-blue-600'}`} />
-              <span>Search Sales</span>
+              <Search className={`w-4 h-4 shrink-0 ${activeTab === 'search' ? 'text-blue-400' : 'text-blue-600'}`} />
+              <span className="truncate">Search Sales</span>
             </button>
 
             <button
               type="button"
               id="tab-btn-leaderboard"
               onClick={() => setActiveTab('leaderboard')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'leaderboard'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <Trophy className={`w-4 h-4 ${activeTab === 'leaderboard' ? 'text-amber-400' : 'text-amber-600'}`} />
-              <span>Leaderboard</span>
+              <Trophy className={`w-4 h-4 shrink-0 ${activeTab === 'leaderboard' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span className="truncate">Leaderboard</span>
             </button>
 
             <button
               type="button"
               id="tab-btn-trades"
               onClick={() => setActiveTab('trades')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'trades'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
-              <span>Trade In</span>
+              <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span className="truncate">Trade In</span>
               {cloudDb.getTradesForDay(currentDateKey).length > 0 && (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold shrink-0 ${
                   activeTab === 'trades'
                     ? 'bg-amber-400 text-zinc-950'
                     : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -236,16 +236,16 @@ export default function App() {
               type="button"
               id="tab-btn-online-cards"
               onClick={() => setActiveTab('online-cards')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'online-cards'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <ShoppingBag className={`w-4 h-4 ${activeTab === 'online-cards' ? 'text-violet-400' : 'text-violet-600'}`} />
-              <span>Online Cards</span>
+              <ShoppingBag className={`w-4 h-4 shrink-0 ${activeTab === 'online-cards' ? 'text-violet-400' : 'text-violet-600'}`} />
+              <span className="truncate">Online Cards</span>
               {cloudDb.getOnlineCardsSummary().availableCount > 0 && (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold shrink-0 ${
                   activeTab === 'online-cards'
                     ? 'bg-violet-400 text-zinc-950'
                     : 'bg-violet-100 text-violet-900 border border-violet-300'
@@ -259,15 +259,15 @@ export default function App() {
               type="button"
               id="tab-btn-vendor-check"
               onClick={() => setActiveTab('vendor-check')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'vendor-check'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <Building2 className={`w-4 h-4 ${activeTab === 'vendor-check' ? 'text-amber-400' : 'text-amber-600'}`} />
-              <span>Vendor Portal</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              <Building2 className={`w-4 h-4 shrink-0 ${activeTab === 'vendor-check' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span className="truncate">Vendor Portal</span>
+              <span className={`hidden sm:inline text-[10px] px-2 py-0.5 rounded-full font-extrabold shrink-0 ${
                 activeTab === 'vendor-check'
                   ? 'bg-amber-400 text-zinc-950'
                   : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -280,15 +280,15 @@ export default function App() {
               type="button"
               id="tab-btn-manage-vendors"
               onClick={() => setActiveTab('manage-vendors')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              className={`col-span-2 sm:col-span-1 min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'manage-vendors'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
               }`}
             >
-              <Users className={`w-4 h-4 ${activeTab === 'manage-vendors' ? 'text-emerald-400' : 'text-emerald-700'}`} />
-              <span>Manage Vendors</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              <Users className={`w-4 h-4 shrink-0 ${activeTab === 'manage-vendors' ? 'text-emerald-400' : 'text-emerald-700'}`} />
+              <span className="truncate">Manage Vendors</span>
+              <span className={`hidden sm:inline text-[10px] px-2 py-0.5 rounded-full font-extrabold shrink-0 ${
                 activeTab === 'manage-vendors'
                   ? 'bg-emerald-400 text-zinc-950'
                   : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
@@ -298,7 +298,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="hidden lg:flex items-center gap-2 text-xs shrink-0">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <Cloud className="w-3.5 h-3.5 text-emerald-600" />

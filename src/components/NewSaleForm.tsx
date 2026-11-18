@@ -229,15 +229,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       <div className="h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-400 rounded-t-2xl" />
 
       {/* Header bar */}
-      <div className="px-5 py-3.5 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-50/70">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+      <div className="px-4 sm:px-5 py-3.5 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-50/70">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
             +£
           </div>
-          <div>
-            <h2 className="text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2 flex-wrap">
               <span>Record New Sale</span>
-              <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
                 Cash • Card • Trade Out
               </span>
             </h2>
@@ -277,15 +277,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 space-y-4">
         {/* Quick Category Buttons: Miscellaneous, Comics (Kieron), Accessories (Newtons), Packs (Any Vendor) */}
         <div className="space-y-1.5 pb-2 border-b border-zinc-100">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span>Quick Categories</span>
             </span>
-            <span className="text-[10px] text-zinc-400 font-medium">
+            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">
               1-tap item & auto-vendor
             </span>
           </div>
@@ -296,17 +296,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="btn-form-quick-misc"
               onClick={() => handleSelectQuickCategory('misc')}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                 isMiscellaneous
                   ? 'bg-zinc-900 border-zinc-900 text-white shadow-xs ring-2 ring-zinc-900/20'
                   : 'bg-zinc-50 border-zinc-200 hover:border-zinc-300 text-zinc-800'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black">Miscellaneous</span>
-                <Layers className={`w-3.5 h-3.5 ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`} />
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] sm:text-xs font-black truncate">Miscellaneous</span>
+                <Layers className={`w-3.5 h-3.5 shrink-0 ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`} />
               </div>
-              <span className={`text-[10px] font-semibold ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`}>Any vendor</span>
+              <span className={`text-[10px] font-semibold truncate ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`}>Any vendor</span>
             </button>
 
             {/* 2. Comics (Auto Kieron) */}
@@ -314,17 +314,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="btn-form-quick-comics"
               onClick={() => handleSelectQuickCategory('comics')}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                 !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
                   ? 'bg-emerald-950 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-500/20'
                   : 'bg-emerald-50/50 border-emerald-200 hover:border-emerald-300 text-zinc-800'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black">Comics</span>
-                <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] sm:text-xs font-black truncate">Comics</span>
+                <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               </div>
-              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 self-start">
+              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 self-start truncate max-w-full">
                 Auto: Kieron
               </span>
             </button>
@@ -334,17 +334,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="btn-form-quick-accessories"
               onClick={() => handleSelectQuickCategory('accessories')}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                 !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
                   ? 'bg-purple-950 text-white border-purple-600 shadow-xs ring-2 ring-purple-500/20'
                   : 'bg-purple-50/50 border-purple-200 hover:border-purple-300 text-zinc-800'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black">Accessories</span>
-                <ShoppingBag className="w-3.5 h-3.5 text-purple-600" />
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] sm:text-xs font-black truncate">Accessories</span>
+                <ShoppingBag className="w-3.5 h-3.5 text-purple-600 shrink-0" />
               </div>
-              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-300 self-start">
+              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-300 self-start truncate max-w-full">
                 Auto: Newtons
               </span>
             </button>
@@ -354,17 +354,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               type="button"
               id="btn-form-quick-packs"
               onClick={() => handleSelectQuickCategory('packs')}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                 !isMiscellaneous && itemDescription.toLowerCase() === 'packs'
                   ? 'bg-blue-950 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/20'
                   : 'bg-blue-50/50 border-blue-200 hover:border-blue-300 text-zinc-800'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black">Packs</span>
-                <Boxes className="w-3.5 h-3.5 text-blue-600" />
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] sm:text-xs font-black truncate">Packs</span>
+                <Boxes className="w-3.5 h-3.5 text-blue-600 shrink-0" />
               </div>
-              <span className={`text-[10px] font-semibold ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-300' : 'text-zinc-500'}`}>Any vendor</span>
+              <span className={`text-[10px] font-semibold truncate ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-300' : 'text-zinc-500'}`}>Any vendor</span>
             </button>
           </div>
         </div>
@@ -560,7 +560,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-cash"
                 onClick={() => setPaymentMethod('cash')}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   paymentMethod === 'cash'
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
@@ -575,7 +575,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-card"
                 onClick={() => setPaymentMethod('card')}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   paymentMethod === 'card'
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
@@ -590,7 +590,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-online"
                 onClick={() => setPaymentMethod('online')}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   paymentMethod === 'online'
                     ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black'
                     : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300'
@@ -606,7 +606,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-traded-out"
                 onClick={() => setPaymentMethod('traded_out')}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   paymentMethod === 'traded_out'
                     ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-600/25 font-black'
                     : 'bg-amber-50/60 hover:bg-amber-100 text-amber-900 border-amber-300'
@@ -628,25 +628,25 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         </div>
 
         {/* Optional Notes & Action Submit */}
-        <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100">
-          <div className="flex-1">
+        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100">
+          <div className="flex-1 min-w-0">
             <input
               type="text"
               id="input-sale-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes or receipt memo..."
-              className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-200 bg-zinc-50/60 hover:bg-white focus:bg-white focus:border-zinc-900 focus:outline-hidden text-zinc-800"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 bg-zinc-50/60 hover:bg-white focus:bg-white focus:border-zinc-900 focus:outline-hidden text-zinc-800"
             />
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-stretch gap-2 w-full sm:w-auto">
             {/* Sound Toggle Button */}
             <button
               type="button"
               id="btn-form-sound-toggle"
               onClick={toggleSound}
-              className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                 soundEnabled
                   ? 'bg-zinc-100 text-emerald-800 border-emerald-300/80 hover:bg-emerald-50'
                   : 'bg-zinc-100 text-zinc-400 border-zinc-200 hover:bg-zinc-200 hover:text-zinc-600'
@@ -656,12 +656,12 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             >
               {soundEnabled ? (
                 <>
-                  <Volume2 className="w-4 h-4 text-emerald-600" />
+                  <Volume2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-[11px] font-bold">Sound: ON</span>
                 </>
               ) : (
                 <>
-                  <VolumeX className="w-4 h-4 text-zinc-400" />
+                  <VolumeX className="w-4 h-4 text-zinc-400 shrink-0" />
                   <span className="text-[11px] font-bold">Sound: OFF</span>
                 </>
               )}
@@ -670,10 +670,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             <button
               type="submit"
               id="btn-submit-new-sale"
-              className="w-full sm:w-auto px-6 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+              className="flex-1 sm:flex-none min-w-0 min-h-[44px] px-4 sm:px-6 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98 whitespace-nowrap"
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">
                 Record Sale {amount && !isNaN(parseFloat(amount)) ? `(£${parseFloat(amount).toFixed(2)})` : ''}
               </span>
             </button>

@@ -200,11 +200,11 @@ export const ManageVendorsTab: React.FC<ManageVendorsTabProps> = ({
 
                 return (
                   <div key={vendor} className="py-3.5 space-y-2.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
                       {/* Vendor Badge & Info */}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-xs ring-1 ring-black/10 transition-transform hover:scale-105 cursor-pointer"
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-xs ring-1 ring-black/10 transition-transform hover:scale-105 cursor-pointer shrink-0"
                           style={{ backgroundColor: vendorColor }}
                           onClick={() => setSelectedVendorForColor(isEditingColor ? null : vendor)}
                           title="Click to change color"
@@ -212,21 +212,21 @@ export const ManageVendorsTab: React.FC<ManageVendorsTabProps> = ({
                           {vendor.charAt(0).toUpperCase()}
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-zinc-900">{vendor}</h4>
+                            <h4 className="text-sm font-bold text-zinc-900 truncate">{vendor}</h4>
                             <span
-                              className="w-2.5 h-2.5 rounded-full inline-block"
+                              className="w-2.5 h-2.5 rounded-full inline-block shrink-0"
                               style={{ backgroundColor: vendorColor }}
                             />
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-zinc-500">
+                          <div className="flex items-center gap-2 text-xs text-zinc-500 flex-wrap">
                             <span className="font-mono text-[11px]">{vendorColor}</span>
                             <span>•</span>
                             <button
                               type="button"
                               onClick={() => setSelectedVendorForColor(isEditingColor ? null : vendor)}
-                              className="font-medium text-emerald-700 hover:text-emerald-800 underline flex items-center gap-1 cursor-pointer"
+                              className="font-medium text-emerald-700 hover:text-emerald-800 underline flex items-center gap-1 cursor-pointer py-1"
                             >
                               <Palette className="w-3 h-3" />
                               <span>{isEditingColor ? 'Done' : 'Change Color'}</span>
@@ -236,9 +236,9 @@ export const ManageVendorsTab: React.FC<ManageVendorsTabProps> = ({
                       </div>
 
                       {/* Delete Action */}
-                      <div>
+                      <div className="shrink-0">
                         {isDeleting ? (
-                          <div className="flex items-center gap-1.5 bg-rose-50 p-1 rounded-lg border border-rose-200">
+                          <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-xl border border-rose-200">
                             <span className="text-[11px] font-bold text-rose-700 px-1">Remove?</span>
                             <button
                               type="button"
@@ -246,14 +246,14 @@ export const ManageVendorsTab: React.FC<ManageVendorsTabProps> = ({
                                 onRemoveVendor(vendor);
                                 setVendorToDelete(null);
                               }}
-                              className="px-2 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md cursor-pointer"
+                              className="px-3 py-1.5 min-h-[34px] text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg cursor-pointer"
                             >
                               Yes
                             </button>
                             <button
                               type="button"
                               onClick={() => setVendorToDelete(null)}
-                              className="px-2 py-1 text-[11px] font-medium text-zinc-700 bg-white hover:bg-zinc-100 rounded-md border border-zinc-200 cursor-pointer"
+                              className="px-3 py-1.5 min-h-[34px] text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-100 rounded-lg border border-zinc-200 cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -262,7 +262,7 @@ export const ManageVendorsTab: React.FC<ManageVendorsTabProps> = ({
                           <button
                             type="button"
                             onClick={() => setVendorToDelete(vendor)}
-                            className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                            className="p-2.5 min-h-[38px] min-w-[38px] flex items-center justify-center text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                             title={`Remove ${vendor} from roster`}
                           >
                             <Trash2 className="w-4 h-4" />

@@ -491,13 +491,13 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
           </div>
 
           {/* Action buttons & Cloud Sync */}
-          <div className="flex items-center gap-2.5 flex-wrap shrink-0 self-start lg:self-auto">
+          <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 sm:gap-2.5 sm:flex-wrap w-full lg:w-auto shrink-0">
             <button
               type="button"
               id="btn-sync-online-cards"
               onClick={handleSyncNow}
               disabled={isSyncing}
-              className="px-3.5 py-2.5 rounded-xl bg-violet-600/70 hover:bg-violet-600 text-white text-xs font-bold border border-violet-400/40 transition-all flex items-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+              className="w-full sm:w-auto justify-center min-h-[40px] px-3.5 py-2.5 rounded-xl bg-violet-600/70 hover:bg-violet-600 text-white text-xs font-bold border border-violet-400/40 transition-all flex items-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
               title="Sync online cards, barcodes, and inventory across all devices via Cloud Firestore"
             >
               <RefreshCw className={`w-4 h-4 text-violet-200 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -508,7 +508,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
               <button
                 type="button"
                 onClick={onNavigateToLedger}
-                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+                className="w-full sm:w-auto justify-center min-h-[40px] px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-2 cursor-pointer"
               >
                 <span>View Daily Sales Report</span>
                 <ArrowRight className="w-4 h-4 text-violet-400" />
@@ -683,9 +683,9 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
             e.preventDefault();
             handleProcessScannedCode(scanInput);
           }}
-          className="flex items-center gap-2"
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
         >
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Barcode className="w-5 h-5 absolute left-3.5 top-3 text-zinc-400 pointer-events-none" />
             <input
               ref={scanInputRef}
@@ -693,7 +693,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
               id="input-barcode-scanner"
               value={scanInput}
               onChange={(e) => setScanInput(e.target.value)}
-              placeholder="Scan barcode with gun or type code (e.g. ONL-123456) and press Enter..."
+              placeholder="Scan barcode or type code (ONL-...)"
               className="w-full pl-11 pr-4 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border border-zinc-300 bg-zinc-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-zinc-900 shadow-inner"
               autoFocus
             />
@@ -703,7 +703,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
             type="submit"
             id="btn-scan-barcode-submit"
             disabled={!scanInput.trim()}
-            className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap"
+            className="w-full sm:w-auto min-h-[42px] px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap justify-center flex items-center"
           >
             Lookup Barcode
           </button>
@@ -947,11 +947,11 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                 </div>
 
                 {/* Final Confirm Buttons */}
-                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-violet-200/60 flex-wrap">
+                <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 pt-2 border-t border-violet-200/60">
                   <button
                     type="button"
                     onClick={() => setScannedCard(null)}
-                    className="px-4 py-2.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold cursor-pointer"
+                    className="w-full sm:w-auto min-h-[42px] px-4 py-2.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold cursor-pointer text-center"
                   >
                     Cancel
                   </button>
@@ -961,7 +961,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                     id="btn-confirm-selected-sale"
                     disabled={isSubmittingSale}
                     onClick={() => handleConfirmSale(scannedCard)}
-                    className={`px-6 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    className={`w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-center ${
                       selectedSaleMethod === 'cash'
                         ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/30'
                         : selectedSaleMethod === 'card'
@@ -971,16 +971,16 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                         : 'bg-violet-600 hover:bg-violet-700 ring-2 ring-violet-500/30'
                     }`}
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span className="leading-snug">
                       {isSubmittingSale
                         ? 'Logging Sale...'
                         : selectedSaleMethod === 'cash'
-                        ? `Confirm In-Person Cash Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        ? `Confirm Cash Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
                         : selectedSaleMethod === 'card'
-                        ? `Confirm In-Person Card Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        ? `Confirm Card Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
                         : selectedSaleMethod === 'traded_out'
-                        ? `Confirm In-Person Trade Out (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
+                        ? `Confirm Trade Out (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`
                         : `Confirm Online Sale (${formatCurrency(parseFloat(saleCustomPrice) || scannedCard.price)})`}
                     </span>
                   </button>
@@ -1113,7 +1113,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-zinc-100 flex-wrap gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-zinc-100 gap-2.5">
             <span className="text-xs text-zinc-500 font-medium">
               A unique Code 128 barcode will be assigned automatically.
             </span>
@@ -1122,9 +1122,9 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
               type="submit"
               id="btn-add-online-card-submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto min-h-[44px] justify-center px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span>{isSubmitting ? 'Saving Card...' : 'Add Online Card & Generate Barcode'}</span>
             </button>
           </div>
@@ -1200,44 +1200,45 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
             </div>
 
             {/* Status Filter Pills */}
-            <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg text-xs font-semibold overflow-x-auto shrink-0">
+            <div className="grid grid-cols-3 sm:flex items-center gap-1 bg-zinc-100 p-1 rounded-lg text-xs font-semibold w-full md:w-auto shrink-0">
               <button
                 type="button"
                 id="filter-online-status-all"
                 onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-2 sm:px-3 py-1.5 min-h-[36px] rounded-md transition-all cursor-pointer flex items-center justify-center truncate ${
                   statusFilter === 'all'
                     ? 'bg-white text-zinc-950 font-bold shadow-2xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                All Cards ({cards.length})
+                <span className="sm:hidden">All ({cards.length})</span>
+                <span className="hidden sm:inline">All Cards ({cards.length})</span>
               </button>
               <button
                 type="button"
                 id="filter-online-status-available"
                 onClick={() => setStatusFilter('available')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                className={`px-2 sm:px-3 py-1.5 min-h-[36px] rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 truncate ${
                   statusFilter === 'available'
                     ? 'bg-emerald-600 text-white font-bold shadow-2xs'
                     : 'text-zinc-600 hover:text-emerald-700'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Available ({summary.availableCount})</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="truncate">Available ({summary.availableCount})</span>
               </button>
               <button
                 type="button"
                 id="filter-online-status-sold"
                 onClick={() => setStatusFilter('sold')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                className={`px-2 sm:px-3 py-1.5 min-h-[36px] rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 truncate ${
                   statusFilter === 'sold'
                     ? 'bg-zinc-800 text-white font-bold shadow-2xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-zinc-400" />
-                <span>Sold ({summary.soldCount})</span>
+                <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                <span className="truncate">Sold ({summary.soldCount})</span>
               </button>
             </div>
 
@@ -1559,26 +1560,42 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-100">
                       <div className="text-base font-black text-zinc-950 tabular-nums">
                         {formatCurrency(card.price)}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
                           onClick={() => downloadSingleLabelPdf(card, vendorColor)}
-                          className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-violet-700 text-xs font-semibold flex items-center gap-1"
+                          className="min-h-[36px] px-2.5 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-violet-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                         >
                           <FileDown className="w-3.5 h-3.5" />
                           <span>PDF</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCard(card);
+                            setEditCardName(card.cardName);
+                            setEditPrice(card.price.toString());
+                            setEditVendor(card.vendorName);
+                            setEditNotes(card.notes || '');
+                          }}
+                          className="min-h-[36px] px-2.5 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Edit card"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
                         </button>
 
                         {!isSold ? (
                           <button
                             type="button"
                             onClick={() => handleInitiateSale(card)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                            className="min-h-[36px] px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Sell</span>
@@ -1587,7 +1604,7 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                           <button
                             type="button"
                             onClick={() => handleReturnToStock(card)}
-                            className="px-2 py-1 rounded-lg bg-zinc-100 text-zinc-700 text-xs font-medium border border-zinc-200"
+                            className="min-h-[36px] px-2.5 py-1.5 rounded-lg bg-zinc-100 text-zinc-700 text-xs font-medium border border-zinc-200 cursor-pointer"
                           >
                             Return
                           </button>
@@ -1596,7 +1613,8 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDeleteCard(card)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50"
+                          className="min-h-[36px] p-2 rounded-lg text-rose-500 hover:bg-rose-50 border border-rose-100 cursor-pointer"
+                          title="Delete card"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

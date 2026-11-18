@@ -169,12 +169,12 @@ export const SalesList: React.FC<SalesListProps> = ({
           </div>
 
           {/* Payment Filter Pills (Cash, Card, or Trade Out) */}
-          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 text-xs flex-wrap sm:flex-nowrap">
+          <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs w-full md:w-auto">
             <button
               type="button"
               id="filter-payment-all"
               onClick={() => onSelectPaymentFilter('all')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer text-center whitespace-nowrap ${
                 selectedPaymentFilter === 'all'
                   ? 'bg-white text-zinc-900 shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-zinc-900'
@@ -186,55 +186,55 @@ export const SalesList: React.FC<SalesListProps> = ({
               type="button"
               id="filter-payment-cash"
               onClick={() => onSelectPaymentFilter('cash')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                 selectedPaymentFilter === 'cash'
                   ? 'bg-emerald-600 text-white shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-emerald-700'
               }`}
             >
-              <Banknote className="w-3 h-3" /> Cash
+              <Banknote className="w-3 h-3 shrink-0" /> Cash
             </button>
             <button
               type="button"
               id="filter-payment-card"
               onClick={() => onSelectPaymentFilter('card')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                 selectedPaymentFilter === 'card'
                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-blue-700'
               }`}
             >
-              <CreditCard className="w-3 h-3" /> Card
+              <CreditCard className="w-3 h-3 shrink-0" /> Card
             </button>
             <button
               type="button"
               id="filter-payment-online"
               onClick={() => onSelectPaymentFilter('online')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                 selectedPaymentFilter === 'online'
                   ? 'bg-violet-600 text-white shadow-xs font-bold'
                   : 'text-zinc-600 hover:text-violet-700'
               }`}
             >
-              <Globe className="w-3 h-3" /> Online
+              <Globe className="w-3 h-3 shrink-0" /> Online
             </button>
             <button
               type="button"
               id="filter-payment-traded-out"
               onClick={() => onSelectPaymentFilter('traded_out')}
-              className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1 transition-all cursor-pointer ${
+              className={`col-span-2 sm:col-span-1 min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                 selectedPaymentFilter === 'traded_out'
                   ? 'bg-amber-600 text-white shadow-xs font-bold'
                   : 'text-amber-800 hover:text-amber-900'
               }`}
             >
-              <ArrowLeftRight className="w-3 h-3" /> Trade Out
+              <ArrowLeftRight className="w-3 h-3 shrink-0" /> Trade Out
             </button>
           </div>
 
           {/* Vendor Filter Dropdown with color dots */}
-          <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
-            <div className="w-full sm:w-44">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+            <div className="w-full sm:w-44 min-w-0">
               <VendorDropdown
                 id="select-vendor-filter"
                 value={selectedVendor}
@@ -251,7 +251,7 @@ export const SalesList: React.FC<SalesListProps> = ({
               id="select-sort-by"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-xs font-medium text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 cursor-pointer"
+              className="min-h-[38px] text-xs font-medium text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 cursor-pointer w-full sm:w-auto"
             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
@@ -334,11 +334,11 @@ export const SalesList: React.FC<SalesListProps> = ({
                       {formatCurrency(sale.amount)}
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => onEditSale(sale)}
-                        className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 text-xs font-semibold flex items-center gap-1"
+                        className="min-h-[36px] px-2.5 py-1.5 rounded-lg text-zinc-700 bg-zinc-100 hover:text-zinc-900 hover:bg-zinc-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Edit</span>
@@ -352,14 +352,14 @@ export const SalesList: React.FC<SalesListProps> = ({
                               onDeleteSale(sale.id);
                               setDeleteConfirmId(null);
                             }}
-                            className="px-2 py-1 rounded-md bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 cursor-pointer shadow-xs"
+                            className="min-h-[36px] px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 cursor-pointer shadow-xs"
                           >
                             Confirm
                           </button>
                           <button
                             type="button"
                             onClick={() => setDeleteConfirmId(null)}
-                            className="px-2 py-1 rounded-md bg-zinc-200 text-zinc-700 font-medium text-xs hover:bg-zinc-300 cursor-pointer"
+                            className="min-h-[36px] px-2.5 py-1.5 rounded-lg bg-zinc-200 text-zinc-700 font-medium text-xs hover:bg-zinc-300 cursor-pointer"
                           >
                             Cancel
                           </button>
@@ -368,7 +368,7 @@ export const SalesList: React.FC<SalesListProps> = ({
                         <button
                           type="button"
                           onClick={() => setDeleteConfirmId(sale.id)}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold"
+                          className="min-h-[36px] min-w-[36px] p-2 rounded-lg text-zinc-500 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold flex items-center justify-center cursor-pointer"
                           title="Delete transaction"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
