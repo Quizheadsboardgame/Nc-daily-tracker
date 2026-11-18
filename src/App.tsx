@@ -15,10 +15,11 @@ import { VendorLeaderboardTab } from './components/VendorLeaderboardTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { SaleFlashBanner } from './components/SaleFlashBanner';
 import { CashDrawerTab } from './components/CashDrawerTab';
+import { StoreCreditTab } from './components/StoreCreditTab';
 import { useTotalSalesAuth, useCashDrawerAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary, BasketItemInput, SplitPaymentBreakdown } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search, Trophy, Vault, Lock } from 'lucide-react';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search, Trophy, Vault, Lock, Ticket } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -71,6 +72,7 @@ export default function App() {
     tradeValue?: number;
     tradeItemDescription?: string;
     notes?: string;
+    storeCredit?: { customerId: string; amount: number };
   }) => {
     cloudDb.insertSale({
       ...newSale,
@@ -83,12 +85,14 @@ export default function App() {
     items: BasketItemInput[];
     payments: SplitPaymentBreakdown;
     notes?: string;
+    storeCredit?: { customerId: string; amount: number };
   }) => {
     await cloudDb.insertBasketCheckout({
       items: payload.items,
       payments: payload.payments,
       dateKey: currentDateKey,
       notes: payload.notes,
+      storeCredit: payload.storeCredit,
     });
     refreshFromDb();
   };
@@ -182,7 +186,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 overflow-x-hidden">
         {/* Navigation Tabs Bar - Wraps cleanly into a 2-col mobile grid so every tab button fits inside the screen */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between border-b border-zinc-250 pb-3.5 gap-2.5 w-full max-w-full">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs w-full lg:w-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs w-full lg:w-auto">
             <button
               type="button"
               id="tab-btn-ledger"
@@ -234,6 +238,29 @@ export default function App() {
               <span className="truncate">Cash Drawer</span>
               {!isCashDrawerUnlocked && (
                 <Lock className={`w-3 h-3 shrink-0 ${activeTab === 'cash-drawer' ? 'text-amber-400' : 'text-zinc-500'}`} />
+              )}
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-store-credit"
+              onClick={() => setActiveTab('store-credit')}
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'store-credit'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <Ticket className={`w-4 h-4 shrink-0 ${activeTab === 'store-credit' ? 'text-purple-400' : 'text-purple-700'}`} />
+              <span className="truncate">Store Credit</span>
+              {cloudDb.getStoreCreditOverview().activeCustomersCount > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold shrink-0 ${
+                  activeTab === 'store-credit'
+                    ? 'bg-purple-400 text-zinc-950'
+                    : 'bg-purple-100 text-purple-900 border border-purple-300'
+                }`}>
+                  {cloudDb.getStoreCreditOverview().activeCustomersCount}
+                </span>
               )}
             </button>
 
@@ -313,7 +340,7 @@ export default function App() {
               type="button"
               id="tab-btn-manage-vendors"
               onClick={() => setActiveTab('manage-vendors')}
-              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              className={`col-span-2 sm:col-span-1 min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'manage-vendors'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
@@ -476,6 +503,17 @@ export default function App() {
             <CashDrawerTab
               currentDateKey={currentDateKey}
               onNavigateToLedger={() => setActiveTab('ledger')}
+            />
+          </div>
+        )}
+
+        {/* TAB: Customer Store Credit Balances */}
+        {activeTab === 'store-credit' && (
+          <div className="animate-fade-in" id="tab-content-store-credit">
+            <StoreCreditTab
+              knownVendors={knownVendors}
+              onNavigateToLedger={() => setActiveTab('ledger')}
+              onNavigateToTrades={() => setActiveTab('trades')}
             />
           </div>
         )}

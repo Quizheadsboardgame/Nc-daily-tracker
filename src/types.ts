@@ -40,6 +40,10 @@ export interface SaleRecord {
   basketItemCount?: number;
   checkoutVendorSummary?: string;
   checkoutItemSummary?: string;
+  // Store credit redemption metadata
+  storeCreditCustomerId?: string;
+  storeCreditCustomerName?: string;
+  storeCreditAmount?: number;
   // Backward compatibility fields if legacy records exist
   tradeDetails?: string;
   tradeAcceptingVendor?: string;
@@ -99,6 +103,7 @@ export interface TradeRecord {
   tradeValue: number; // Valuation in GBP (£)
   tradeType: TradeType; // 'cash' (cash payout) or 'credit' (vendor credit)
   customerName?: string; // Optional customer name (great for credit tracking)
+  storeCreditCustomerId?: string; // Linked StoreCreditCustomer ID if credit added to balance
   notes?: string;
   dateKey: string; // YYYY-MM-DD
   timestamp: number; // Milliseconds epoch
@@ -229,4 +234,44 @@ export interface CashReconciliationSummary {
   denominationCounts?: Record<string, number>;
   notes?: string;
   updatedAt?: number;
+}
+
+export type StoreCreditTransactionType = 'issue' | 'redeem' | 'adjust';
+
+export interface StoreCreditCustomer {
+  id: string;
+  name: string;
+  normalizedName: string;
+  phone?: string;
+  balance: number;
+  totalIssued: number;
+  totalRedeemed: number;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StoreCreditTransaction {
+  id: string;
+  customerId: string;
+  customerName: string;
+  type: StoreCreditTransactionType;
+  amount: number;
+  delta: number;
+  balanceAfter: number;
+  vendorName?: string;
+  description: string;
+  relatedTradeId?: string;
+  relatedCheckoutGroupId?: string;
+  relatedSaleId?: string;
+  dateKey: string;
+  timestamp: number;
+}
+
+export interface StoreCreditOverview {
+  totalOutstandingBalance: number;
+  activeCustomersCount: number;
+  totalCustomersCount: number;
+  totalLifetimeIssued: number;
+  totalLifetimeRedeemed: number;
 }

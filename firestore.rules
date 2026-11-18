@@ -33,6 +33,14 @@ service cloud.firestore {
     match /cash_reconciliations/{dateKey} {
       allow read, write: if true;
     }
+    // Customer store credit accounts & balances synced across terminals
+    match /store_credit_customers/{customerId} {
+      allow read, write: if true;
+    }
+    // Customer store credit transaction audit log synced across terminals
+    match /store_credit_transactions/{txId} {
+      allow read, write: if true;
+    }
     // Universal access rule to ensure all devices can read and write all application data
     match /{document=**} {
       allow read, write: if true;

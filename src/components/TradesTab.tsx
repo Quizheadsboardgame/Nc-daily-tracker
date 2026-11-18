@@ -50,6 +50,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
   const [tradeValue, setTradeValue] = useState<string>('');
   const [tradeType, setTradeType] = useState<TradeType>('credit'); // default to vendor credit
   const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showSuccessToast, setShowSuccessToast] = useState<boolean>(false);
@@ -135,6 +136,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
       tradeType,
       dateKey: currentDateKey,
       customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -147,6 +149,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
     setItemDescription('');
     setTradeValue('');
     setCustomerName('');
+    setCustomerPhone('');
     setNotes('');
   };
 
@@ -486,51 +489,97 @@ export const TradesTab: React.FC<TradesTabProps> = ({
             </div>
           </div>
 
-          {/* Row 3: Customer Name & Notes & Submit */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
-            <div className="md:col-span-4 space-y-1">
-              <label htmlFor="input-trade-customer" className="block text-[11px] font-bold text-zinc-700">
-                Customer Name (Optional)
-              </label>
-              <div className="relative">
-                <User className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-400 pointer-events-none" />
+          {/* Row 3: Customer Name (Store Credit Sync), Phone, Notes & Submit */}
+          <div className="space-y-3 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-3 space-y-1">
+                <label htmlFor="input-trade-customer" className="block text-[11px] font-bold text-zinc-700">
+                  Customer Name {tradeType === 'credit' ? '(Saves Store Credit)' : '(Optional)'}
+                </label>
+                <div className="relative">
+                  <User className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    id="input-trade-customer"
+                    list="trades-tab-store-credit-customers"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="e.g. Alex, Sam Smith..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:outline-hidden focus:border-zinc-900"
+                  />
+                  <datalist id="trades-tab-store-credit-customers">
+                    {cloudDb.getStoreCreditCustomers().map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {tradeType === 'credit' && (
+                <div className="md:col-span-2 space-y-1">
+                  <label htmlFor="input-trade-customer-phone" className="block text-[11px] font-bold text-zinc-700">
+                    Phone / Handle
+                  </label>
+                  <input
+                    type="text"
+                    id="input-trade-customer-phone"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="07... or @handle"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:outline-hidden focus:border-purple-600"
+                  />
+                </div>
+              )}
+
+              <div className={`${tradeType === 'credit' ? 'md:col-span-4' : 'md:col-span-6'} space-y-1`}>
+                <label htmlFor="input-trade-notes" className="block text-[11px] font-bold text-zinc-700">
+                  Notes / Condition Memo (Optional)
+                </label>
                 <input
                   type="text"
-                  id="input-trade-customer"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Alex, Sam Smith..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:outline-hidden focus:border-zinc-900"
+                  id="input-trade-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Near Mint, sleeved & toploader, credit slip #41..."
+                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:outline-hidden focus:border-zinc-900"
                 />
+              </div>
+
+              <div className="md:col-span-3 flex items-end">
+                <button
+                  type="submit"
+                  id="btn-submit-trade-entry"
+                  className="w-full min-h-[44px] py-2.5 px-4 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+                >
+                  <PlusCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="truncate">
+                    Log Cards Trade {tradeValue && !isNaN(parseFloat(tradeValue)) ? `(£${parseFloat(tradeValue).toFixed(2)})` : ''}
+                  </span>
+                </button>
               </div>
             </div>
 
-            <div className="md:col-span-5 space-y-1">
-              <label htmlFor="input-trade-notes" className="block text-[11px] font-bold text-zinc-700">
-                Notes / Condition Memo (Optional)
-              </label>
-              <input
-                type="text"
-                id="input-trade-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Near Mint, sleeved & toploader, credit slip #41..."
-                className="w-full px-3 py-1.5 text-xs rounded-xl border border-zinc-300 bg-white text-zinc-900 focus:outline-hidden focus:border-zinc-900"
-              />
-            </div>
-
-            <div className="md:col-span-3 flex items-end">
-              <button
-                type="submit"
-                id="btn-submit-trade-entry"
-                className="w-full min-h-[44px] py-2.5 px-4 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
-              >
-                <PlusCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="truncate">
-                  Log Cards Trade {tradeValue && !isNaN(parseFloat(tradeValue)) ? `(£${parseFloat(tradeValue).toFixed(2)})` : ''}
-                </span>
-              </button>
-            </div>
+            {tradeType === 'credit' && customerName.trim() && (
+              <div className="px-3.5 py-2 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Ticket className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                  <span>
+                    Automatically credits <strong>{customerName.trim()}</strong>&apos;s Store Credit balance
+                    {(() => {
+                      const existing = cloudDb.findStoreCreditCustomerByExactName(customerName);
+                      return existing
+                        ? ` (Current balance: ${formatCurrency(existing.balance)})`
+                        : ' (Creates new customer credit profile)';
+                    })()}
+                  </span>
+                </div>
+                {parseFloat(tradeValue) > 0 && (
+                  <span className="font-black text-purple-800 tabular-nums">
+                    +{formatCurrency(parseFloat(tradeValue))}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </form>
       </div>

@@ -9,6 +9,7 @@ import {
   Trash2,
   Clock,
   SlidersHorizontal,
+  Ticket,
 } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
@@ -72,6 +73,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           s.salesmanName.toLowerCase().includes(q) ||
           (s.notes && s.notes.toLowerCase().includes(q)) ||
           (s.onlineBarcode && s.onlineBarcode.toLowerCase().includes(q)) ||
+          (s.storeCreditCustomerName && s.storeCreditCustomerName.toLowerCase().includes(q)) ||
           (s.paymentMethod === 'online' && ('online'.includes(q) || 'web'.includes(q) || 'internet'.includes(q))) ||
           (s.paymentMethod === 'traded_out' && ('trade out'.includes(q) || 'traded out'.includes(q) || q === 'out'))
       );
@@ -333,6 +335,15 @@ export const SalesList: React.FC<SalesListProps> = ({
                           Split
                         </span>
                       )}
+                      {sale.storeCreditCustomerName && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                          <Ticket className="w-2.5 h-2.5 text-purple-700" />
+                          Store Credit: {sale.storeCreditCustomerName}
+                          {typeof sale.storeCreditAmount === 'number' && sale.storeCreditAmount > 0
+                            ? ` (${formatCurrency(sale.storeCreditAmount)})`
+                            : ''}
+                        </span>
+                      )}
                     </div>
                     {sale.notes && (
                       <p className="text-[11px] text-zinc-500 font-normal italic mt-0.5 break-words">
@@ -471,6 +482,15 @@ export const SalesList: React.FC<SalesListProps> = ({
                         {sale.splitSummary && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
                             Split
+                          </span>
+                        )}
+                        {sale.storeCreditCustomerName && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                            <Ticket className="w-2.5 h-2.5 text-purple-700" />
+                            Store Credit: {sale.storeCreditCustomerName}
+                            {typeof sale.storeCreditAmount === 'number' && sale.storeCreditAmount > 0
+                              ? ` (${formatCurrency(sale.storeCreditAmount)})`
+                              : ''}
                           </span>
                         )}
                       </div>

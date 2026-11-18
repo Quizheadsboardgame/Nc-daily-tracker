@@ -20,10 +20,11 @@ import {
   Trash2,
   Split,
 } from 'lucide-react';
-import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown } from '../types';
+import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
 import { cloudDb, formatCurrency } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
 import { useCheckoutSound } from '../utils/sound';
+import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -36,11 +37,13 @@ interface NewSaleFormProps {
     amount: number;
     paymentMethod: PaymentMethod;
     notes?: string;
+    storeCredit?: { customerId: string; amount: number };
   }) => void;
   onCheckoutBasket?: (payload: {
     items: BasketItemInput[];
     payments: SplitPaymentBreakdown;
     notes?: string;
+    storeCredit?: { customerId: string; amount: number };
   }) => Promise<void> | void;
   onAddVendor?: (name: string) => void;
   onAddSalesman?: (name: string) => void;
@@ -80,6 +83,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const [notes, setNotes] = useState('');
   const [basketItems, setBasketItems] = useState<BasketItemInput[]>([]);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [storeCreditSelection, setStoreCreditSelection] = useState<{
+    customer: StoreCreditCustomer;
+    amountToUse: number;
+  } | null>(null);
 
   const [showSuccessBadge, setShowSuccessBadge] = useState(false);
   const [lastRecordedInfo, setLastRecordedInfo] = useState('');
@@ -238,6 +245,29 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
   };
 
+  const handleApplyStoreCredit = (
+    selection: { customer: StoreCreditCustomer; amountToUse: number } | null
+  ) => {
+    setStoreCreditSelection(selection);
+    setErrors((prev) => ({ ...prev, split: '', checkout: '' }));
+
+    if (!selection) {
+      if (paymentMode === 'traded_out') setPaymentMode('card');
+      return;
+    }
+
+    const total = checkoutTargetTotal;
+    if (total > 0 && selection.amountToUse >= total - 0.004) {
+      setPaymentMode('traded_out');
+    } else if (selection.amountToUse > 0) {
+      setPaymentMode('split');
+      setSplitAmounts((prev) => ({
+        ...prev,
+        traded_out: selection.amountToUse.toFixed(2),
+      }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -262,6 +292,16 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
     const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
 
+    // Validate Store Credit if applied
+    let storeCreditPayload: { customerId: string; amount: number } | undefined;
+    if (storeCreditSelection && storeCreditSelection.amountToUse > 0) {
+      const creditUsed = Math.round(Math.min(storeCreditSelection.amountToUse, totalVal) * 100) / 100;
+      storeCreditPayload = {
+        customerId: storeCreditSelection.customer.id,
+        amount: creditUsed,
+      };
+    }
+
     // Validate Split Payments if split mode selected
     let payments: SplitPaymentBreakdown;
     if (paymentMode === 'split') {
@@ -279,29 +319,53 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         return;
       }
 
+      if (storeCreditPayload && t < storeCreditPayload.amount - 0.004) {
+        setErrors((prev) => ({
+          ...prev,
+          split: `Trade Out / Credit leg (£${t.toFixed(2)}) must be at least £${storeCreditPayload!.amount.toFixed(2)} to match applied store credit.`,
+        }));
+        return;
+      }
+
       payments = { cash: c, card: d, online: o, traded_out: t };
     } else {
-      payments = { [paymentMode]: totalVal };
+      if (storeCreditPayload && paymentMode !== 'traded_out') {
+        // Ensure credit leg is tracked properly when partial/full store credit was applied
+        if (storeCreditPayload.amount >= totalVal - 0.004) {
+          payments = { traded_out: totalVal };
+        } else {
+          const rem = Math.round((totalVal - storeCreditPayload.amount) * 100) / 100;
+          payments = { traded_out: storeCreditPayload.amount, [paymentMode]: rem };
+        }
+      } else {
+        payments = { [paymentMode]: totalVal };
+      }
     }
 
     setIsCheckingOut(true);
     try {
-      // Single item & single payment method -> use classic handler if no basket checkout needed
-      if (itemsToCheckout.length === 1 && paymentMode !== 'split') {
+      const isSinglePurePayment =
+        itemsToCheckout.length === 1 &&
+        paymentMode !== 'split' &&
+        (!storeCreditPayload || (paymentMode === 'traded_out' && storeCreditPayload.amount >= totalVal - 0.004));
+
+      if (isSinglePurePayment) {
         const single = itemsToCheckout[0];
         onSubmitSale({
           salesmanName: single.salesmanName,
           itemDescription: single.itemDescription,
           isMiscellaneous: single.isMiscellaneous,
           amount: single.amount,
-          paymentMethod: paymentMode,
+          paymentMethod: paymentMode as PaymentMethod,
           notes: notes.trim() || undefined,
+          storeCredit: storeCreditPayload,
         });
       } else if (onCheckoutBasket) {
         await onCheckoutBasket({
           items: itemsToCheckout,
           payments,
           notes: notes.trim() || undefined,
+          storeCredit: storeCreditPayload,
         });
       } else {
         await cloudDb.insertBasketCheckout({
@@ -309,11 +373,14 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           payments,
           dateKey: currentDateKey,
           notes: notes.trim() || undefined,
+          storeCredit: storeCreditPayload,
         });
       }
 
       const methodSummary =
-        paymentMode === 'split'
+        storeCreditPayload
+          ? `STORE CREDIT (${storeCreditSelection!.customer.name})`
+          : paymentMode === 'split'
           ? 'SPLIT PAYMENT'
           : paymentMode === 'traded_out'
           ? 'TRADE OUT'
@@ -334,6 +401,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
       // Reset form & basket
       setBasketItems([]);
+      setStoreCreditSelection(null);
       if (!isMiscellaneous) {
         setItemDescription('');
       }
@@ -981,6 +1049,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             {errors.split && <p className="text-[11px] font-bold text-rose-600">{errors.split}</p>}
           </div>
         )}
+
+        {/* Customer Store Credit Lookup & Apply */}
+        <StoreCreditCheckoutPicker
+          theme="light"
+          checkoutTotal={checkoutTargetTotal}
+          selectedCustomerId={storeCreditSelection?.customer.id || null}
+          appliedAmount={storeCreditSelection?.amountToUse || 0}
+          onApplyStoreCredit={handleApplyStoreCredit}
+        />
 
         {errors.checkout && (
           <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl">

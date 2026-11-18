@@ -65,6 +65,18 @@
         "basketItemCount": {
           "type": "number",
           "description": "Number of items included in the basket checkout"
+        },
+        "storeCreditCustomerId": {
+          "type": "string",
+          "description": "Optional customer ID whose store credit was redeemed on this sale"
+        },
+        "storeCreditCustomerName": {
+          "type": "string",
+          "description": "Optional customer name whose store credit was redeemed"
+        },
+        "storeCreditAmount": {
+          "type": "number",
+          "description": "Amount paid using customer store credit in GBP"
         }
       },
       "required": ["salesmanName", "itemDescription", "amount", "paymentMethod", "timestamp", "dateKey"]
@@ -114,6 +126,10 @@
         "customerName": {
           "type": "string",
           "description": "Optional customer name trading in cards"
+        },
+        "storeCreditCustomerId": {
+          "type": "string",
+          "description": "Linked StoreCreditCustomer ID when credit is added to customer balance"
         },
         "notes": {
           "type": "string",
@@ -231,6 +247,111 @@
         }
       },
       "required": ["dateKey", "openingFloat", "updatedAt"]
+    },
+    "StoreCreditCustomer": {
+      "title": "StoreCreditCustomer",
+      "description": "Customer store credit account tracking remaining balance, phone contact, and lifetime totals",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Customer display name"
+        },
+        "normalizedName": {
+          "type": "string",
+          "description": "Lowercase trimmed customer name for lookup"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Optional customer phone number or social handle"
+        },
+        "balance": {
+          "type": "number",
+          "description": "Current available store credit balance in GBP"
+        },
+        "totalIssued": {
+          "type": "number",
+          "description": "Lifetime store credit issued in GBP"
+        },
+        "totalRedeemed": {
+          "type": "number",
+          "description": "Lifetime store credit redeemed in GBP"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional customer notes"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Account creation epoch milliseconds"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last activity epoch milliseconds"
+        }
+      },
+      "required": ["name", "normalizedName", "balance", "totalIssued", "totalRedeemed", "createdAt", "updatedAt"]
+    },
+    "StoreCreditTransaction": {
+      "title": "StoreCreditTransaction",
+      "description": "Audit log entry for store credit issuance, redemption at checkout, or manual balance adjustment",
+      "type": "object",
+      "properties": {
+        "customerId": {
+          "type": "string",
+          "description": "Customer account document ID"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Customer display name snapshot"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["issue", "redeem", "adjust"],
+          "description": "Transaction type: issue from trade/top-up, redeem at checkout, or manual adjust"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Absolute GBP amount of the change"
+        },
+        "delta": {
+          "type": "number",
+          "description": "Signed GBP delta applied to balance"
+        },
+        "balanceAfter": {
+          "type": "number",
+          "description": "Customer balance in GBP immediately after transaction"
+        },
+        "vendorName": {
+          "type": "string",
+          "description": "Associated vendor if applicable"
+        },
+        "description": {
+          "type": "string",
+          "description": "Reason or item description for transaction"
+        },
+        "relatedTradeId": {
+          "type": "string",
+          "description": "Linked trade document ID if issued from a trade-in"
+        },
+        "relatedCheckoutGroupId": {
+          "type": "string",
+          "description": "Linked checkout group ID if redeemed on a basket/split sale"
+        },
+        "relatedSaleId": {
+          "type": "string",
+          "description": "Linked sale document ID if redeemed on a single sale"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Calendar date YYYY-MM-DD"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Epoch milliseconds timestamp"
+        }
+      },
+      "required": ["customerId", "customerName", "type", "amount", "delta", "balanceAfter", "description", "dateKey", "timestamp"]
     }
   },
   "firestore": {
@@ -257,6 +378,14 @@
     "/cash_reconciliations/{dateKey}": {
       "schema": "CashReconciliation",
       "description": "Collection of daily cash drawer float and end-of-day cash reconciliation counts synced across devices"
+    },
+    "/store_credit_customers/{customerId}": {
+      "schema": "StoreCreditCustomer",
+      "description": "Collection of customer store credit accounts and balances synced across terminals"
+    },
+    "/store_credit_transactions/{txId}": {
+      "schema": "StoreCreditTransaction",
+      "description": "Audit log of all store credit issuances, redemptions, and adjustments synced across terminals"
     }
   }
 }

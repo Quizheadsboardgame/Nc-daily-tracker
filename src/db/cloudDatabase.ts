@@ -30,6 +30,10 @@ import {
   BasketItemInput,
   CashReconciliationRecord,
   CashReconciliationSummary,
+  StoreCreditCustomer,
+  StoreCreditTransaction,
+  StoreCreditTransactionType,
+  StoreCreditOverview,
 } from '../types';
 import {
   playCheckoutSound,
@@ -73,6 +77,8 @@ const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v6';
 const STORAGE_ONLINE_CARDS_KEY = 'daily_sales_tracker_real_online_cards_v6';
 const STORAGE_REMOVED_VENDORS_KEY = 'daily_sales_tracker_removed_vendors_v6';
 const STORAGE_CASH_RECON_KEY = 'daily_sales_tracker_cash_reconciliation_v6';
+const STORAGE_STORE_CREDIT_CUSTOMERS_KEY = 'daily_sales_tracker_store_credit_customers_v6';
+const STORAGE_STORE_CREDIT_TX_KEY = 'daily_sales_tracker_store_credit_tx_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -221,6 +227,8 @@ class CloudSalesDatabase {
   private tradesCache: Map<string, TradeRecord> = new Map();
   private onlineCardsCache: Map<string, OnlineCard> = new Map();
   private cashReconciliationsCache: Map<string, CashReconciliationRecord> = new Map();
+  private storeCreditCustomersCache: Map<string, StoreCreditCustomer> = new Map();
+  private storeCreditTxCache: Map<string, StoreCreditTransaction> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private removedVendors: Set<string> = new Set(['kerion']);
@@ -341,6 +349,30 @@ class CloudSalesDatabase {
           }
         }
       }
+
+      const storedCreditCustomers = localStorage.getItem(STORAGE_STORE_CREDIT_CUSTOMERS_KEY);
+      if (storedCreditCustomers) {
+        const parsedCust = JSON.parse(storedCreditCustomers);
+        if (Array.isArray(parsedCust)) {
+          for (const item of parsedCust) {
+            if (item && item.id) {
+              this.storeCreditCustomersCache.set(item.id, item);
+            }
+          }
+        }
+      }
+
+      const storedCreditTx = localStorage.getItem(STORAGE_STORE_CREDIT_TX_KEY);
+      if (storedCreditTx) {
+        const parsedTx = JSON.parse(storedCreditTx);
+        if (Array.isArray(parsedTx)) {
+          for (const item of parsedTx) {
+            if (item && item.id) {
+              this.storeCreditTxCache.set(item.id, item);
+            }
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -359,6 +391,14 @@ class CloudSalesDatabase {
       localStorage.setItem(STORAGE_TRADES_KEY, JSON.stringify(Array.from(this.tradesCache.values())));
       localStorage.setItem(STORAGE_ONLINE_CARDS_KEY, JSON.stringify(Array.from(this.onlineCardsCache.values())));
       localStorage.setItem(STORAGE_CASH_RECON_KEY, JSON.stringify(Array.from(this.cashReconciliationsCache.values())));
+      localStorage.setItem(
+        STORAGE_STORE_CREDIT_CUSTOMERS_KEY,
+        JSON.stringify(Array.from(this.storeCreditCustomersCache.values()))
+      );
+      localStorage.setItem(
+        STORAGE_STORE_CREDIT_TX_KEY,
+        JSON.stringify(Array.from(this.storeCreditTxCache.values()))
+      );
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
     }
@@ -580,6 +620,9 @@ class CloudSalesDatabase {
               basketItemCount: data.basketItemCount !== undefined && data.basketItemCount !== null ? Number(data.basketItemCount) : undefined,
               checkoutVendorSummary: data.checkoutVendorSummary || undefined,
               checkoutItemSummary: data.checkoutItemSummary || undefined,
+              storeCreditCustomerId: data.storeCreditCustomerId || undefined,
+              storeCreditCustomerName: data.storeCreditCustomerName || undefined,
+              storeCreditAmount: data.storeCreditAmount !== undefined && data.storeCreditAmount !== null ? Number(data.storeCreditAmount) : undefined,
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
               tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -626,6 +669,7 @@ class CloudSalesDatabase {
               dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
               timestamp: data.timestamp || Date.now(),
               customerName: data.customerName || undefined,
+              storeCreditCustomerId: data.storeCreditCustomerId || undefined,
               notes: data.notes || undefined,
               isStandalone: data.isStandalone !== undefined ? Boolean(data.isStandalone) : true,
               soldItemDescription: data.soldItemDescription || undefined,
@@ -730,6 +774,88 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Cash reconciliations Firestore listener error:', error);
+        }
+      );
+
+      // 6. Real-time listener for Customer Store Credit Accounts
+      const storeCreditCustCol = collection(db, 'store_credit_customers');
+      onSnapshot(
+        storeCreditCustCol,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
+          const remoteIds = new Set<string>();
+
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            remoteIds.add(docSnap.id);
+            this.storeCreditCustomersCache.set(docSnap.id, {
+              id: docSnap.id,
+              name: data.name || 'Customer',
+              normalizedName: (data.normalizedName || data.name || '').toString().trim().toLowerCase(),
+              phone: data.phone || undefined,
+              balance: Math.round((Number(data.balance) || 0) * 100) / 100,
+              totalIssued: Math.round((Number(data.totalIssued) || 0) * 100) / 100,
+              totalRedeemed: Math.round((Number(data.totalRedeemed) || 0) * 100) / 100,
+              notes: data.notes || undefined,
+              createdAt: data.createdAt || Date.now(),
+              updatedAt: data.updatedAt || Date.now(),
+            });
+          });
+
+          for (const localId of Array.from(this.storeCreditCustomersCache.keys())) {
+            if (!remoteIds.has(localId)) {
+              this.storeCreditCustomersCache.delete(localId);
+            }
+          }
+
+          this.notify();
+        },
+        (error) => {
+          console.warn('Store credit customers Firestore listener error:', error);
+        }
+      );
+
+      // 7. Real-time listener for Customer Store Credit Transactions
+      const storeCreditTxCol = collection(db, 'store_credit_transactions');
+      onSnapshot(
+        storeCreditTxCol,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
+          const remoteTxIds = new Set<string>();
+
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            remoteTxIds.add(docSnap.id);
+            this.storeCreditTxCache.set(docSnap.id, {
+              id: docSnap.id,
+              customerId: data.customerId || '',
+              customerName: data.customerName || 'Customer',
+              type: data.type === 'redeem' ? 'redeem' : data.type === 'adjust' ? 'adjust' : 'issue',
+              amount: Math.round((Number(data.amount) || 0) * 100) / 100,
+              delta: Math.round((Number(data.delta) || 0) * 100) / 100,
+              balanceAfter: Math.round((Number(data.balanceAfter) || 0) * 100) / 100,
+              vendorName: data.vendorName || undefined,
+              description: data.description || '',
+              relatedTradeId: data.relatedTradeId || undefined,
+              relatedCheckoutGroupId: data.relatedCheckoutGroupId || undefined,
+              relatedSaleId: data.relatedSaleId || undefined,
+              dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+              timestamp: data.timestamp || Date.now(),
+            });
+          });
+
+          for (const localId of Array.from(this.storeCreditTxCache.keys())) {
+            if (!remoteTxIds.has(localId)) {
+              this.storeCreditTxCache.delete(localId);
+            }
+          }
+
+          this.notify();
+        },
+        (error) => {
+          console.warn('Store credit transactions Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -927,6 +1053,10 @@ class CloudSalesDatabase {
     isOnlineSale?: boolean;
     onlineCardId?: string;
     onlineBarcode?: string;
+    storeCredit?: {
+      customerId: string;
+      amount: number;
+    };
   }): Promise<SaleRecord> {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
@@ -958,6 +1088,28 @@ class CloudSalesDatabase {
       }
     }
 
+    let creditCustomer: StoreCreditCustomer | undefined;
+    let creditUsedAmount: number | undefined;
+    if (input.storeCredit && input.storeCredit.amount > 0) {
+      creditCustomer = this.storeCreditCustomersCache.get(input.storeCredit.customerId);
+      if (!creditCustomer) {
+        throw new Error('Selected customer store credit account was not found.');
+      }
+      const reqPence = Math.round(input.storeCredit.amount * 100);
+      const balPence = Math.round(creditCustomer.balance * 100);
+      if (reqPence > balPence) {
+        throw new Error(
+          `Insufficient store credit for ${creditCustomer.name} (Available: £${creditCustomer.balance.toFixed(2)}).`
+        );
+      }
+      creditUsedAmount = reqPence / 100;
+    }
+
+    const creditNoteTag = creditCustomer && creditUsedAmount
+      ? `Store Credit (${creditCustomer.name}: £${creditUsedAmount.toFixed(2)})`
+      : '';
+    const combinedNotes = [creditNoteTag, input.notes?.trim() || ''].filter(Boolean).join(' • ') || undefined;
+
     const record: SaleRecord = {
       id,
       salesmanName: input.salesmanName.trim(),
@@ -965,16 +1117,36 @@ class CloudSalesDatabase {
       isMiscellaneous: isMiscellaneous ? true : undefined,
       amount: Math.round(Number(input.amount) * 100) / 100,
       paymentMethod,
-      notes: input.notes?.trim() || undefined,
+      notes: combinedNotes,
       timestamp,
       dateKey,
       isOnlineSale: isOnlineSale ? true : undefined,
       onlineCardId: input.onlineCardId || undefined,
       onlineBarcode: input.onlineBarcode || undefined,
+      storeCreditCustomerId: creditCustomer?.id,
+      storeCreditCustomerName: creditCustomer?.name,
+      storeCreditAmount: creditUsedAmount,
+      splitSummary: creditCustomer && creditUsedAmount
+        ? `Store Credit (${creditCustomer.name} £${creditUsedAmount.toFixed(2)})`
+        : undefined,
     };
 
     // Store in cache & notify
     this.salesCache.set(id, record);
+
+    // Deduct store credit if used
+    if (creditCustomer && creditUsedAmount && creditUsedAmount > 0) {
+      await this.adjustStoreCreditBalance({
+        customerId: creditCustomer.id,
+        type: 'redeem',
+        delta: -creditUsedAmount,
+        vendorName: record.salesmanName,
+        description: `Redeemed on sale: ${record.itemDescription}`,
+        relatedSaleId: id,
+        dateKey,
+        timestamp,
+      });
+    }
 
     // Play Mario coin sound (or fanfare if > £100) immediately on this device and mark ID to avoid double-firing
     playCheckoutSound(false, id, record.amount);
@@ -988,6 +1160,8 @@ class CloudSalesDatabase {
       itemDescription: record.itemDescription,
       amount: record.amount,
       isOver100: record.amount > 100,
+      isSplit: Boolean(record.splitSummary),
+      splitSummary: record.splitSummary,
     });
 
     if (!this.salesmenList.includes(record.salesmanName)) {
@@ -1011,6 +1185,10 @@ class CloudSalesDatabase {
         isOnlineSale: isOnlineSale,
         onlineCardId: input.onlineCardId || null,
         onlineBarcode: input.onlineBarcode || null,
+        splitSummary: record.splitSummary || null,
+        storeCreditCustomerId: record.storeCreditCustomerId || null,
+        storeCreditCustomerName: record.storeCreditCustomerName || null,
+        storeCreditAmount: record.storeCreditAmount || null,
       });
     } catch (e) {
       console.warn('Sale saved to memory/localStorage; Firestore sync pending:', e);
@@ -1029,6 +1207,10 @@ class CloudSalesDatabase {
     dateKey?: string;
     timestamp?: number;
     notes?: string;
+    storeCredit?: {
+      customerId: string;
+      amount: number;
+    };
   }): Promise<SaleRecord[]> {
     if (!input.items || input.items.length === 0) {
       throw new Error('Cannot checkout an empty basket.');
@@ -1090,13 +1272,44 @@ class CloudSalesDatabase {
       throw new Error('Select at least one payment method with an amount greater than £0.00.');
     }
 
-    const isSplit = activeMethods.length > 1;
-    const methodLabel = (m: PaymentMethod) =>
-      m === 'cash' ? 'Cash' : m === 'card' ? 'Card' : m === 'online' ? 'Online' : 'Trade Out';
+    let creditCustomer: StoreCreditCustomer | undefined;
+    let creditUsedAmount: number | undefined;
+    if (input.storeCredit && input.storeCredit.amount > 0) {
+      creditCustomer = this.storeCreditCustomersCache.get(input.storeCredit.customerId);
+      if (!creditCustomer) {
+        throw new Error('Selected customer store credit account was not found.');
+      }
+      const reqPence = Math.round(input.storeCredit.amount * 100);
+      const balPence = Math.round(creditCustomer.balance * 100);
+      if (reqPence > balPence) {
+        throw new Error(
+          `Insufficient store credit for ${creditCustomer.name} (Available: £${creditCustomer.balance.toFixed(2)}).`
+        );
+      }
+      if (reqPence > payPenceMap.traded_out) {
+        throw new Error(
+          `Store credit amount (£${(reqPence / 100).toFixed(2)}) cannot exceed the Trade Out / Credit payment leg.`
+        );
+      }
+      creditUsedAmount = reqPence / 100;
+    }
 
-    const splitSummary = isSplit
-      ? activeMethods.map((m) => `${methodLabel(m)} £${(payPenceMap[m] / 100).toFixed(2)}`).join(' + ')
-      : undefined;
+    const isSplit = activeMethods.length > 1 || Boolean(creditCustomer && creditUsedAmount);
+    const methodLabel = (m: PaymentMethod) =>
+      m === 'cash'
+        ? 'Cash'
+        : m === 'card'
+        ? 'Card'
+        : m === 'online'
+        ? 'Online'
+        : creditCustomer && creditUsedAmount
+        ? `Store Credit (${creditCustomer.name})`
+        : 'Trade Out';
+
+    const splitSummary =
+      activeMethods.length > 1 || (creditCustomer && creditUsedAmount)
+        ? activeMethods.map((m) => `${methodLabel(m)} £${(payPenceMap[m] / 100).toFixed(2)}`).join(' + ')
+        : undefined;
 
     // 3. Allocate pence across (item, method) matrix with exact row & column sums
     const rows = input.items.length;
@@ -1196,7 +1409,9 @@ class CloudSalesDatabase {
         const legAmount = Math.round(legPence) / 100;
         const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 
+        const attachCreditInfo = Boolean(creditCustomer && creditUsedAmount && method === 'traded_out');
         const noteParts = [
+          attachCreditInfo ? `Store Credit (${creditCustomer!.name})` : '',
           splitSummary ? `Split (${splitSummary})` : '',
           basketNotePrefix,
           item.notes?.trim() || '',
@@ -1228,6 +1443,9 @@ class CloudSalesDatabase {
           basketItemCount: input.items.length,
           checkoutVendorSummary,
           checkoutItemSummary,
+          storeCreditCustomerId: attachCreditInfo ? creditCustomer!.id : undefined,
+          storeCreditCustomerName: attachCreditInfo ? creditCustomer!.name : undefined,
+          storeCreditAmount: attachCreditInfo ? creditUsedAmount : undefined,
         };
 
         this.salesCache.set(id, record);
@@ -1252,6 +1470,9 @@ class CloudSalesDatabase {
             basketItemCount: input.items.length,
             checkoutVendorSummary,
             checkoutItemSummary,
+            storeCreditCustomerId: record.storeCreditCustomerId || null,
+            storeCreditCustomerName: record.storeCreditCustomerName || null,
+            storeCreditAmount: record.storeCreditAmount || null,
           })
         );
 
@@ -1280,6 +1501,20 @@ class CloudSalesDatabase {
           }
         }
       }
+    }
+
+    // Deduct store credit if used in this checkout
+    if (creditCustomer && creditUsedAmount && creditUsedAmount > 0) {
+      await this.adjustStoreCreditBalance({
+        customerId: creditCustomer.id,
+        type: 'redeem',
+        delta: -creditUsedAmount,
+        vendorName: checkoutVendorSummary,
+        description: `Redeemed at checkout: ${checkoutItemSummary}`,
+        relatedCheckoutGroupId: checkoutGroupId,
+        dateKey,
+        timestamp,
+      });
     }
 
     // Play sound ONCE for the combined checkout total (Fanfare if > £100!) & flash unified 3s banner
@@ -1410,6 +1645,19 @@ class CloudSalesDatabase {
       }
     }
 
+    // Reverse any linked Store Credit redemption transaction when sale is deleted
+    if (existing?.storeCreditCustomerId) {
+      const remainingGroupLegs = existing.checkoutGroupId
+        ? Array.from(this.salesCache.values()).some((s) => s.checkoutGroupId === existing.checkoutGroupId)
+        : false;
+      if (!remainingGroupLegs) {
+        await this.removeLinkedStoreCreditTransactions({
+          relatedSaleId: id,
+          relatedCheckoutGroupId: existing.checkoutGroupId,
+        });
+      }
+    }
+
     this.notify();
 
     try {
@@ -1427,6 +1675,8 @@ class CloudSalesDatabase {
     tradeValue: number;
     tradeType: TradeType; // 'cash' or 'credit'
     customerName?: string;
+    customerPhone?: string;
+    addToStoreCredit?: boolean;
     notes?: string;
     dateKey?: string;
     timestamp?: number;
@@ -1437,15 +1687,41 @@ class CloudSalesDatabase {
     const cleanItem = input.itemDescription.trim();
     const val = Math.round(Number(input.tradeValue) * 100) / 100;
     const tradeType: TradeType = input.tradeType === 'cash' ? 'cash' : 'credit';
+    const cleanCustomer = input.customerName?.trim() || undefined;
 
     const id = `trade_${timestamp}_${Math.random().toString(36).slice(2, 7)}`;
+    let linkedCustomerId: string | undefined;
+
+    // Automatically issue customer store credit when a credit trade includes a customer name
+    const shouldAddStoreCredit =
+      tradeType === 'credit' &&
+      Boolean(cleanCustomer) &&
+      val > 0 &&
+      input.addToStoreCredit !== false;
+
+    if (shouldAddStoreCredit && cleanCustomer) {
+      const res = await this.adjustStoreCreditBalance({
+        customerName: cleanCustomer,
+        phone: input.customerPhone?.trim() || undefined,
+        type: 'issue',
+        delta: val,
+        vendorName: cleanVendor,
+        description: `Trade-In Credit: ${cleanItem}`,
+        relatedTradeId: id,
+        dateKey,
+        timestamp,
+      });
+      linkedCustomerId = res.customer.id;
+    }
+
     const record: TradeRecord = {
       id,
       vendorName: cleanVendor,
       itemDescription: cleanItem,
       tradeValue: isNaN(val) ? 0 : val,
       tradeType,
-      customerName: input.customerName?.trim() || undefined,
+      customerName: cleanCustomer,
+      storeCreditCustomerId: linkedCustomerId,
       notes: input.notes?.trim() || undefined,
       dateKey,
       timestamp,
@@ -1468,6 +1744,7 @@ class CloudSalesDatabase {
         tradeValue: record.tradeValue,
         tradeType: record.tradeType,
         customerName: record.customerName || null,
+        storeCreditCustomerId: record.storeCreditCustomerId || null,
         notes: record.notes || null,
         dateKey: record.dateKey,
         timestamp: record.timestamp,
@@ -1494,6 +1771,26 @@ class CloudSalesDatabase {
       notes: updates.notes !== undefined ? (updates.notes ? updates.notes.trim() : undefined) : existing.notes,
     };
 
+    // Keep linked store credit in sync when a trade is edited
+    const hadLinkedTx = Array.from(this.storeCreditTxCache.values()).some((tx) => tx.relatedTradeId === id);
+    if (hadLinkedTx) {
+      await this.removeLinkedStoreCreditTransactions({ relatedTradeId: id });
+      updated.storeCreditCustomerId = undefined;
+    }
+    if (updated.tradeType === 'credit' && updated.customerName && updated.tradeValue > 0) {
+      const res = await this.adjustStoreCreditBalance({
+        customerName: updated.customerName,
+        type: 'issue',
+        delta: updated.tradeValue,
+        vendorName: updated.vendorName,
+        description: `Trade-In Credit: ${updated.itemDescription}`,
+        relatedTradeId: id,
+        dateKey: updated.dateKey,
+        timestamp: updated.timestamp,
+      });
+      updated.storeCreditCustomerId = res.customer.id;
+    }
+
     this.tradesCache.set(id, updated);
     this.notify();
 
@@ -1506,6 +1803,7 @@ class CloudSalesDatabase {
       if (updates.customerName !== undefined) firestoreUpdates.customerName = updates.customerName ? updates.customerName.trim() : null;
       if (updates.notes !== undefined) firestoreUpdates.notes = updates.notes ? updates.notes.trim() : null;
       if (updates.dateKey !== undefined) firestoreUpdates.dateKey = updates.dateKey;
+      firestoreUpdates.storeCreditCustomerId = updated.storeCreditCustomerId || null;
 
       await updateDoc(doc(db, 'trades', id), firestoreUpdates);
     } catch (e) {
@@ -1515,6 +1813,7 @@ class CloudSalesDatabase {
 
   public async deleteTrade(id: string) {
     this.tradesCache.delete(id);
+    await this.removeLinkedStoreCreditTransactions({ relatedTradeId: id });
     this.notify();
 
     try {
@@ -2803,6 +3102,372 @@ class CloudSalesDatabase {
     return record;
   }
 
+  // --- Customer Store Credit Balances & Audit Transactions ---
+
+  public getStoreCreditCustomers(): StoreCreditCustomer[] {
+    return Array.from(this.storeCreditCustomersCache.values()).sort((a, b) => {
+      if (Math.abs(b.balance - a.balance) >= 0.005) return b.balance - a.balance;
+      return b.updatedAt - a.updatedAt;
+    });
+  }
+
+  public getStoreCreditCustomer(id: string): StoreCreditCustomer | undefined {
+    return this.storeCreditCustomersCache.get(id);
+  }
+
+  public findStoreCreditCustomerByExactName(name: string): StoreCreditCustomer | undefined {
+    const clean = name.trim().toLowerCase();
+    if (!clean) return undefined;
+    for (const c of this.storeCreditCustomersCache.values()) {
+      if (c.normalizedName === clean || c.name.trim().toLowerCase() === clean) {
+        return c;
+      }
+    }
+    return undefined;
+  }
+
+  public getStoreCreditTransactions(customerId?: string): StoreCreditTransaction[] {
+    const list: StoreCreditTransaction[] = [];
+    this.storeCreditTxCache.forEach((tx) => {
+      if (!customerId || tx.customerId === customerId) {
+        list.push(tx);
+      }
+    });
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public getStoreCreditOverview(): StoreCreditOverview {
+    let totalOutstandingPence = 0;
+    let activeCustomersCount = 0;
+    let totalIssuedPence = 0;
+    let totalRedeemedPence = 0;
+
+    this.storeCreditCustomersCache.forEach((c) => {
+      const balP = Math.round((c.balance || 0) * 100);
+      if (balP > 0) activeCustomersCount += 1;
+      totalOutstandingPence += Math.max(0, balP);
+      totalIssuedPence += Math.round((c.totalIssued || 0) * 100);
+      totalRedeemedPence += Math.round((c.totalRedeemed || 0) * 100);
+    });
+
+    return {
+      totalOutstandingBalance: totalOutstandingPence / 100,
+      activeCustomersCount,
+      totalCustomersCount: this.storeCreditCustomersCache.size,
+      totalLifetimeIssued: totalIssuedPence / 100,
+      totalLifetimeRedeemed: totalRedeemedPence / 100,
+    };
+  }
+
+  public async upsertStoreCreditCustomer(input: {
+    name: string;
+    phone?: string;
+    notes?: string;
+  }): Promise<StoreCreditCustomer> {
+    const cleanName = input.name.trim();
+    if (!cleanName) {
+      throw new Error('Customer name is required.');
+    }
+
+    const existing = this.findStoreCreditCustomerByExactName(cleanName);
+    const now = Date.now();
+
+    if (existing) {
+      const updated: StoreCreditCustomer = {
+        ...existing,
+        phone: input.phone !== undefined ? input.phone.trim() || undefined : existing.phone,
+        notes: input.notes !== undefined ? input.notes.trim() || undefined : existing.notes,
+        updatedAt: now,
+      };
+      this.storeCreditCustomersCache.set(existing.id, updated);
+      this.notify();
+
+      try {
+        await setDoc(
+          doc(db, 'store_credit_customers', existing.id),
+          {
+            name: updated.name,
+            normalizedName: updated.normalizedName,
+            phone: updated.phone || null,
+            balance: updated.balance,
+            totalIssued: updated.totalIssued,
+            totalRedeemed: updated.totalRedeemed,
+            notes: updated.notes || null,
+            createdAt: updated.createdAt,
+            updatedAt: updated.updatedAt,
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Customer saved locally; Firestore sync pending:', e);
+      }
+      return updated;
+    }
+
+    const id = 'cust_' + Math.random().toString(36).substring(2, 9) + now.toString(36);
+    const created: StoreCreditCustomer = {
+      id,
+      name: cleanName,
+      normalizedName: cleanName.toLowerCase(),
+      phone: input.phone?.trim() || undefined,
+      balance: 0,
+      totalIssued: 0,
+      totalRedeemed: 0,
+      notes: input.notes?.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.storeCreditCustomersCache.set(id, created);
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'store_credit_customers', id), {
+        name: created.name,
+        normalizedName: created.normalizedName,
+        phone: created.phone || null,
+        balance: created.balance,
+        totalIssued: created.totalIssued,
+        totalRedeemed: created.totalRedeemed,
+        notes: created.notes || null,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+      });
+    } catch (e) {
+      console.warn('Customer created locally; Firestore sync pending:', e);
+    }
+
+    return created;
+  }
+
+  public async adjustStoreCreditBalance(input: {
+    customerId?: string;
+    customerName?: string;
+    phone?: string;
+    notes?: string;
+    type: StoreCreditTransactionType;
+    delta: number; // positive adds credit, negative deducts credit
+    description: string;
+    vendorName?: string;
+    relatedTradeId?: string;
+    relatedSaleId?: string;
+    relatedCheckoutGroupId?: string;
+    dateKey?: string;
+    timestamp?: number;
+  }): Promise<{ customer: StoreCreditCustomer; transaction: StoreCreditTransaction }> {
+    const timestamp = input.timestamp || Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
+
+    let customer = input.customerId
+      ? this.storeCreditCustomersCache.get(input.customerId)
+      : undefined;
+    if (!customer && input.customerName) {
+      customer = await this.upsertStoreCreditCustomer({
+        name: input.customerName,
+        phone: input.phone,
+        notes: input.notes,
+      });
+    }
+    if (!customer) {
+      throw new Error('Customer account not found.');
+    }
+
+    // Update phone/notes if provided
+    if (
+      (input.phone !== undefined && input.phone.trim() && input.phone.trim() !== customer.phone) ||
+      (input.notes !== undefined && input.notes.trim() && input.notes.trim() !== customer.notes)
+    ) {
+      customer = {
+        ...customer,
+        phone: input.phone?.trim() || customer.phone,
+        notes: input.notes?.trim() || customer.notes,
+      };
+    }
+
+    const currentPence = Math.round((customer.balance || 0) * 100);
+    const deltaPence = Math.round(Number(input.delta) * 100);
+    if (isNaN(deltaPence) || deltaPence === 0) {
+      throw new Error('Credit adjustment amount must not be £0.00.');
+    }
+
+    const nextBalancePence = currentPence + deltaPence;
+    if (nextBalancePence < 0) {
+      throw new Error(
+        `Store credit balance for ${customer.name} cannot go below £0.00 (Available: £${(currentPence / 100).toFixed(2)}).`
+      );
+    }
+
+    const nextBalance = nextBalancePence / 100;
+    const issuedPence =
+      Math.round((customer.totalIssued || 0) * 100) + (deltaPence > 0 ? deltaPence : 0);
+    const redeemedPence =
+      Math.round((customer.totalRedeemed || 0) * 100) + (deltaPence < 0 ? Math.abs(deltaPence) : 0);
+
+    const updatedCustomer: StoreCreditCustomer = {
+      ...customer,
+      balance: nextBalance,
+      totalIssued: issuedPence / 100,
+      totalRedeemed: redeemedPence / 100,
+      updatedAt: timestamp,
+    };
+
+    const txId = 'sctx_' + Math.random().toString(36).substring(2, 9) + timestamp.toString(36);
+    const tx: StoreCreditTransaction = {
+      id: txId,
+      customerId: updatedCustomer.id,
+      customerName: updatedCustomer.name,
+      type: input.type,
+      amount: Math.abs(deltaPence) / 100,
+      delta: deltaPence / 100,
+      balanceAfter: nextBalance,
+      vendorName: input.vendorName?.trim() || undefined,
+      description: input.description.trim() || 'Store Credit Update',
+      relatedTradeId: input.relatedTradeId,
+      relatedSaleId: input.relatedSaleId,
+      relatedCheckoutGroupId: input.relatedCheckoutGroupId,
+      dateKey,
+      timestamp,
+    };
+
+    this.storeCreditCustomersCache.set(updatedCustomer.id, updatedCustomer);
+    this.storeCreditTxCache.set(txId, tx);
+    this.notify();
+
+    try {
+      await Promise.all([
+        setDoc(
+          doc(db, 'store_credit_customers', updatedCustomer.id),
+          {
+            name: updatedCustomer.name,
+            normalizedName: updatedCustomer.normalizedName,
+            phone: updatedCustomer.phone || null,
+            balance: updatedCustomer.balance,
+            totalIssued: updatedCustomer.totalIssued,
+            totalRedeemed: updatedCustomer.totalRedeemed,
+            notes: updatedCustomer.notes || null,
+            createdAt: updatedCustomer.createdAt,
+            updatedAt: updatedCustomer.updatedAt,
+          },
+          { merge: true }
+        ),
+        setDoc(doc(db, 'store_credit_transactions', txId), {
+          customerId: tx.customerId,
+          customerName: tx.customerName,
+          type: tx.type,
+          amount: tx.amount,
+          delta: tx.delta,
+          balanceAfter: tx.balanceAfter,
+          vendorName: tx.vendorName || null,
+          description: tx.description,
+          relatedTradeId: tx.relatedTradeId || null,
+          relatedSaleId: tx.relatedSaleId || null,
+          relatedCheckoutGroupId: tx.relatedCheckoutGroupId || null,
+          dateKey: tx.dateKey,
+          timestamp: tx.timestamp,
+        }),
+      ]);
+    } catch (e) {
+      console.warn('Store credit updated locally; Firestore sync pending:', e);
+    }
+
+    return { customer: updatedCustomer, transaction: tx };
+  }
+
+  private async recalculateCustomerBalance(customerId: string) {
+    const customer = this.storeCreditCustomersCache.get(customerId);
+    if (!customer) return;
+
+    const txs = this.getStoreCreditTransactions(customerId).sort((a, b) => a.timestamp - b.timestamp);
+    let balancePence = 0;
+    let issuedPence = 0;
+    let redeemedPence = 0;
+
+    for (const tx of txs) {
+      const dPence = Math.round((tx.delta || 0) * 100);
+      balancePence = Math.max(0, balancePence + dPence);
+      if (dPence > 0) issuedPence += dPence;
+      if (dPence < 0) redeemedPence += Math.abs(dPence);
+    }
+
+    const updated: StoreCreditCustomer = {
+      ...customer,
+      balance: balancePence / 100,
+      totalIssued: issuedPence / 100,
+      totalRedeemed: redeemedPence / 100,
+      updatedAt: Date.now(),
+    };
+    this.storeCreditCustomersCache.set(customerId, updated);
+
+    try {
+      await setDoc(
+        doc(db, 'store_credit_customers', customerId),
+        {
+          balance: updated.balance,
+          totalIssued: updated.totalIssued,
+          totalRedeemed: updated.totalRedeemed,
+          updatedAt: updated.updatedAt,
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('Could not sync recalculated customer balance:', e);
+    }
+  }
+
+  private async removeLinkedStoreCreditTransactions(filter: {
+    relatedTradeId?: string;
+    relatedSaleId?: string;
+    relatedCheckoutGroupId?: string;
+  }) {
+    const matchingTx: StoreCreditTransaction[] = [];
+    this.storeCreditTxCache.forEach((tx) => {
+      if (
+        (filter.relatedTradeId && tx.relatedTradeId === filter.relatedTradeId) ||
+        (filter.relatedSaleId && tx.relatedSaleId === filter.relatedSaleId) ||
+        (filter.relatedCheckoutGroupId && tx.relatedCheckoutGroupId === filter.relatedCheckoutGroupId)
+      ) {
+        matchingTx.push(tx);
+      }
+    });
+
+    if (matchingTx.length === 0) return;
+
+    const affectedCustomerIds = new Set<string>();
+    const deletes: Promise<any>[] = [];
+
+    for (const tx of matchingTx) {
+      this.storeCreditTxCache.delete(tx.id);
+      affectedCustomerIds.add(tx.customerId);
+      deletes.push(deleteDoc(doc(db, 'store_credit_transactions', tx.id)).catch(() => {}));
+    }
+
+    await Promise.all(deletes);
+    for (const custId of affectedCustomerIds) {
+      await this.recalculateCustomerBalance(custId);
+    }
+  }
+
+  public async deleteStoreCreditCustomer(customerId: string) {
+    this.storeCreditCustomersCache.delete(customerId);
+    const txToDelete: string[] = [];
+    this.storeCreditTxCache.forEach((tx, txId) => {
+      if (tx.customerId === customerId) {
+        txToDelete.push(txId);
+      }
+    });
+    txToDelete.forEach((id) => this.storeCreditTxCache.delete(id));
+    this.notify();
+
+    try {
+      await Promise.all([
+        deleteDoc(doc(db, 'store_credit_customers', customerId)),
+        ...txToDelete.map((id) => deleteDoc(doc(db, 'store_credit_transactions', id)).catch(() => {})),
+      ]);
+    } catch (e) {
+      console.warn('Store credit customer deleted locally; Firestore sync pending:', e);
+    }
+  }
+
   public getSyncStatus(): {
     isConnected: boolean;
     lastSyncTimestamp: number;
@@ -2959,6 +3624,46 @@ class CloudSalesDatabase {
           denominationCounts: data.denominationCounts || undefined,
           notes: data.notes || undefined,
           updatedAt: data.updatedAt || Date.now(),
+        });
+      });
+
+      // 5. Store Credit Customers
+      const custSnap = await getDocs(collection(db, 'store_credit_customers'));
+      custSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        this.storeCreditCustomersCache.set(docSnap.id, {
+          id: docSnap.id,
+          name: data.name || 'Customer',
+          normalizedName: (data.normalizedName || data.name || '').toString().trim().toLowerCase(),
+          phone: data.phone || undefined,
+          balance: Math.round((Number(data.balance) || 0) * 100) / 100,
+          totalIssued: Math.round((Number(data.totalIssued) || 0) * 100) / 100,
+          totalRedeemed: Math.round((Number(data.totalRedeemed) || 0) * 100) / 100,
+          notes: data.notes || undefined,
+          createdAt: data.createdAt || Date.now(),
+          updatedAt: data.updatedAt || Date.now(),
+        });
+      });
+
+      // 6. Store Credit Transactions
+      const txSnap = await getDocs(collection(db, 'store_credit_transactions'));
+      txSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        this.storeCreditTxCache.set(docSnap.id, {
+          id: docSnap.id,
+          customerId: data.customerId || '',
+          customerName: data.customerName || 'Customer',
+          type: data.type === 'redeem' ? 'redeem' : data.type === 'adjust' ? 'adjust' : 'issue',
+          amount: Math.round((Number(data.amount) || 0) * 100) / 100,
+          delta: Math.round((Number(data.delta) || 0) * 100) / 100,
+          balanceAfter: Math.round((Number(data.balanceAfter) || 0) * 100) / 100,
+          vendorName: data.vendorName || undefined,
+          description: data.description || '',
+          relatedTradeId: data.relatedTradeId || undefined,
+          relatedCheckoutGroupId: data.relatedCheckoutGroupId || undefined,
+          relatedSaleId: data.relatedSaleId || undefined,
+          dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
+          timestamp: data.timestamp || Date.now(),
         });
       });
 

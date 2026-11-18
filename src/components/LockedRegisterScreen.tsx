@@ -31,9 +31,10 @@ import {
   Trash2,
   Split,
 } from 'lucide-react';
-import { PaymentMethod, OnlineCard, TradeType, BasketItemInput, SplitPaymentBreakdown } from '../types';
+import { PaymentMethod, OnlineCard, TradeType, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
+import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
 import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
@@ -69,6 +70,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [barcodeInput, setBarcodeInput] = useState<string>('');
   const [scannedCardInfo, setScannedCardInfo] = useState<OnlineCard | null>(null);
   const [basketItems, setBasketItems] = useState<BasketItemInput[]>([]);
+  const [storeCreditSelection, setStoreCreditSelection] = useState<{
+    customer: StoreCreditCustomer;
+    amountToUse: number;
+  } | null>(null);
 
   // Trade-In form states
   const [tradeVendor, setTradeVendor] = useState<string>('');
@@ -76,6 +81,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [tradeValue, setTradeValue] = useState<string>('');
   const [tradeType, setTradeType] = useState<TradeType>('credit');
   const [tradeCustomerName, setTradeCustomerName] = useState<string>('');
+  const [tradeCustomerPhone, setTradeCustomerPhone] = useState<string>('');
   const [tradeNotes, setTradeNotes] = useState<string>('');
   const [isTradeVendorDropdownOpen, setIsTradeVendorDropdownOpen] = useState(false);
   const [tradeVendorSearch, setTradeVendorSearch] = useState('');
@@ -361,6 +367,29 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     setFormError(null);
   };
 
+  const handleApplyStoreCredit = (
+    selection: { customer: StoreCreditCustomer; amountToUse: number } | null
+  ) => {
+    setStoreCreditSelection(selection);
+    setFormError(null);
+
+    if (!selection) {
+      if (paymentMode === 'traded_out') setPaymentMode('card');
+      return;
+    }
+
+    const total = checkoutTargetTotal;
+    if (total > 0 && selection.amountToUse >= total - 0.004) {
+      setPaymentMode('traded_out');
+    } else if (selection.amountToUse > 0) {
+      setPaymentMode('split');
+      setSplitAmounts((prev) => ({
+        ...prev,
+        traded_out: selection.amountToUse.toFixed(2),
+      }));
+    }
+  };
+
   const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -408,6 +437,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
     const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
 
+    let storeCreditPayload: { customerId: string; amount: number } | undefined;
+    if (storeCreditSelection && storeCreditSelection.amountToUse > 0) {
+      const creditUsed = Math.round(Math.min(storeCreditSelection.amountToUse, totalVal) * 100) / 100;
+      storeCreditPayload = {
+        customerId: storeCreditSelection.customer.id,
+        amount: creditUsed,
+      };
+    }
+
     let payments: SplitPaymentBreakdown;
     if (paymentMode === 'split') {
       const c = Math.max(0, Math.round((parseFloat(splitAmounts.cash) || 0) * 100) / 100);
@@ -423,30 +461,50 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         );
         return;
       }
+      if (storeCreditPayload && t < storeCreditPayload.amount - 0.004) {
+        playSaleBeep(false);
+        setFormError(
+          `Trade Out / Credit leg (£${t.toFixed(2)}) must be at least £${storeCreditPayload.amount.toFixed(2)} to match applied store credit.`
+        );
+        return;
+      }
       payments = { cash: c, card: d, online: o, traded_out: t };
+    } else if (storeCreditPayload && paymentMode !== 'traded_out') {
+      if (storeCreditPayload.amount >= totalVal - 0.004) {
+        payments = { traded_out: totalVal };
+      } else {
+        const rem = Math.round((totalVal - storeCreditPayload.amount) * 100) / 100;
+        payments = { traded_out: storeCreditPayload.amount, [paymentMode]: rem };
+      }
     } else {
       payments = { [paymentMode]: totalVal };
     }
 
     setIsSubmitting(true);
     try {
-      // Single scanned card with single payment uses sellOnlineCard directly
-      if (itemsToCheckout.length === 1 && paymentMode !== 'split' && itemsToCheckout[0].onlineCardId) {
+      const isSinglePurePayment =
+        itemsToCheckout.length === 1 &&
+        paymentMode !== 'split' &&
+        (!storeCreditPayload || (paymentMode === 'traded_out' && storeCreditPayload.amount >= totalVal - 0.004));
+
+      // Single scanned card with single payment (no store credit) uses sellOnlineCard directly
+      if (isSinglePurePayment && itemsToCheckout[0].onlineCardId && !storeCreditPayload) {
         await cloudDb.sellOnlineCard(itemsToCheckout[0].onlineCardId, {
           targetDateKey: currentDateKey,
           customPrice: itemsToCheckout[0].amount,
           notes: notes.trim() || undefined,
-          paymentMethod: paymentMode,
+          paymentMethod: paymentMode as PaymentMethod,
         });
-      } else if (itemsToCheckout.length === 1 && paymentMode !== 'split') {
+      } else if (isSinglePurePayment && !itemsToCheckout[0].onlineCardId) {
         await cloudDb.insertSale({
           salesmanName: itemsToCheckout[0].salesmanName,
           itemDescription: itemsToCheckout[0].itemDescription,
           isMiscellaneous: itemsToCheckout[0].isMiscellaneous,
           amount: itemsToCheckout[0].amount,
-          paymentMethod: paymentMode,
+          paymentMethod: paymentMode as PaymentMethod,
           notes: notes.trim() || undefined,
           dateKey: currentDateKey,
+          storeCredit: storeCreditPayload,
         });
       } else {
         await cloudDb.insertBasketCheckout({
@@ -454,12 +512,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           payments,
           dateKey: currentDateKey,
           notes: notes.trim() || undefined,
+          storeCredit: storeCreditPayload,
         });
       }
 
       const uniqueVendors = Array.from(new Set(itemsToCheckout.map((i) => i.salesmanName)));
       const methodLabel =
-        paymentMode === 'split'
+        storeCreditPayload
+          ? `STORE CREDIT (${storeCreditSelection!.customer.name})`
+          : paymentMode === 'split'
           ? 'SPLIT PAYMENT'
           : paymentMode === 'cash'
           ? 'CASH'
@@ -480,6 +541,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       });
 
       setBasketItems([]);
+      setStoreCreditSelection(null);
       if (!isMiscellaneous) {
         setItemDescription('');
       }
@@ -558,6 +620,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         tradeType,
         dateKey: currentDateKey,
         customerName: tradeCustomerName.trim() || undefined,
+        customerPhone: tradeCustomerPhone.trim() || undefined,
         notes: tradeNotes.trim() || undefined,
       });
 
@@ -572,6 +635,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       setTradeItemDescription('');
       setTradeValue('');
       setTradeCustomerName('');
+      setTradeCustomerPhone('');
       setTradeNotes('');
 
       onSaleRecorded?.();
@@ -1400,6 +1464,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               </div>
             )}
 
+            {/* Customer Store Credit Lookup & Apply (POS Terminal) */}
+            <StoreCreditCheckoutPicker
+              theme="dark"
+              checkoutTotal={checkoutTargetTotal}
+              selectedCustomerId={storeCreditSelection?.customer.id || null}
+              appliedAmount={storeCreditSelection?.amountToUse || 0}
+              onApplyStoreCredit={handleApplyStoreCredit}
+            />
+
             {/* 5. Optional Notes / Memo */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
@@ -1687,38 +1760,105 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               </div>
             </div>
 
-            {/* 5. Customer Name & Condition Memo */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Customer Name <span className="text-zinc-500 font-normal">(Optional)</span>
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 absolute left-3.5 top-2.5 text-zinc-500 pointer-events-none" />
-                  <input
-                    id="input-lockscreen-trade-customer"
-                    type="text"
-                    value={tradeCustomerName}
-                    onChange={(e) => setTradeCustomerName(e.target.value)}
-                    placeholder="e.g. Alex, Sam..."
-                    className="w-full pl-10 pr-3 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-amber-500"
-                  />
+            {/* 5. Customer Name (Linked to Store Credit) & Condition Memo */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Customer Name{' '}
+                    <span className="text-zinc-500 font-normal">
+                      {tradeType === 'credit' ? '(Saves Store Credit)' : '(Optional)'}
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 absolute left-3.5 top-2.5 text-zinc-500 pointer-events-none" />
+                    <input
+                      id="input-lockscreen-trade-customer"
+                      type="text"
+                      list="lockscreen-store-credit-customers"
+                      value={tradeCustomerName}
+                      onChange={(e) => setTradeCustomerName(e.target.value)}
+                      placeholder="e.g. Alex, Sam..."
+                      className="w-full pl-10 pr-3 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-amber-500"
+                    />
+                    <datalist id="lockscreen-store-credit-customers">
+                      {cloudDb.getStoreCreditCustomers().map((c) => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
+
+                {tradeType === 'credit' ? (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Customer Phone / Handle <span className="text-zinc-500 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="input-lockscreen-trade-phone"
+                      type="text"
+                      value={tradeCustomerPhone}
+                      onChange={(e) => setTradeCustomerPhone(e.target.value)}
+                      placeholder="e.g. 07700 900123 or @handle"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-purple-400"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Notes / Condition Memo <span className="text-zinc-500 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="input-lockscreen-trade-notes"
+                      type="text"
+                      value={tradeNotes}
+                      onChange={(e) => setTradeNotes(e.target.value)}
+                      placeholder="e.g. NM, toploader, credit slip #41..."
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-amber-500"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Notes / Condition Memo <span className="text-zinc-500 font-normal">(Optional)</span>
-                </label>
-                <input
-                  id="input-lockscreen-trade-notes"
-                  type="text"
-                  value={tradeNotes}
-                  onChange={(e) => setTradeNotes(e.target.value)}
-                  placeholder="e.g. NM, toploader, credit slip #41..."
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-amber-500"
-                />
-              </div>
+              {tradeType === 'credit' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                      Notes / Condition Memo <span className="text-zinc-500 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="input-lockscreen-trade-notes"
+                      type="text"
+                      value={tradeNotes}
+                      onChange={(e) => setTradeNotes(e.target.value)}
+                      placeholder="e.g. NM, toploader, credit slip #41..."
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-amber-500"
+                    />
+                  </div>
+
+                  {tradeCustomerName.trim() && (
+                    <div className="px-3.5 py-2 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs text-purple-200 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Ticket className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span>
+                          Store Credit for <strong className="text-white">{tradeCustomerName.trim()}</strong>
+                          {(() => {
+                            const existing = cloudDb.findStoreCreditCustomerByExactName(tradeCustomerName);
+                            return existing
+                              ? ` (Current balance: ${formatCurrency(existing.balance)})`
+                              : ' (New customer account)';
+                          })()}
+                        </span>
+                      </div>
+                      {parseFloat(tradeValue) > 0 && (
+                        <span className="font-black text-purple-300 tabular-nums">
+                          +{formatCurrency(parseFloat(tradeValue))} credit
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* 6. Big Submit Trade Button */}
