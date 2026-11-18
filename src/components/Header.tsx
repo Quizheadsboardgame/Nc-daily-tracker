@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX, Search, Trophy } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Unlock, Volume2, VolumeX, Search, Trophy, Vault } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
-import { useTotalSalesAuth } from '../utils/auth';
+import { useTotalSalesAuth, useCashDrawerAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
 import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
-export type AppTab = 'ledger' | 'trades' | 'search' | 'leaderboard' | 'online-cards' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'trades' | 'cash-drawer' | 'search' | 'leaderboard' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -33,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenManageSalesmen,
 }) => {
   const { isUnlocked, lock } = useTotalSalesAuth();
+  const { isUnlocked: isCashDrawerUnlocked } = useCashDrawerAuth();
   const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
   const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
@@ -131,6 +132,23 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
                 <span>Trade In</span>
+              </button>
+
+              <button
+                type="button"
+                id="nav-tab-cash-drawer"
+                onClick={() => onTabChange('cash-drawer')}
+                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'cash-drawer'
+                    ? 'bg-white text-zinc-950 shadow-sm font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <Vault className={`w-4 h-4 ${activeTab === 'cash-drawer' ? 'text-emerald-700' : 'text-emerald-400'}`} />
+                <span>Cash Drawer</span>
+                {!isCashDrawerUnlocked && (
+                  <Lock className={`w-3 h-3 ${activeTab === 'cash-drawer' ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                )}
               </button>
 
               <button

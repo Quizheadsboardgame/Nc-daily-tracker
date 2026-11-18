@@ -27,11 +27,14 @@ import {
   VolumeX,
   Ticket,
   User,
+  ShoppingCart,
+  Trash2,
+  Split,
 } from 'lucide-react';
-import { PaymentMethod, OnlineCard, TradeType } from '../types';
+import { PaymentMethod, OnlineCard, TradeType, BasketItemInput, SplitPaymentBreakdown } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
-import { playSaleBeep, playCheckoutSound, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
+import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
   onSaleRecorded?: () => void;
@@ -55,10 +58,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [itemDescription, setItemDescription] = useState<string>('');
   const [isMiscellaneous, setIsMiscellaneous] = useState<boolean>(false);
   const [amount, setAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [paymentMode, setPaymentMode] = useState<PaymentMethod | 'split'>('card');
+  const [splitAmounts, setSplitAmounts] = useState<{
+    cash: string;
+    card: string;
+    online: string;
+    traded_out: string;
+  }>({ cash: '', card: '', online: '', traded_out: '' });
   const [notes, setNotes] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
   const [scannedCardInfo, setScannedCardInfo] = useState<OnlineCard | null>(null);
+  const [basketItems, setBasketItems] = useState<BasketItemInput[]>([]);
 
   // Trade-In form states
   const [tradeVendor, setTradeVendor] = useState<string>('');
@@ -83,7 +93,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     vendor: string;
     item: string;
     amount: number;
-    method: PaymentMethod;
+    methodLabel: string;
   } | null>(null);
   const [tradeSuccessNotice, setTradeSuccessNotice] = useState<{
     vendor: string;
@@ -158,6 +168,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       return;
     }
 
+    if (basketItems.some((b) => b.onlineCardId === card.id || b.onlineBarcode === card.barcode)) {
+      playSaleBeep(false);
+      setFormError(`Card "${card.cardName}" (${card.barcode}) is already in your basket!`);
+      return;
+    }
+
     // Auto-populate form
     playSaleBeep(true);
     setScannedCardInfo(card);
@@ -165,7 +181,9 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     setItemDescription(card.cardName);
     setIsMiscellaneous(false);
     setAmount(card.price.toFixed(2));
-    setPaymentMethod('card'); // Default to card or user can change
+    if (paymentMode === 'online' || paymentMode === 'traded_out') {
+      setPaymentMode('card');
+    }
     setNotes(`Scanned Barcode: ${card.barcode}`);
     setBarcodeInput('');
     amountInputRef.current?.focus();
@@ -250,12 +268,26 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     itemInputRef.current?.focus();
   };
 
-  const handleSubmitSale = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const basketSubtotal = Math.round(basketItems.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+  const currentFieldAmount = parseFloat(amount) || 0;
+  const checkoutTargetTotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
+
+  const splitSum = (() => {
+    const c = parseFloat(splitAmounts.cash) || 0;
+    const d = parseFloat(splitAmounts.card) || 0;
+    const o = parseFloat(splitAmounts.online) || 0;
+    const t = parseFloat(splitAmounts.traded_out) || 0;
+    return Math.round((c + d + o + t) * 100) / 100;
+  })();
+
+  const splitRemaining = Math.round((checkoutTargetTotal - splitSum) * 100) / 100;
+  const isSplitBalanced = Math.abs(splitRemaining) < 0.005 && checkoutTargetTotal > 0;
+
+  const handleAddToBasket = () => {
     setFormError(null);
 
     if (!selectedVendor.trim()) {
-      setFormError('Please select a vendor.');
+      setFormError('Please select a vendor before adding to basket.');
       return;
     }
 
@@ -271,47 +303,183 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       return;
     }
 
-    // If card was scanned, double check duplicate
     if (scannedCardInfo) {
       if (cloudDb.isOnlineCardAlreadySold(scannedCardInfo.barcode)) {
         playSaleBeep(false);
         setFormError(`Duplicate prevented: Card "${scannedCardInfo.cardName}" is already sold.`);
         return;
       }
+      if (basketItems.some((b) => b.onlineCardId === scannedCardInfo.id)) {
+        playSaleBeep(false);
+        setFormError(`Card "${scannedCardInfo.cardName}" is already in the basket.`);
+        return;
+      }
+    }
+
+    const newItem: BasketItemInput = {
+      id: 'bkt_' + Math.random().toString(36).substring(2, 9),
+      salesmanName: selectedVendor.trim(),
+      itemDescription: scannedCardInfo
+        ? `${scannedCardInfo.cardName} (In-Person #${scannedCardInfo.barcode})`
+        : finalItemDesc,
+      isMiscellaneous,
+      amount: Math.round(parsedAmount * 100) / 100,
+      notes: scannedCardInfo ? `Scanned Barcode: ${scannedCardInfo.barcode}` : undefined,
+      onlineCardId: scannedCardInfo?.id,
+      onlineBarcode: scannedCardInfo?.barcode,
+    };
+
+    setBasketItems((prev) => [...prev, newItem]);
+    if (!isMiscellaneous) setItemDescription('');
+    setAmount('');
+    setScannedCardInfo(null);
+    setBarcodeInput('');
+    if (notes.startsWith('Scanned Barcode:')) setNotes('');
+
+    setTimeout(() => {
+      if (isMiscellaneous) amountInputRef.current?.focus();
+      else itemInputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleRemoveBasketItem = (id: string) => {
+    setBasketItems((prev) => prev.filter((item) => item.id !== id));
+    setFormError(null);
+  };
+
+  const handleFillRemainder = (target: PaymentMethod) => {
+    const currentOther =
+      (target === 'cash' ? 0 : parseFloat(splitAmounts.cash) || 0) +
+      (target === 'card' ? 0 : parseFloat(splitAmounts.card) || 0) +
+      (target === 'online' ? 0 : parseFloat(splitAmounts.online) || 0) +
+      (target === 'traded_out' ? 0 : parseFloat(splitAmounts.traded_out) || 0);
+    const rem = Math.max(0, Math.round((checkoutTargetTotal - currentOther) * 100) / 100);
+    setSplitAmounts((prev) => ({
+      ...prev,
+      [target]: rem > 0 ? rem.toFixed(2) : '',
+    }));
+    setFormError(null);
+  };
+
+  const handleSubmitSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    let itemsToCheckout: BasketItemInput[] = [...basketItems];
+
+    if (itemsToCheckout.length === 0) {
+      if (!selectedVendor.trim()) {
+        setFormError('Please select a vendor.');
+        return;
+      }
+
+      const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+      if (!finalItemDesc) {
+        setFormError('Please enter an item description or tick Miscellaneous.');
+        return;
+      }
+
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        setFormError('Please enter a valid amount greater than £0.00.');
+        return;
+      }
+
+      if (scannedCardInfo && cloudDb.isOnlineCardAlreadySold(scannedCardInfo.barcode)) {
+        playSaleBeep(false);
+        setFormError(`Duplicate prevented: Card "${scannedCardInfo.cardName}" is already sold.`);
+        return;
+      }
+
+      itemsToCheckout = [
+        {
+          id: 'single_' + Date.now(),
+          salesmanName: selectedVendor.trim(),
+          itemDescription: scannedCardInfo
+            ? `${scannedCardInfo.cardName} (In-Person #${scannedCardInfo.barcode})`
+            : finalItemDesc,
+          isMiscellaneous,
+          amount: Math.round(parsedAmount * 100) / 100,
+          onlineCardId: scannedCardInfo?.id,
+          onlineBarcode: scannedCardInfo?.barcode,
+        },
+      ];
+    }
+
+    const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+
+    let payments: SplitPaymentBreakdown;
+    if (paymentMode === 'split') {
+      const c = Math.max(0, Math.round((parseFloat(splitAmounts.cash) || 0) * 100) / 100);
+      const d = Math.max(0, Math.round((parseFloat(splitAmounts.card) || 0) * 100) / 100);
+      const o = Math.max(0, Math.round((parseFloat(splitAmounts.online) || 0) * 100) / 100);
+      const t = Math.max(0, Math.round((parseFloat(splitAmounts.traded_out) || 0) * 100) / 100);
+      const enteredSum = Math.round((c + d + o + t) * 100) / 100;
+
+      if (Math.abs(enteredSum - totalVal) >= 0.005) {
+        playSaleBeep(false);
+        setFormError(
+          `Split payment amounts (£${enteredSum.toFixed(2)}) must equal the checkout total (£${totalVal.toFixed(2)}).`
+        );
+        return;
+      }
+      payments = { cash: c, card: d, online: o, traded_out: t };
+    } else {
+      payments = { [paymentMode]: totalVal };
     }
 
     setIsSubmitting(true);
     try {
-      if (scannedCardInfo) {
-        // Record via sellOnlineCard to update inventory card status and sales ledger in sync
-        await cloudDb.sellOnlineCard(scannedCardInfo.id, {
+      // Single scanned card with single payment uses sellOnlineCard directly
+      if (itemsToCheckout.length === 1 && paymentMode !== 'split' && itemsToCheckout[0].onlineCardId) {
+        await cloudDb.sellOnlineCard(itemsToCheckout[0].onlineCardId, {
           targetDateKey: currentDateKey,
-          customPrice: parsedAmount,
+          customPrice: itemsToCheckout[0].amount,
           notes: notes.trim() || undefined,
-          paymentMethod,
+          paymentMethod: paymentMode,
         });
-      } else {
-        // Manual sale entry
+      } else if (itemsToCheckout.length === 1 && paymentMode !== 'split') {
         await cloudDb.insertSale({
-          salesmanName: selectedVendor.trim(),
-          itemDescription: finalItemDesc,
-          isMiscellaneous,
-          amount: parsedAmount,
-          paymentMethod,
+          salesmanName: itemsToCheckout[0].salesmanName,
+          itemDescription: itemsToCheckout[0].itemDescription,
+          isMiscellaneous: itemsToCheckout[0].isMiscellaneous,
+          amount: itemsToCheckout[0].amount,
+          paymentMethod: paymentMode,
           notes: notes.trim() || undefined,
           dateKey: currentDateKey,
         });
+      } else {
+        await cloudDb.insertBasketCheckout({
+          items: itemsToCheckout,
+          payments,
+          dateKey: currentDateKey,
+          notes: notes.trim() || undefined,
+        });
       }
 
-      playCheckoutSound(false, undefined, parsedAmount);
+      const uniqueVendors = Array.from(new Set(itemsToCheckout.map((i) => i.salesmanName)));
+      const methodLabel =
+        paymentMode === 'split'
+          ? 'SPLIT PAYMENT'
+          : paymentMode === 'cash'
+          ? 'CASH'
+          : paymentMode === 'card'
+          ? 'CARD'
+          : paymentMode === 'traded_out'
+          ? 'TRADE OUT'
+          : 'ONLINE';
+
       setSuccessNotice({
-        vendor: selectedVendor.trim(),
-        item: finalItemDesc,
-        amount: parsedAmount,
-        method: paymentMethod,
+        vendor: uniqueVendors.join(' & '),
+        item:
+          itemsToCheckout.length > 1
+            ? `Basket (${itemsToCheckout.length} items): ${itemsToCheckout[0].itemDescription} + ${itemsToCheckout.length - 1} more`
+            : itemsToCheckout[0].itemDescription,
+        amount: totalVal,
+        methodLabel,
       });
 
-      // Clear fields while retaining vendor for speed
+      setBasketItems([]);
       if (!isMiscellaneous) {
         setItemDescription('');
       }
@@ -319,6 +487,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       setNotes('');
       setScannedCardInfo(null);
       setBarcodeInput('');
+      setSplitAmounts({ cash: '', card: '', online: '', traded_out: '' });
+      if (paymentMode === 'split') setPaymentMode('card');
 
       onSaleRecorded?.();
 
@@ -326,7 +496,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         setSuccessNotice(null);
       }, 5000);
 
-      // Focus back to item for next transaction
       setTimeout(() => {
         if (isMiscellaneous) {
           amountInputRef.current?.focus();
@@ -600,13 +769,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 <span>Sale Recorded & Added to Sales Ledger!</span>
               </div>
               <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-900/60 px-2.5 py-0.5 rounded-lg border border-emerald-500/40">
-                {successNotice.method === 'cash'
-                  ? 'CASH'
-                  : successNotice.method === 'card'
-                  ? 'CARD'
-                  : successNotice.method === 'traded_out'
-                  ? 'TRADE OUT'
-                  : 'ONLINE'}
+                {successNotice.methodLabel}
               </span>
             </div>
             <div className="text-base font-extrabold text-white flex items-center justify-between pt-1">
@@ -975,41 +1138,112 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               </div>
             </div>
 
-            {/* 3. Sale Amount (£) */}
+            {/* 3. Sale Amount (£) + Add to Basket */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-2">
                 Sale Amount (£) <span className="text-emerald-400">*</span>
               </label>
-              <div className="relative">
-                <span className="absolute left-4 top-3 text-xl font-black text-emerald-400 pointer-events-none">
-                  £
-                </span>
-                <input
-                  ref={amountInputRef}
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full pl-9 pr-4 py-3 text-2xl font-black tabular-nums tracking-tight rounded-2xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
+              <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
+                <div className="relative flex-1 min-w-0">
+                  <span className="absolute left-4 top-3.5 text-xl font-black text-emerald-400 pointer-events-none">
+                    £
+                  </span>
+                  <input
+                    ref={amountInputRef}
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-9 pr-4 py-3 text-2xl font-black tabular-nums tracking-tight rounded-2xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  id="btn-pos-add-to-basket"
+                  onClick={handleAddToBasket}
+                  className="min-h-[48px] px-4 py-3 rounded-2xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/60 text-indigo-200 font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                  title="Add item to multi-item basket before checkout"
+                >
+                  <ShoppingCart className="w-4 h-4 text-indigo-300 shrink-0" />
+                  <span>+ Add to Basket</span>
+                </button>
               </div>
             </div>
 
-            {/* 4. Payment Method Selection (4 Large Buttons) */}
+            {/* Multi-Item Basket Card (POS Terminal) */}
+            {basketItems.length > 0 && (
+              <div
+                id="panel-pos-basket"
+                className="rounded-2xl bg-indigo-950/40 border border-indigo-500/50 p-3.5 sm:p-4 space-y-3 animate-fade-in"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span className="text-xs font-black uppercase tracking-wider text-indigo-200">
+                      Customer Basket ({basketItems.length} {basketItems.length === 1 ? 'item' : 'items'})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-white tabular-nums bg-zinc-950 px-2.5 py-1 rounded-lg border border-indigo-500/40">
+                      {formatCurrency(basketSubtotal)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBasketItems([])}
+                      className="text-xs font-bold text-rose-400 hover:text-rose-300 px-2 py-1 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-zinc-800 bg-zinc-950/90 rounded-xl border border-zinc-800 overflow-hidden">
+                  {basketItems.map((item, idx) => (
+                    <div key={item.id} className="px-3 py-2.5 flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-zinc-500">#{idx + 1}</span>
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: cloudDb.getVendorColor(item.salesmanName) }}
+                        />
+                        <span className="font-bold text-white shrink-0">{item.salesmanName}</span>
+                        <span className="text-zinc-600">•</span>
+                        <span className="text-zinc-300 truncate">{item.itemDescription}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-black text-emerald-300 tabular-nums">
+                          {formatCurrency(item.amount)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBasketItem(item.id)}
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer"
+                          aria-label={`Remove ${item.itemDescription}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Payment Method Selection (Cash, Card, Online, Trade Out, Split) */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-2">
                 Payment Method <span className="text-emerald-400">*</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {/* Cash */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 <button
                   type="button"
                   id="btn-pos-method-cash"
-                  onClick={() => setPaymentMethod('cash')}
+                  onClick={() => setPaymentMode('cash')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    paymentMethod === 'cash'
+                    paymentMode === 'cash'
                       ? 'bg-emerald-950/80 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-md'
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                   }`}
@@ -1021,13 +1255,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   <span className="text-[10px] text-zinc-400 font-medium">Till / Notes</span>
                 </button>
 
-                {/* Card */}
                 <button
                   type="button"
                   id="btn-pos-method-card"
-                  onClick={() => setPaymentMethod('card')}
+                  onClick={() => setPaymentMode('card')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    paymentMethod === 'card'
+                    paymentMode === 'card'
                       ? 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-500/30 text-white shadow-md'
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                   }`}
@@ -1039,13 +1272,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   <span className="text-[10px] text-zinc-400 font-medium">PDQ / Reader</span>
                 </button>
 
-                {/* Online */}
                 <button
                   type="button"
                   id="btn-pos-method-online"
-                  onClick={() => setPaymentMethod('online')}
+                  onClick={() => setPaymentMode('online')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    paymentMethod === 'online'
+                    paymentMode === 'online'
                       ? 'bg-violet-950/80 border-violet-500 ring-2 ring-violet-500/30 text-white shadow-md'
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                   }`}
@@ -1057,13 +1289,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   <span className="text-[10px] text-zinc-400 font-medium">Web order</span>
                 </button>
 
-                {/* Trade Out */}
                 <button
                   type="button"
                   id="btn-pos-method-traded-out"
-                  onClick={() => setPaymentMethod('traded_out')}
+                  onClick={() => setPaymentMode('traded_out')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    paymentMethod === 'traded_out'
+                    paymentMode === 'traded_out'
                       ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-500/30 text-white shadow-md'
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                   }`}
@@ -1074,8 +1305,100 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   </div>
                   <span className="text-[10px] text-zinc-400 font-medium">Card deal trade</span>
                 </button>
+
+                <button
+                  type="button"
+                  id="btn-pos-method-split"
+                  onClick={() => setPaymentMode('split')}
+                  className={`col-span-2 sm:col-span-1 p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                    paymentMode === 'split'
+                      ? 'bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-400/30 text-white shadow-md'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider">Split Pay</span>
+                    <Split className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-medium">Cash + Card mix</span>
+                </button>
               </div>
             </div>
+
+            {/* Split Payment Breakdown Box (POS Terminal) */}
+            {paymentMode === 'split' && (
+              <div
+                id="panel-pos-split-payment"
+                className="rounded-2xl bg-cyan-950/35 border border-cyan-500/40 p-3.5 sm:p-4 space-y-3 animate-fade-in"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-300">
+                    <Split className="w-4 h-4 text-cyan-400" />
+                    <span>Split Breakdown</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-400">
+                      Target: <strong className="text-white tabular-nums">{formatCurrency(checkoutTargetTotal)}</strong>
+                    </span>
+                    {checkoutTargetTotal > 0 && (
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-extrabold text-[11px] tabular-nums border ${
+                          isSplitBalanced
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            : splitRemaining > 0
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                        }`}
+                      >
+                        {isSplitBalanced
+                          ? 'Balanced ✓'
+                          : splitRemaining > 0
+                          ? `Rem: ${formatCurrency(splitRemaining)}`
+                          : `Over: ${formatCurrency(Math.abs(splitRemaining))}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {(
+                    [
+                      { key: 'cash', label: 'Cash (£)' },
+                      { key: 'card', label: 'Card (£)' },
+                      { key: 'online', label: 'Online (£)' },
+                      { key: 'traded_out', label: 'Trade Out (£)' },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <div key={key} className="bg-zinc-950 rounded-xl border border-zinc-800 p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <label className="text-[11px] font-bold text-zinc-300">{label}</label>
+                        {checkoutTargetTotal > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleFillRemainder(key)}
+                            className="text-[10px] font-extrabold text-cyan-300 hover:text-white bg-cyan-950/70 px-1.5 py-0.5 rounded border border-cyan-500/40 cursor-pointer"
+                          >
+                            Rem
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-2 text-xs font-bold text-zinc-500 pointer-events-none">£</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={splitAmounts[key]}
+                          onChange={(e) => setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
+                          placeholder="0.00"
+                          className="w-full pl-6 pr-2 py-1.5 text-sm font-black tabular-nums rounded-lg border border-zinc-700 bg-zinc-900 text-white focus:outline-hidden focus:border-cyan-400"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 5. Optional Notes / Memo */}
             <div>
@@ -1102,7 +1425,11 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               <span className="truncate">
                 {isSubmitting
                   ? 'Adding to Ledger...'
-                  : `Record & Add (${formatCurrency(parseFloat(amount) || 0)})`}
+                  : basketItems.length > 0
+                  ? `Checkout Basket (${basketItems.length} items • ${formatCurrency(basketSubtotal)})`
+                  : paymentMode === 'split'
+                  ? `Record Split Sale (${formatCurrency(currentFieldAmount)})`
+                  : `Record & Add (${formatCurrency(currentFieldAmount)})`}
               </span>
             </button>
           </form>

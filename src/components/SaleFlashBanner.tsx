@@ -110,6 +110,8 @@ export const SaleFlashBanner: React.FC = () => {
 
   const payment = getPaymentDisplay(activeFlash.paymentMethod);
   const PaymentIcon = payment.Icon;
+  const isSplit = Boolean(activeFlash.isSplit && activeFlash.splitSummary);
+  const itemCount = activeFlash.basketItemCount && activeFlash.basketItemCount > 1 ? activeFlash.basketItemCount : 0;
 
   return (
     <div
@@ -130,8 +132,8 @@ export const SaleFlashBanner: React.FC = () => {
         <div className="px-4 py-3.5 sm:px-5 sm:py-4">
           {/* Top Status Row */}
           <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span
                   className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                     activeFlash.isOver100 ? 'bg-amber-400' : 'bg-emerald-400'
@@ -144,19 +146,24 @@ export const SaleFlashBanner: React.FC = () => {
                 />
               </span>
               <span
-                className={`text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
+                className={`text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 truncate ${
                   activeFlash.isOver100 ? 'text-amber-300' : 'text-emerald-300'
                 }`}
               >
                 {activeFlash.isOver100 ? (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Big Sale! Over £100</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="truncate">
+                      Big Sale! Over £100{activeFlash.amount !== undefined ? ` (£${activeFlash.amount.toFixed(2)})` : ''}
+                    </span>
                   </>
                 ) : (
                   <>
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Sale Put Through</span>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="truncate">
+                      {itemCount > 0 ? `Basket Put Through (${itemCount} items)` : 'Sale Put Through'}
+                      {activeFlash.amount !== undefined ? ` • £${activeFlash.amount.toFixed(2)}` : ''}
+                    </span>
                   </>
                 )}
               </span>
@@ -165,7 +172,7 @@ export const SaleFlashBanner: React.FC = () => {
             <button
               type="button"
               onClick={dismissNow}
-              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer shrink-0"
               aria-label="Dismiss sale notification"
             >
               <X className="w-4 h-4" />
@@ -176,15 +183,22 @@ export const SaleFlashBanner: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {/* WHO IT'S FOR (Vendor) */}
             <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 px-3.5 py-2.5 flex flex-col justify-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                Sale For
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  Sale For
+                </span>
+                {itemCount > 0 && (
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">
+                    {itemCount} items
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span
                   className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs ring-2 ring-white/20"
                   style={{ backgroundColor: activeFlash.vendorColor }}
                 />
-                <span className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+                <span className="text-lg sm:text-xl font-black text-white tracking-tight truncate">
                   {activeFlash.vendorName}
                 </span>
               </div>
@@ -196,12 +210,19 @@ export const SaleFlashBanner: React.FC = () => {
                 Paid By
               </span>
               <div className="mt-1">
-                <span
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg border text-base sm:text-lg font-black ${payment.badgeClass}`}
-                >
-                  <PaymentIcon className="w-5 h-5 shrink-0" />
-                  <span>{payment.label}</span>
-                </span>
+                {isSplit ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs sm:text-sm font-black bg-cyan-500/20 text-cyan-200 border-cyan-400/60 leading-snug">
+                    <ArrowLeftRight className="w-4 h-4 shrink-0 text-cyan-300" />
+                    <span>{activeFlash.splitSummary}</span>
+                  </span>
+                ) : (
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg border text-base sm:text-lg font-black ${payment.badgeClass}`}
+                  >
+                    <PaymentIcon className="w-5 h-5 shrink-0" />
+                    <span>{payment.label}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -210,7 +231,8 @@ export const SaleFlashBanner: React.FC = () => {
           {activeFlash.itemDescription && (
             <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-zinc-400 px-0.5">
               <span className="truncate font-medium">
-                Item: <span className="text-zinc-200 font-semibold">{activeFlash.itemDescription}</span>
+                {itemCount > 0 ? 'Items: ' : 'Item: '}
+                <span className="text-zinc-200 font-semibold">{activeFlash.itemDescription}</span>
               </span>
               <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold shrink-0">
                 3s Flash
@@ -224,7 +246,7 @@ export const SaleFlashBanner: React.FC = () => {
           <div
             key={activeFlash.id + activeFlash.timestamp}
             className={`h-full transition-all duration-[3000ms] ease-linear ${
-              activeFlash.isOver100 ? 'bg-amber-400' : payment.barClass
+              activeFlash.isOver100 ? 'bg-amber-400' : isSplit ? 'bg-cyan-400' : payment.barClass
             } ${progressWidth === '0%' ? 'w-0' : 'w-full'}`}
           />
         </div>

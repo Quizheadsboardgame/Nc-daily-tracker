@@ -315,13 +315,25 @@ export const SalesList: React.FC<SalesListProps> = ({
                   </div>
 
                   <div className="text-xs text-zinc-800 font-semibold break-words">
-                    {isMisc ? (
-                      <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded text-[11px] border border-zinc-200">
-                        Miscellaneous
-                      </span>
-                    ) : (
-                      <span>{sale.itemDescription}</span>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {isMisc ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded text-[11px] border border-zinc-200">
+                          Miscellaneous
+                        </span>
+                      ) : (
+                        <span>{sale.itemDescription}</span>
+                      )}
+                      {sale.basketItemCount && sale.basketItemCount > 1 && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                          Basket ({sale.basketItemCount})
+                        </span>
+                      )}
+                      {sale.splitSummary && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                          Split
+                        </span>
+                      )}
+                    </div>
                     {sale.notes && (
                       <p className="text-[11px] text-zinc-500 font-normal italic mt-0.5 break-words">
                         Memo: {sale.notes}
@@ -449,6 +461,16 @@ export const SalesList: React.FC<SalesListProps> = ({
                           <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[10px] border border-amber-300">
                             <ArrowLeftRight className="w-2.5 h-2.5 text-amber-700" />
                             Trade Out
+                          </span>
+                        )}
+                        {sale.basketItemCount && sale.basketItemCount > 1 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                            Basket ({sale.basketItemCount})
+                          </span>
+                        )}
+                        {sale.splitSummary && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                            Split
                           </span>
                         )}
                       </div>

@@ -26,6 +26,10 @@ import {
   VendorLeaderboardEntry,
   VendorLeaderboardSummary,
   DailySalesTrendPoint,
+  SplitPaymentBreakdown,
+  BasketItemInput,
+  CashReconciliationRecord,
+  CashReconciliationSummary,
 } from '../types';
 import {
   playCheckoutSound,
@@ -68,6 +72,7 @@ const STORAGE_SALESMEN_KEY = 'daily_sales_tracker_real_salesmen_v6';
 const STORAGE_VENDOR_COLORS_KEY = 'daily_sales_tracker_vendor_colors_v6';
 const STORAGE_ONLINE_CARDS_KEY = 'daily_sales_tracker_real_online_cards_v6';
 const STORAGE_REMOVED_VENDORS_KEY = 'daily_sales_tracker_removed_vendors_v6';
+const STORAGE_CASH_RECON_KEY = 'daily_sales_tracker_cash_reconciliation_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -215,6 +220,7 @@ class CloudSalesDatabase {
   private salesCache: Map<string, SaleRecord> = new Map();
   private tradesCache: Map<string, TradeRecord> = new Map();
   private onlineCardsCache: Map<string, OnlineCard> = new Map();
+  private cashReconciliationsCache: Map<string, CashReconciliationRecord> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private removedVendors: Set<string> = new Set(['kerion']);
@@ -323,6 +329,18 @@ class CloudSalesDatabase {
           }
         }
       }
+
+      const storedCashRecon = localStorage.getItem(STORAGE_CASH_RECON_KEY);
+      if (storedCashRecon) {
+        const parsedRecon = JSON.parse(storedCashRecon);
+        if (Array.isArray(parsedRecon)) {
+          for (const item of parsedRecon) {
+            if (item && item.dateKey) {
+              this.cashReconciliationsCache.set(item.dateKey, item);
+            }
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -340,6 +358,7 @@ class CloudSalesDatabase {
       localStorage.setItem(STORAGE_SALES_KEY, JSON.stringify(Array.from(this.salesCache.values())));
       localStorage.setItem(STORAGE_TRADES_KEY, JSON.stringify(Array.from(this.tradesCache.values())));
       localStorage.setItem(STORAGE_ONLINE_CARDS_KEY, JSON.stringify(Array.from(this.onlineCardsCache.values())));
+      localStorage.setItem(STORAGE_CASH_RECON_KEY, JSON.stringify(Array.from(this.cashReconciliationsCache.values())));
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
     }
@@ -442,46 +461,84 @@ class CloudSalesDatabase {
           this.lastSyncTimestamp = Date.now();
           const remoteSaleIds = new Set<string>();
 
-          // Trigger Mario Coin sound (or fanfare if > £100) and 3-second flash banner on all connected devices when any new sale is made
+          // Trigger Mario Coin sound (or fanfare if > £100) and 3-second flash banner on all connected devices when any new sale or basket checkout is made
           if (!isInitialSalesSnapshot) {
+            const addedGroups = new Map<string, { docId: string; data: Record<string, any> }[]>();
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
                 const data = change.doc.data();
-                const saleId = change.doc.id;
-                const saleAmount = Number(data.amount) || 0;
-                const rawMethod = (data.paymentMethod || '').toString().toLowerCase().trim();
-                const paymentMethod: PaymentMethod =
-                  rawMethod === 'cash'
-                    ? 'cash'
-                    : rawMethod === 'traded_out' ||
-                      rawMethod === 'trade_out' ||
-                      rawMethod === 'trade out' ||
-                      rawMethod === 'trade' ||
-                      rawMethod === 'traded'
-                    ? 'traded_out'
-                    : rawMethod === 'online'
-                    ? 'online'
-                    : 'card';
-                const vendorName = (data.salesmanName || '').toString().trim() || 'Store';
-                const itemDescription = data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : '');
+                const groupKey = data.checkoutGroupId ? String(data.checkoutGroupId) : change.doc.id;
+                const existingGroup = addedGroups.get(groupKey) || [];
+                existingGroup.push({ docId: change.doc.id, data });
+                addedGroups.set(groupKey, existingGroup);
+              }
+            });
 
-                // Play sound immediately on this device if not already played locally
-                if (!isSaleSoundRecentlyPlayed(saleId)) {
-                  playCheckoutSound(false, saleId, saleAmount);
-                }
+            addedGroups.forEach((groupItems, groupKey) => {
+              const first = groupItems[0].data;
+              const summedGroupAmount = groupItems.reduce((acc, g) => acc + (Number(g.data.amount) || 0), 0);
+              const totalAmount =
+                first.checkoutTotalAmount !== undefined && first.checkoutTotalAmount !== null
+                  ? Number(first.checkoutTotalAmount)
+                  : Math.round(summedGroupAmount * 100) / 100;
 
-                // Flash who the sale is for and how it was paid for 3 seconds
-                if (!isSaleRecentlyFlashed(saleId)) {
-                  emitSaleFlash({
-                    id: saleId,
-                    vendorName,
-                    vendorColor: this.getVendorColor(vendorName),
-                    paymentMethod,
-                    itemDescription,
-                    amount: saleAmount,
-                    isOver100: saleAmount > 100,
-                  });
-                }
+              const rawMethod = (first.paymentMethod || '').toString().toLowerCase().trim();
+              const paymentMethod: PaymentMethod =
+                rawMethod === 'cash'
+                  ? 'cash'
+                  : rawMethod === 'traded_out' ||
+                    rawMethod === 'trade_out' ||
+                    rawMethod === 'trade out' ||
+                    rawMethod === 'trade' ||
+                    rawMethod === 'traded'
+                  ? 'traded_out'
+                  : rawMethod === 'online'
+                  ? 'online'
+                  : 'card';
+
+              const uniqueVendors = Array.from(
+                new Set(
+                  groupItems
+                    .map((g) => (g.data.salesmanName || '').toString().trim())
+                    .filter(Boolean)
+                )
+              );
+              const primaryVendor = uniqueVendors[0] || 'Store';
+              const vendorName =
+                first.checkoutVendorSummary ||
+                (uniqueVendors.length > 2
+                  ? `${uniqueVendors[0]}, ${uniqueVendors[1]} +${uniqueVendors.length - 2}`
+                  : uniqueVendors.join(' & ') || 'Store');
+
+              const itemDescription =
+                first.checkoutItemSummary ||
+                first.itemDescription ||
+                (first.isMiscellaneous ? 'Miscellaneous' : '');
+              const splitSummary = first.splitSummary ? String(first.splitSummary) : undefined;
+              const basketItemCount =
+                first.basketItemCount !== undefined && first.basketItemCount !== null
+                  ? Number(first.basketItemCount)
+                  : groupItems.length;
+
+              // Play sound immediately on this device if not already played locally
+              if (!isSaleSoundRecentlyPlayed(groupKey)) {
+                playCheckoutSound(false, groupKey, totalAmount);
+              }
+
+              // Flash who the sale is for and how it was paid for 3 seconds
+              if (!isSaleRecentlyFlashed(groupKey)) {
+                emitSaleFlash({
+                  id: groupKey,
+                  vendorName,
+                  vendorColor: this.getVendorColor(primaryVendor),
+                  paymentMethod,
+                  itemDescription,
+                  amount: totalAmount,
+                  isOver100: totalAmount > 100,
+                  isSplit: Boolean(splitSummary),
+                  splitSummary,
+                  basketItemCount,
+                });
               }
             });
           }
@@ -517,6 +574,12 @@ class CloudSalesDatabase {
               isOnlineSale: Boolean(data.isOnlineSale) || paymentMethod === 'online',
               onlineCardId: data.onlineCardId || undefined,
               onlineBarcode: data.onlineBarcode || undefined,
+              checkoutGroupId: data.checkoutGroupId || undefined,
+              checkoutTotalAmount: data.checkoutTotalAmount !== undefined && data.checkoutTotalAmount !== null ? Number(data.checkoutTotalAmount) : undefined,
+              splitSummary: data.splitSummary || undefined,
+              basketItemCount: data.basketItemCount !== undefined && data.basketItemCount !== null ? Number(data.basketItemCount) : undefined,
+              checkoutVendorSummary: data.checkoutVendorSummary || undefined,
+              checkoutItemSummary: data.checkoutItemSummary || undefined,
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
               tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -628,6 +691,45 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Online cards Firestore listener error:', error);
+        }
+      );
+
+      // 5. Real-time listener for End-of-Day Cash Drawer Reconciliations across all devices
+      const cashReconCol = collection(db, 'cash_reconciliations');
+      onSnapshot(
+        cashReconCol,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
+          const remoteKeys = new Set<string>();
+
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const dKey = data.dateKey || docSnap.id;
+            remoteKeys.add(dKey);
+            this.cashReconciliationsCache.set(dKey, {
+              dateKey: dKey,
+              openingFloat: Number(data.openingFloat) || 0,
+              actualCashCounted:
+                data.actualCashCounted !== undefined && data.actualCashCounted !== null
+                  ? Number(data.actualCashCounted)
+                  : null,
+              denominationCounts: data.denominationCounts || undefined,
+              notes: data.notes || undefined,
+              updatedAt: data.updatedAt || Date.now(),
+            });
+          });
+
+          for (const localKey of Array.from(this.cashReconciliationsCache.keys())) {
+            if (!remoteKeys.has(localKey)) {
+              this.cashReconciliationsCache.delete(localKey);
+            }
+          }
+
+          this.notify();
+        },
+        (error) => {
+          console.warn('Cash reconciliations Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -915,6 +1017,295 @@ class CloudSalesDatabase {
     }
 
     return record;
+  }
+
+  /**
+   * Records a Multi-Item Basket and/or Split-Payment Checkout as penny-accurate SaleRecord legs.
+   * Plays ONE unified checkout sound (Fanfare if combined total > £100) and emits ONE 3s flash banner across devices.
+   */
+  public async insertBasketCheckout(input: {
+    items: BasketItemInput[];
+    payments: SplitPaymentBreakdown;
+    dateKey?: string;
+    timestamp?: number;
+    notes?: string;
+  }): Promise<SaleRecord[]> {
+    if (!input.items || input.items.length === 0) {
+      throw new Error('Cannot checkout an empty basket.');
+    }
+
+    const timestamp = input.timestamp || Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
+    const checkoutGroupId = 'chk_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+
+    // 1. Validate items & online card duplicates
+    const seenCardIds = new Set<string>();
+    const itemPence: number[] = [];
+    for (const item of input.items) {
+      const pence = Math.round(Number(item.amount) * 100);
+      if (isNaN(pence) || pence <= 0) {
+        throw new Error(`Invalid price for item "${item.itemDescription}".`);
+      }
+      if (!item.salesmanName || !item.salesmanName.trim()) {
+        throw new Error(`Missing vendor for item "${item.itemDescription}".`);
+      }
+      if (item.onlineCardId || item.onlineBarcode) {
+        if (item.onlineCardId && seenCardIds.has(item.onlineCardId)) {
+          throw new Error(`Card [${item.onlineBarcode || item.onlineCardId}] is already in this basket.`);
+        }
+        if (item.onlineCardId) seenCardIds.add(item.onlineCardId);
+        if (
+          (item.onlineBarcode && this.isOnlineCardAlreadySold(item.onlineBarcode)) ||
+          (item.onlineCardId && this.isOnlineCardAlreadySold(item.onlineCardId))
+        ) {
+          throw new Error(
+            `Duplicate sale prevented: Card [${item.onlineBarcode || item.onlineCardId}] is already sold!`
+          );
+        }
+      }
+      itemPence.push(pence);
+    }
+
+    const totalPence = itemPence.reduce((a, b) => a + b, 0);
+    const totalCheckoutAmount = Math.round(totalPence) / 100;
+
+    // 2. Validate payment breakdown in integer pence
+    const orderedMethods: PaymentMethod[] = ['cash', 'card', 'online', 'traded_out'];
+    const payPenceMap: Record<PaymentMethod, number> = {
+      cash: Math.max(0, Math.round((Number(input.payments.cash) || 0) * 100)),
+      card: Math.max(0, Math.round((Number(input.payments.card) || 0) * 100)),
+      online: Math.max(0, Math.round((Number(input.payments.online) || 0) * 100)),
+      traded_out: Math.max(0, Math.round((Number(input.payments.traded_out) || 0) * 100)),
+    };
+
+    const totalPayPence = orderedMethods.reduce((sum, m) => sum + payPenceMap[m], 0);
+    if (totalPayPence !== totalPence) {
+      throw new Error(
+        `Split payment total (£${(totalPayPence / 100).toFixed(2)}) must match basket total (£${totalCheckoutAmount.toFixed(2)}).`
+      );
+    }
+
+    const activeMethods = orderedMethods.filter((m) => payPenceMap[m] > 0);
+    if (activeMethods.length === 0) {
+      throw new Error('Select at least one payment method with an amount greater than £0.00.');
+    }
+
+    const isSplit = activeMethods.length > 1;
+    const methodLabel = (m: PaymentMethod) =>
+      m === 'cash' ? 'Cash' : m === 'card' ? 'Card' : m === 'online' ? 'Online' : 'Trade Out';
+
+    const splitSummary = isSplit
+      ? activeMethods.map((m) => `${methodLabel(m)} £${(payPenceMap[m] / 100).toFixed(2)}`).join(' + ')
+      : undefined;
+
+    // 3. Allocate pence across (item, method) matrix with exact row & column sums
+    const rows = input.items.length;
+    const cols = activeMethods.length;
+    const alloc: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+    if (cols === 1) {
+      for (let i = 0; i < rows; i++) {
+        alloc[i][0] = itemPence[i];
+      }
+    } else if (rows === 1) {
+      for (let c = 0; c < cols; c++) {
+        alloc[0][c] = payPenceMap[activeMethods[c]];
+      }
+    } else {
+      const frac: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+      const rowSums = Array(rows).fill(0);
+      const colSums = Array(cols).fill(0);
+
+      for (let i = 0; i < rows; i++) {
+        for (let c = 0; c < cols; c++) {
+          const exact = (itemPence[i] * payPenceMap[activeMethods[c]]) / totalPence;
+          const floored = Math.floor(exact);
+          alloc[i][c] = floored;
+          frac[i][c] = exact - floored;
+          rowSums[i] += floored;
+          colSums[c] += floored;
+        }
+      }
+
+      const rowDeficit = itemPence.map((target, i) => target - rowSums[i]);
+      const colDeficit = activeMethods.map((m, c) => payPenceMap[m] - colSums[c]);
+      let remainingDeficit = rowDeficit.reduce((a, b) => a + b, 0);
+
+      while (remainingDeficit > 0) {
+        let bestI = -1;
+        let bestC = -1;
+        let bestFrac = -1;
+        for (let i = 0; i < rows; i++) {
+          if (rowDeficit[i] <= 0) continue;
+          for (let c = 0; c < cols; c++) {
+            if (colDeficit[c] <= 0) continue;
+            if (frac[i][c] > bestFrac) {
+              bestFrac = frac[i][c];
+              bestI = i;
+              bestC = c;
+            }
+          }
+        }
+        if (bestI === -1 || bestC === -1) break;
+        alloc[bestI][bestC] += 1;
+        rowDeficit[bestI] -= 1;
+        colDeficit[bestC] -= 1;
+        frac[bestI][bestC] = -1;
+        remainingDeficit -= 1;
+      }
+    }
+
+    // 4. Build unified flash metadata
+    const uniqueVendors = Array.from(new Set(input.items.map((i) => i.salesmanName.trim()).filter(Boolean)));
+    const primaryVendor = uniqueVendors[0] || 'Store';
+    const checkoutVendorSummary =
+      uniqueVendors.length > 2
+        ? `${uniqueVendors[0]}, ${uniqueVendors[1]} +${uniqueVendors.length - 2}`
+        : uniqueVendors.join(' & ');
+
+    const firstItemLabel = input.items[0].isMiscellaneous
+      ? 'Miscellaneous'
+      : input.items[0].itemDescription.trim();
+    const checkoutItemSummary =
+      input.items.length === 1
+        ? firstItemLabel
+        : `${firstItemLabel} + ${input.items.length - 1} more`;
+
+    // 5. Create SaleRecord legs & mark online cards sold
+    const createdRecords: SaleRecord[] = [];
+    const firestoreWrites: Promise<any>[] = [];
+    const basketNotePrefix = input.items.length > 1 ? `Basket (${input.items.length} items)` : '';
+
+    for (let i = 0; i < rows; i++) {
+      const item = input.items[i];
+      const vendor = item.salesmanName.trim();
+      const isMisc = Boolean(item.isMiscellaneous) || item.itemDescription.trim().toLowerCase() === 'miscellaneous';
+      const baseDesc = isMisc ? 'Miscellaneous' : item.itemDescription.trim();
+      let cardLinkedToSale = false;
+
+      if (!this.salesmenList.includes(vendor)) {
+        this.salesmenList.push(vendor);
+        this.salesmenList.sort();
+      }
+
+      for (let c = 0; c < cols; c++) {
+        const legPence = alloc[i][c];
+        if (legPence <= 0) continue;
+
+        const method = activeMethods[c];
+        const legAmount = Math.round(legPence) / 100;
+        const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+
+        const noteParts = [
+          splitSummary ? `Split (${splitSummary})` : '',
+          basketNotePrefix,
+          item.notes?.trim() || '',
+          input.notes?.trim() || '',
+        ].filter(Boolean);
+        const combinedNotes = noteParts.length > 0 ? noteParts.join(' • ') : undefined;
+
+        const attachCard = Boolean(item.onlineCardId && !cardLinkedToSale);
+        if (attachCard) cardLinkedToSale = true;
+
+        const isOnlineSale = method === 'online' || Boolean(attachCard && item.onlineCardId);
+
+        const record: SaleRecord = {
+          id,
+          salesmanName: vendor,
+          itemDescription: baseDesc,
+          isMiscellaneous: isMisc ? true : undefined,
+          amount: legAmount,
+          paymentMethod: method,
+          notes: combinedNotes,
+          timestamp: timestamp + createdRecords.length,
+          dateKey,
+          isOnlineSale: isOnlineSale ? true : undefined,
+          onlineCardId: attachCard ? item.onlineCardId : undefined,
+          onlineBarcode: attachCard ? item.onlineBarcode : undefined,
+          checkoutGroupId,
+          checkoutTotalAmount: totalCheckoutAmount,
+          splitSummary,
+          basketItemCount: input.items.length,
+          checkoutVendorSummary,
+          checkoutItemSummary,
+        };
+
+        this.salesCache.set(id, record);
+        createdRecords.push(record);
+
+        firestoreWrites.push(
+          setDoc(doc(db, 'sales', id), {
+            salesmanName: record.salesmanName,
+            itemDescription: record.itemDescription,
+            isMiscellaneous: record.isMiscellaneous || false,
+            amount: record.amount,
+            paymentMethod: record.paymentMethod,
+            notes: record.notes || null,
+            timestamp: record.timestamp,
+            dateKey: record.dateKey,
+            isOnlineSale: Boolean(record.isOnlineSale),
+            onlineCardId: record.onlineCardId || null,
+            onlineBarcode: record.onlineBarcode || null,
+            checkoutGroupId,
+            checkoutTotalAmount: totalCheckoutAmount,
+            splitSummary: splitSummary || null,
+            basketItemCount: input.items.length,
+            checkoutVendorSummary,
+            checkoutItemSummary,
+          })
+        );
+
+        // If this leg carries the scanned online card, mark card as sold
+        if (attachCard && item.onlineCardId) {
+          const card = this.onlineCardsCache.get(item.onlineCardId);
+          if (card) {
+            const updatedCard: OnlineCard = {
+              ...card,
+              status: 'sold',
+              soldAt: timestamp,
+              soldDateKey: dateKey,
+              saleId: id,
+              soldPaymentMethod: method,
+            };
+            this.onlineCardsCache.set(card.id, updatedCard);
+            firestoreWrites.push(
+              updateDoc(doc(db, 'online_cards', card.id), {
+                status: 'sold',
+                soldAt: timestamp,
+                soldDateKey: dateKey,
+                saleId: id,
+                soldPaymentMethod: method,
+              })
+            );
+          }
+        }
+      }
+    }
+
+    // Play sound ONCE for the combined checkout total (Fanfare if > £100!) & flash unified 3s banner
+    playCheckoutSound(false, checkoutGroupId, totalCheckoutAmount);
+    emitSaleFlash({
+      id: checkoutGroupId,
+      vendorName: checkoutVendorSummary,
+      vendorColor: this.getVendorColor(primaryVendor),
+      paymentMethod: activeMethods[0],
+      itemDescription: checkoutItemSummary,
+      amount: totalCheckoutAmount,
+      isOver100: totalCheckoutAmount > 100,
+      isSplit,
+      splitSummary,
+      basketItemCount: input.items.length,
+    });
+
+    this.notify();
+
+    try {
+      await Promise.all(firestoreWrites);
+    } catch (e) {
+      console.warn('Checkout saved locally; Firestore sync pending:', e);
+    }
+
+    return createdRecords;
   }
 
   public async updateSale(id: string, updates: Partial<Omit<SaleRecord, 'id'>>) {
@@ -2280,6 +2671,138 @@ class CloudSalesDatabase {
     }
   }
 
+  // --- End-of-Day Cash Drawer Reconciliation ---
+
+  public getCashReconciliationRecord(dateKey: string): CashReconciliationRecord {
+    const existing = this.cashReconciliationsCache.get(dateKey);
+    if (existing) return existing;
+    return {
+      dateKey,
+      openingFloat: 0,
+      actualCashCounted: null,
+      updatedAt: 0,
+    };
+  }
+
+  public getPreviousDayOpeningFloat(dateKey: string): number | null {
+    const sortedKeys = Array.from(this.cashReconciliationsCache.keys())
+      .filter((k) => k < dateKey)
+      .sort((a, b) => b.localeCompare(a));
+
+    for (const key of sortedKeys) {
+      const rec = this.cashReconciliationsCache.get(key);
+      if (rec && rec.openingFloat > 0) {
+        return rec.openingFloat;
+      }
+    }
+    return null;
+  }
+
+  public getCashReconciliationSummary(dateKey: string): CashReconciliationSummary {
+    const rec = this.getCashReconciliationRecord(dateKey);
+    const daySummary = this.getDailySummary(dateKey);
+    const tradeSummary = this.getDailyTradeSummary(dateKey);
+
+    const openingFloat = Math.round((Number(rec.openingFloat) || 0) * 100) / 100;
+    const cashSalesIn = Math.round((Number(daySummary.cashRevenue) || 0) * 100) / 100;
+    const cashTradesOut = Math.round((Number(tradeSummary.cashTradeValue) || 0) * 100) / 100;
+    const expectedCashInTill = Math.round((openingFloat + cashSalesIn - cashTradesOut) * 100) / 100;
+
+    const actualCashCounted =
+      rec.actualCashCounted !== undefined && rec.actualCashCounted !== null
+        ? Math.round(Number(rec.actualCashCounted) * 100) / 100
+        : null;
+
+    const variance =
+      actualCashCounted !== null
+        ? Math.round((actualCashCounted - expectedCashInTill) * 100) / 100
+        : null;
+
+    let status: CashReconciliationSummary['status'] = 'pending';
+    if (variance !== null) {
+      if (Math.abs(variance) < 0.005) status = 'balanced';
+      else if (variance > 0) status = 'over';
+      else status = 'short';
+    }
+
+    return {
+      dateKey,
+      openingFloat,
+      cashSalesIn,
+      cashTradesOut,
+      expectedCashInTill,
+      actualCashCounted,
+      variance,
+      status,
+      denominationCounts: rec.denominationCounts,
+      notes: rec.notes,
+      updatedAt: rec.updatedAt || undefined,
+    };
+  }
+
+  public async saveCashReconciliation(
+    dateKey: string,
+    updates: {
+      openingFloat?: number;
+      actualCashCounted?: number | null;
+      denominationCounts?: Record<string, number>;
+      notes?: string;
+    }
+  ): Promise<CashReconciliationRecord> {
+    const existing = this.getCashReconciliationRecord(dateKey);
+    const now = Date.now();
+
+    const openingFloat =
+      updates.openingFloat !== undefined
+        ? Math.max(0, Math.round((Number(updates.openingFloat) || 0) * 100) / 100)
+        : existing.openingFloat;
+
+    let actualCashCounted = existing.actualCashCounted;
+    if (updates.actualCashCounted !== undefined) {
+      actualCashCounted =
+        updates.actualCashCounted === null
+          ? null
+          : Math.max(0, Math.round(Number(updates.actualCashCounted) * 100) / 100);
+    }
+
+    const denominationCounts =
+      updates.denominationCounts !== undefined
+        ? updates.denominationCounts
+        : existing.denominationCounts;
+
+    const notes =
+      updates.notes !== undefined
+        ? updates.notes.trim() || undefined
+        : existing.notes;
+
+    const record: CashReconciliationRecord = {
+      dateKey,
+      openingFloat,
+      actualCashCounted,
+      denominationCounts,
+      notes,
+      updatedAt: now,
+    };
+
+    this.cashReconciliationsCache.set(dateKey, record);
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'cash_reconciliations', dateKey), {
+        dateKey,
+        openingFloat: record.openingFloat,
+        actualCashCounted: record.actualCashCounted,
+        denominationCounts: record.denominationCounts || null,
+        notes: record.notes || null,
+        updatedAt: record.updatedAt,
+      });
+    } catch (e) {
+      console.warn('Cash reconciliation saved locally; Firestore sync pending:', e);
+    }
+
+    return record;
+  }
+
   public getSyncStatus(): {
     isConnected: boolean;
     lastSyncTimestamp: number;
@@ -2384,6 +2907,12 @@ class CloudSalesDatabase {
           isOnlineSale: Boolean(data.isOnlineSale) || paymentMethod === 'online',
           onlineCardId: data.onlineCardId || undefined,
           onlineBarcode: data.onlineBarcode || undefined,
+          checkoutGroupId: data.checkoutGroupId || undefined,
+          checkoutTotalAmount: data.checkoutTotalAmount !== undefined && data.checkoutTotalAmount !== null ? Number(data.checkoutTotalAmount) : undefined,
+          splitSummary: data.splitSummary || undefined,
+          basketItemCount: data.basketItemCount !== undefined && data.basketItemCount !== null ? Number(data.basketItemCount) : undefined,
+          checkoutVendorSummary: data.checkoutVendorSummary || undefined,
+          checkoutItemSummary: data.checkoutItemSummary || undefined,
           tradeDetails: data.tradeDetails || undefined,
           tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
           tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -2412,6 +2941,24 @@ class CloudSalesDatabase {
           soldItemDescription: data.soldItemDescription || undefined,
           saleAmount: data.saleAmount !== undefined && data.saleAmount !== null ? Number(data.saleAmount) : undefined,
           associatedSaleId: data.associatedSaleId || undefined,
+        });
+      });
+
+      // 4. Cash Drawer Reconciliations
+      const cashReconSnap = await getDocs(collection(db, 'cash_reconciliations'));
+      cashReconSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const dKey = data.dateKey || docSnap.id;
+        this.cashReconciliationsCache.set(dKey, {
+          dateKey: dKey,
+          openingFloat: Number(data.openingFloat) || 0,
+          actualCashCounted:
+            data.actualCashCounted !== undefined && data.actualCashCounted !== null
+              ? Number(data.actualCashCounted)
+              : null,
+          denominationCounts: data.denominationCounts || undefined,
+          notes: data.notes || undefined,
+          updatedAt: data.updatedAt || Date.now(),
         });
       });
 
@@ -2476,6 +3023,7 @@ class CloudSalesDatabase {
 
   public exportDayToCsv(dateKey: string): string {
     const sales = this.getSalesForDay(dateKey);
+    const recon = this.getCashReconciliationSummary(dateKey);
     const headers = [
       'Sale ID',
       'Date',
@@ -2497,10 +3045,23 @@ class CloudSalesDatabase {
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
+    const reconLines = [
+      '',
+      `# END-OF-DAY CASH DRAWER RECONCILIATION (${dateKey})`,
+      `Opening Float (£),${recon.openingFloat.toFixed(2)}`,
+      `Cash Sales In (£),${recon.cashSalesIn.toFixed(2)}`,
+      `Cash Trade-In Payouts Out (£),-${recon.cashTradesOut.toFixed(2)}`,
+      `Expected Cash in Till (£),${recon.expectedCashInTill.toFixed(2)}`,
+      `Actual Cash Counted (£),${recon.actualCashCounted !== null ? recon.actualCashCounted.toFixed(2) : 'Not Counted'}`,
+      `Variance (£),${recon.variance !== null ? recon.variance.toFixed(2) : 'N/A'}`,
+      `Status,${recon.status.toUpperCase()}`,
+    ];
+
     return [
       `# DISCLAIMER: All figures are gross totals before commission reductions`,
       headers.join(','),
       ...rows.map((r) => r.join(',')),
+      ...reconLines,
     ].join('\n');
   }
 }

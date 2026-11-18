@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 const STORAGE_KEY = 'pos_total_sales_auth_unlocked';
 const AUTH_EVENT = 'pos_total_sales_auth_changed';
 
+const CASH_DRAWER_STORAGE_KEY = 'pos_cash_drawer_auth_unlocked';
+const CASH_DRAWER_AUTH_EVENT = 'pos_cash_drawer_auth_changed';
+
 export function isTotalSalesUnlocked(): boolean {
   try {
     return sessionStorage.getItem(STORAGE_KEY) === 'true';
@@ -17,6 +20,8 @@ export function setTotalSalesUnlocked(unlocked: boolean) {
       sessionStorage.setItem(STORAGE_KEY, 'true');
     } else {
       sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(CASH_DRAWER_STORAGE_KEY);
+      window.dispatchEvent(new Event(CASH_DRAWER_AUTH_EVENT));
     }
     window.dispatchEvent(new Event(AUTH_EVENT));
   } catch (e) {
@@ -49,6 +54,57 @@ export function useTotalSalesAuth() {
 
   const lock = () => {
     setTotalSalesUnlocked(false);
+  };
+
+  return { isUnlocked, unlock, lock };
+}
+
+export function isCashDrawerUnlocked(): boolean {
+  try {
+    return sessionStorage.getItem(CASH_DRAWER_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setCashDrawerUnlocked(unlocked: boolean) {
+  try {
+    if (unlocked) {
+      sessionStorage.setItem(CASH_DRAWER_STORAGE_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(CASH_DRAWER_STORAGE_KEY);
+    }
+    window.dispatchEvent(new Event(CASH_DRAWER_AUTH_EVENT));
+  } catch (e) {
+    console.warn('Could not update cash drawer session auth:', e);
+  }
+}
+
+export function verifyCashDrawerCode(code: string): boolean {
+  return code.trim() === '2703';
+}
+
+export function useCashDrawerAuth() {
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => isCashDrawerUnlocked());
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setIsUnlocked(isCashDrawerUnlocked());
+    };
+    window.addEventListener(CASH_DRAWER_AUTH_EVENT, handleAuthChange);
+    return () => window.removeEventListener(CASH_DRAWER_AUTH_EVENT, handleAuthChange);
+  }, []);
+
+  const unlock = (code: string): boolean => {
+    if (verifyCashDrawerCode(code)) {
+      setCashDrawerUnlocked(true);
+      return true;
+    }
+    return false;
+  };
+
+  const lock = () => {
+    setCashDrawerUnlocked(false);
   };
 
   return { isUnlocked, unlock, lock };

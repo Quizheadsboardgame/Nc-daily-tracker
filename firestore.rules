@@ -29,6 +29,10 @@ service cloud.firestore {
     match /removed_vendors/{vendorId} {
       allow read, write: if true;
     }
+    // End-of-day cash drawer reconciliations synced across terminals
+    match /cash_reconciliations/{dateKey} {
+      allow read, write: if true;
+    }
     // Universal access rule to ensure all devices can read and write all application data
     match /{document=**} {
       allow read, write: if true;

@@ -2,6 +2,24 @@ export type PaymentMethod = 'cash' | 'card' | 'traded_out' | 'online';
 
 export type TradeType = 'cash' | 'credit'; // Cards traded in for cash OR for credit (vendors credit)
 
+export interface SplitPaymentBreakdown {
+  cash?: number;
+  card?: number;
+  online?: number;
+  traded_out?: number;
+}
+
+export interface BasketItemInput {
+  id: string;
+  salesmanName: string;
+  itemDescription: string;
+  isMiscellaneous?: boolean;
+  amount: number;
+  notes?: string;
+  onlineCardId?: string;
+  onlineBarcode?: string;
+}
+
 export interface SaleRecord {
   id: string;
   salesmanName: string; // Vendor name
@@ -15,6 +33,13 @@ export interface SaleRecord {
   isOnlineSale?: boolean;
   onlineCardId?: string;
   onlineBarcode?: string;
+  // Multi-item basket & split payment grouping metadata
+  checkoutGroupId?: string;
+  checkoutTotalAmount?: number;
+  splitSummary?: string;
+  basketItemCount?: number;
+  checkoutVendorSummary?: string;
+  checkoutItemSummary?: string;
   // Backward compatibility fields if legacy records exist
   tradeDetails?: string;
   tradeAcceptingVendor?: string;
@@ -181,4 +206,27 @@ export interface DailySalesTrendPoint {
   fullDate: string;
   totalRevenue: number;
   salesCount: number;
+}
+
+export interface CashReconciliationRecord {
+  dateKey: string; // YYYY-MM-DD
+  openingFloat: number; // Opening till float in GBP (£)
+  actualCashCounted: number | null; // Manager physical count at end of day
+  denominationCounts?: Record<string, number>; // Optional UK notes/coins count map
+  notes?: string;
+  updatedAt: number; // Epoch ms
+}
+
+export interface CashReconciliationSummary {
+  dateKey: string;
+  openingFloat: number;
+  cashSalesIn: number;
+  cashTradesOut: number;
+  expectedCashInTill: number; // openingFloat + cashSalesIn - cashTradesOut
+  actualCashCounted: number | null;
+  variance: number | null; // actualCashCounted - expectedCashInTill
+  status: 'pending' | 'balanced' | 'over' | 'short';
+  denominationCounts?: Record<string, number>;
+  notes?: string;
+  updatedAt?: number;
 }

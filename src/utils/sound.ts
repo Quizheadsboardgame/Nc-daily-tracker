@@ -633,6 +633,9 @@ export interface SaleFlashEvent {
   itemDescription?: string;
   amount?: number;
   isOver100?: boolean;
+  isSplit?: boolean;
+  splitSummary?: string;
+  basketItemCount?: number;
   timestamp: number;
 }
 

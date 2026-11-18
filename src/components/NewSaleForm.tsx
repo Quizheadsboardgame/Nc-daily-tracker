@@ -1,9 +1,29 @@
-import React, { useState, useRef } from 'react';
-import { User, Tag, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Plus, Users, UserPlus, X, Globe, BookOpen, ShoppingBag, Boxes, Sparkles, Layers, Volume2, VolumeX } from 'lucide-react';
-import { PaymentMethod } from '../types';
-import { cloudDb } from '../db/cloudDatabase';
+import React, { useState, useRef, useMemo } from 'react';
+import {
+  Tag,
+  Banknote,
+  CreditCard,
+  ArrowLeftRight,
+  CheckCircle2,
+  Plus,
+  Users,
+  X,
+  Globe,
+  BookOpen,
+  ShoppingBag,
+  Boxes,
+  Sparkles,
+  Layers,
+  Volume2,
+  VolumeX,
+  ShoppingCart,
+  Trash2,
+  Split,
+} from 'lucide-react';
+import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown } from '../types';
+import { cloudDb, formatCurrency } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
-import { playCheckoutSound, useCheckoutSound } from '../utils/sound';
+import { useCheckoutSound } from '../utils/sound';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -17,6 +37,11 @@ interface NewSaleFormProps {
     paymentMethod: PaymentMethod;
     notes?: string;
   }) => void;
+  onCheckoutBasket?: (payload: {
+    items: BasketItemInput[];
+    payments: SplitPaymentBreakdown;
+    notes?: string;
+  }) => Promise<void> | void;
   onAddVendor?: (name: string) => void;
   onAddSalesman?: (name: string) => void;
   onOpenManageVendors?: () => void;
@@ -25,10 +50,11 @@ interface NewSaleFormProps {
 }
 
 export const NewSaleForm: React.FC<NewSaleFormProps> = ({
-  currentDateKey: _currentDateKey,
+  currentDateKey,
   knownVendors: propKnownVendors,
   knownSalesmen: propKnownSalesmen,
   onSubmitSale,
+  onCheckoutBasket,
   onAddVendor,
   onAddSalesman,
   onOpenManageVendors,
@@ -44,8 +70,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const [itemDescription, setItemDescription] = useState('');
   const [isMiscellaneous, setIsMiscellaneous] = useState(false);
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [paymentMode, setPaymentMode] = useState<PaymentMethod | 'split'>('card');
+  const [splitAmounts, setSplitAmounts] = useState<{
+    cash: string;
+    card: string;
+    online: string;
+    traded_out: string;
+  }>({ cash: '', card: '', online: '', traded_out: '' });
   const [notes, setNotes] = useState('');
+  const [basketItems, setBasketItems] = useState<BasketItemInput[]>([]);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
   const [showSuccessBadge, setShowSuccessBadge] = useState(false);
   const [lastRecordedInfo, setLastRecordedInfo] = useState('');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -56,6 +91,25 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   const itemInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
+
+  const basketSubtotal = useMemo(
+    () => Math.round(basketItems.reduce((sum, item) => sum + item.amount, 0) * 100) / 100,
+    [basketItems]
+  );
+
+  const currentFieldAmount = parseFloat(amount) || 0;
+  const checkoutTargetTotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
+
+  const splitSum = useMemo(() => {
+    const c = parseFloat(splitAmounts.cash) || 0;
+    const d = parseFloat(splitAmounts.card) || 0;
+    const o = parseFloat(splitAmounts.online) || 0;
+    const t = parseFloat(splitAmounts.traded_out) || 0;
+    return Math.round((c + d + o + t) * 100) / 100;
+  }, [splitAmounts]);
+
+  const splitRemaining = Math.round((checkoutTargetTotal - splitSum) * 100) / 100;
+  const isSplitBalanced = Math.abs(splitRemaining) < 0.005 && checkoutTargetTotal > 0;
 
   const handleToggleMisc = (checked: boolean) => {
     setIsMiscellaneous(checked);
@@ -77,15 +131,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
   const resolveTargetVendor = (target: 'Kieron' | 'Newtons'): string => {
     if (target === 'Kieron') {
-      const found = knownVendors.find(
-        (v) => v.toLowerCase() === 'kieron'
-      );
+      const found = knownVendors.find((v) => v.toLowerCase() === 'kieron');
       return found || '';
     }
     if (target === 'Newtons') {
-      const found = knownVendors.find(
-        (v) => v.toLowerCase().startsWith('newton')
-      );
+      const found = knownVendors.find((v) => v.toLowerCase().startsWith('newton'));
       return found || '';
     }
     return '';
@@ -123,7 +173,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     }
   };
 
-  const validate = (): boolean => {
+  const validateCurrentItemFields = (): boolean => {
     const errs: { [key: string]: string } = {};
 
     if (!vendorName.trim()) {
@@ -143,54 +193,168 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const handleAddCurrentToBasket = () => {
+    if (!validateCurrentItemFields()) return;
 
-    const numAmount = parseFloat(amount);
+    const numAmount = Math.round(parseFloat(amount) * 100) / 100;
     const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
 
-    onSubmitSale({
+    const newItem: BasketItemInput = {
+      id: 'bkt_' + Math.random().toString(36).substring(2, 9),
       salesmanName: vendorName.trim(),
       itemDescription: finalItemDesc,
       isMiscellaneous,
       amount: numAmount,
-      paymentMethod,
-      notes: notes.trim() || undefined,
-    });
+    };
 
-    playCheckoutSound(false, undefined, numAmount);
-
-    const methodDisplay =
-      paymentMethod === 'traded_out'
-        ? 'TRADE OUT'
-        : paymentMethod === 'online'
-        ? 'ONLINE SALE'
-        : paymentMethod.toUpperCase();
-    setLastRecordedInfo(
-      `${vendorName.trim()} • ${finalItemDesc} • £${numAmount.toFixed(2)} (${methodDisplay})`
-    );
-    setShowSuccessBadge(true);
-    setTimeout(() => {
-      setShowSuccessBadge(false);
-    }, 3500);
-
-    // Reset item fields, maintain selected vendor for fast sequential entries
+    setBasketItems((prev) => [...prev, newItem]);
     if (!isMiscellaneous) {
       setItemDescription('');
     }
     setAmount('');
-    setNotes('');
     setErrors({});
-
-    // Refocus item input
     setTimeout(() => {
-      if (isMiscellaneous) {
-        amountInputRef.current?.focus();
-      } else {
-        itemInputRef.current?.focus();
-      }
+      if (isMiscellaneous) amountInputRef.current?.focus();
+      else itemInputRef.current?.focus();
     }, 50);
+  };
+
+  const handleRemoveBasketItem = (id: string) => {
+    setBasketItems((prev) => prev.filter((item) => item.id !== id));
+    setErrors((prev) => ({ ...prev, split: '', checkout: '' }));
+  };
+
+  const handleFillRemainder = (target: PaymentMethod) => {
+    const currentOther =
+      (target === 'cash' ? 0 : parseFloat(splitAmounts.cash) || 0) +
+      (target === 'card' ? 0 : parseFloat(splitAmounts.card) || 0) +
+      (target === 'online' ? 0 : parseFloat(splitAmounts.online) || 0) +
+      (target === 'traded_out' ? 0 : parseFloat(splitAmounts.traded_out) || 0);
+    const rem = Math.max(0, Math.round((checkoutTargetTotal - currentOther) * 100) / 100);
+    setSplitAmounts((prev) => ({
+      ...prev,
+      [target]: rem > 0 ? rem.toFixed(2) : '',
+    }));
+    if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Determine items to check out:
+    // If basket has items, check out the basket; if basket is empty, validate & use single item form.
+    let itemsToCheckout: BasketItemInput[] = [...basketItems];
+
+    if (itemsToCheckout.length === 0) {
+      if (!validateCurrentItemFields()) return;
+      const numAmount = Math.round(parseFloat(amount) * 100) / 100;
+      const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+      itemsToCheckout = [
+        {
+          id: 'single_' + Date.now(),
+          salesmanName: vendorName.trim(),
+          itemDescription: finalItemDesc,
+          isMiscellaneous,
+          amount: numAmount,
+        },
+      ];
+    }
+
+    const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+
+    // Validate Split Payments if split mode selected
+    let payments: SplitPaymentBreakdown;
+    if (paymentMode === 'split') {
+      const c = Math.max(0, Math.round((parseFloat(splitAmounts.cash) || 0) * 100) / 100);
+      const d = Math.max(0, Math.round((parseFloat(splitAmounts.card) || 0) * 100) / 100);
+      const o = Math.max(0, Math.round((parseFloat(splitAmounts.online) || 0) * 100) / 100);
+      const t = Math.max(0, Math.round((parseFloat(splitAmounts.traded_out) || 0) * 100) / 100);
+      const enteredSum = Math.round((c + d + o + t) * 100) / 100;
+
+      if (Math.abs(enteredSum - totalVal) >= 0.005) {
+        setErrors((prev) => ({
+          ...prev,
+          split: `Split amounts (£${enteredSum.toFixed(2)}) must equal checkout total (£${totalVal.toFixed(2)}).`,
+        }));
+        return;
+      }
+
+      payments = { cash: c, card: d, online: o, traded_out: t };
+    } else {
+      payments = { [paymentMode]: totalVal };
+    }
+
+    setIsCheckingOut(true);
+    try {
+      // Single item & single payment method -> use classic handler if no basket checkout needed
+      if (itemsToCheckout.length === 1 && paymentMode !== 'split') {
+        const single = itemsToCheckout[0];
+        onSubmitSale({
+          salesmanName: single.salesmanName,
+          itemDescription: single.itemDescription,
+          isMiscellaneous: single.isMiscellaneous,
+          amount: single.amount,
+          paymentMethod: paymentMode,
+          notes: notes.trim() || undefined,
+        });
+      } else if (onCheckoutBasket) {
+        await onCheckoutBasket({
+          items: itemsToCheckout,
+          payments,
+          notes: notes.trim() || undefined,
+        });
+      } else {
+        await cloudDb.insertBasketCheckout({
+          items: itemsToCheckout,
+          payments,
+          dateKey: currentDateKey,
+          notes: notes.trim() || undefined,
+        });
+      }
+
+      const methodSummary =
+        paymentMode === 'split'
+          ? 'SPLIT PAYMENT'
+          : paymentMode === 'traded_out'
+          ? 'TRADE OUT'
+          : paymentMode === 'online'
+          ? 'ONLINE SALE'
+          : paymentMode.toUpperCase();
+
+      const itemSummaryText =
+        itemsToCheckout.length > 1
+          ? `Basket (${itemsToCheckout.length} items)`
+          : `${itemsToCheckout[0].salesmanName} • ${itemsToCheckout[0].itemDescription}`;
+
+      setLastRecordedInfo(`${itemSummaryText} • £${totalVal.toFixed(2)} (${methodSummary})`);
+      setShowSuccessBadge(true);
+      setTimeout(() => {
+        setShowSuccessBadge(false);
+      }, 3500);
+
+      // Reset form & basket
+      setBasketItems([]);
+      if (!isMiscellaneous) {
+        setItemDescription('');
+      }
+      setAmount('');
+      setNotes('');
+      setSplitAmounts({ cash: '', card: '', online: '', traded_out: '' });
+      if (paymentMode === 'split') setPaymentMode('card');
+      setErrors({});
+
+      setTimeout(() => {
+        if (isMiscellaneous) {
+          amountInputRef.current?.focus();
+        } else {
+          itemInputRef.current?.focus();
+        }
+      }, 50);
+    } catch (err: any) {
+      setErrors((prev) => ({ ...prev, checkout: err?.message || 'Failed to complete checkout.' }));
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   const handleQuickAddAmount = (addVal: number) => {
@@ -218,7 +382,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     }
   };
 
-  const selectedVendorColor = vendorName ? cloudDb.getVendorColor(vendorName) : '#2563eb';
+  const hasUnsavedItemInput =
+    basketItems.length > 0 && (Boolean(itemDescription.trim() && !isMiscellaneous) || currentFieldAmount > 0);
 
   return (
     <div
@@ -238,7 +403,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             <h2 className="text-sm font-bold text-zinc-900 tracking-tight flex items-center gap-2 flex-wrap">
               <span>Record New Sale</span>
               <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
-                Cash • Card • Trade Out
+                Multi-Item Basket • Split Pay
               </span>
             </h2>
             <p className="text-[11px] text-zinc-500">
@@ -254,7 +419,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           {handleOpenManageVendors && (
             <button
               type="button"
@@ -278,7 +443,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       </div>
 
       <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 space-y-4">
-        {/* Quick Category Buttons: Miscellaneous, Comics (Kieron), Accessories (Newtons), Packs (Any Vendor) */}
+        {/* Quick Category Buttons */}
         <div className="space-y-1.5 pb-2 border-b border-zinc-100">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
@@ -291,7 +456,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {/* 1. Miscellaneous */}
             <button
               type="button"
               id="btn-form-quick-misc"
@@ -309,7 +473,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               <span className={`text-[10px] font-semibold truncate ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`}>Any vendor</span>
             </button>
 
-            {/* 2. Comics (Auto Kieron) */}
             <button
               type="button"
               id="btn-form-quick-comics"
@@ -329,7 +492,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </span>
             </button>
 
-            {/* 3. Accessories (Auto Newtons) */}
             <button
               type="button"
               id="btn-form-quick-accessories"
@@ -349,7 +511,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </span>
             </button>
 
-            {/* 4. Packs (Any Vendor) */}
             <button
               type="button"
               id="btn-form-quick-packs"
@@ -449,7 +610,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 Item Sold <span className="text-rose-500">*</span>
               </label>
 
-              {/* Quick Miscellaneous Toggle */}
               <label
                 htmlFor="check-misc-sale"
                 className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-700 hover:text-zinc-950 cursor-pointer select-none bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200"
@@ -492,16 +652,15 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
         </div>
 
-        {/* ROW 2: Price (£) and Payment Method (Cash or Card) */}
+        {/* ROW 2: Price (£) + Add to Basket + Payment Method */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-1">
-          {/* Amount / Price */}
-          <div className="md:col-span-5 space-y-1.5">
+          {/* Amount / Price + Add to Basket */}
+          <div className="md:col-span-5 space-y-2">
             <div className="flex items-center justify-between">
               <label htmlFor="input-sale-amount" className="block text-xs font-bold text-zinc-800">
                 Sale Price (£ GBP) <span className="text-rose-500">*</span>
               </label>
 
-              {/* Quick increment buttons */}
               <div className="flex items-center gap-1">
                 {[1, 5, 10].map((inc) => (
                   <button
@@ -516,52 +675,64 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </div>
             </div>
 
-            <div className="relative">
-              <span className="absolute left-3.5 top-2 text-sm font-black text-zinc-500 pointer-events-none">
-                £
-              </span>
-              <input
-                ref={amountInputRef}
-                type="number"
-                step="0.01"
-                min="0.01"
-                id="input-sale-amount"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  if (errors.amount) setErrors((prev) => ({ ...prev, amount: '' }));
-                }}
-                placeholder="0.00"
-                className={`w-full pl-8 pr-3 py-2 text-sm font-black tracking-tight rounded-xl border tabular-nums transition-all ${
-                  errors.amount
-                    ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
-                    : 'border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 focus:ring-zinc-900/10 focus:border-zinc-900'
-                }`}
-              />
+            <div className="flex items-stretch gap-2">
+              <div className="relative flex-1 min-w-0">
+                <span className="absolute left-3.5 top-2.5 text-sm font-black text-zinc-500 pointer-events-none">
+                  £
+                </span>
+                <input
+                  ref={amountInputRef}
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  id="input-sale-amount"
+                  value={amount}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    if (errors.amount) setErrors((prev) => ({ ...prev, amount: '' }));
+                  }}
+                  placeholder="0.00"
+                  className={`w-full min-h-[42px] pl-8 pr-3 py-2 text-sm font-black tracking-tight rounded-xl border tabular-nums transition-all ${
+                    errors.amount
+                      ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
+                      : 'border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 focus:ring-zinc-900/10 focus:border-zinc-900'
+                  }`}
+                />
+              </div>
+
+              <button
+                type="button"
+                id="btn-add-to-basket"
+                onClick={handleAddCurrentToBasket}
+                className="min-h-[42px] px-3 py-2 rounded-xl border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-extrabold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                title="Add this item to multi-item basket (mix items across vendors in one checkout)"
+              >
+                <ShoppingCart className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                <span>+ Basket</span>
+              </button>
             </div>
 
             {errors.amount && <p className="text-[11px] font-semibold text-rose-600">{errors.amount}</p>}
           </div>
 
-          {/* Payment Method Selector (Cash, Card, or Traded Out) */}
+          {/* Payment Method Selector (Cash, Card, Online, Trade Out, Split) */}
           <div className="md:col-span-7 space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-zinc-800">
                 Payment / Settlement Method <span className="text-rose-500">*</span>
               </label>
               <span className="text-[10px] text-zinc-400 font-medium hidden sm:inline">
-                Traded Out = item leaving stock in deal
+                Use Split to mix Cash + Card + Trade
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {/* Cash Button */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <button
                 type="button"
                 id="btn-payment-cash"
-                onClick={() => setPaymentMethod('cash')}
-                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-                  paymentMethod === 'cash'
+                onClick={() => setPaymentMode('cash')}
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  paymentMode === 'cash'
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                 }`}
@@ -570,13 +741,12 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 <span>Cash</span>
               </button>
 
-              {/* Card Button */}
               <button
                 type="button"
                 id="btn-payment-card"
-                onClick={() => setPaymentMethod('card')}
-                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-                  paymentMethod === 'card'
+                onClick={() => setPaymentMode('card')}
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  paymentMode === 'card'
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-600/25 font-black'
                     : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-300'
                 }`}
@@ -585,40 +755,53 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 <span>Card</span>
               </button>
 
-              {/* Online Button */}
               <button
                 type="button"
                 id="btn-payment-online"
-                onClick={() => setPaymentMethod('online')}
-                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-                  paymentMethod === 'online'
+                onClick={() => setPaymentMode('online')}
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  paymentMode === 'online'
                     ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black'
                     : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300'
                 }`}
                 title="Sold online via website, socials, or marketplace"
               >
-                <Globe className={`w-4 h-4 shrink-0 ${paymentMethod === 'online' ? 'text-violet-200' : 'text-violet-700'}`} />
+                <Globe className={`w-4 h-4 shrink-0 ${paymentMode === 'online' ? 'text-violet-200' : 'text-violet-700'}`} />
                 <span>Online</span>
               </button>
 
-              {/* Trade Out Button */}
               <button
                 type="button"
                 id="btn-payment-traded-out"
-                onClick={() => setPaymentMethod('traded_out')}
-                className={`min-h-[44px] py-2.5 sm:py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
-                  paymentMethod === 'traded_out'
+                onClick={() => setPaymentMode('traded_out')}
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  paymentMode === 'traded_out'
                     ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-600/25 font-black'
                     : 'bg-amber-50/60 hover:bg-amber-100 text-amber-900 border-amber-300'
                 }`}
                 title="Item traded out from vendor's inventory/till"
               >
-                <ArrowLeftRight className={`w-4 h-4 shrink-0 ${paymentMethod === 'traded_out' ? 'text-amber-200' : 'text-amber-700'}`} />
+                <ArrowLeftRight className={`w-4 h-4 shrink-0 ${paymentMode === 'traded_out' ? 'text-amber-200' : 'text-amber-700'}`} />
                 <span>Trade Out</span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-payment-split"
+                onClick={() => setPaymentMode('split')}
+                className={`col-span-2 sm:col-span-1 min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  paymentMode === 'split'
+                    ? 'bg-cyan-700 text-white border-cyan-700 shadow-sm ring-2 ring-cyan-600/25 font-black'
+                    : 'bg-cyan-50/70 hover:bg-cyan-100 text-cyan-900 border-cyan-300'
+                }`}
+                title="Split payment across Cash, Card, Online, or Trade Out"
+              >
+                <Split className={`w-4 h-4 shrink-0 ${paymentMode === 'split' ? 'text-cyan-200' : 'text-cyan-700'}`} />
+                <span>Split</span>
               </button>
             </div>
 
-            {paymentMethod === 'traded_out' && (
+            {paymentMode === 'traded_out' && (
               <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5 animate-fade-in">
                 <span className="font-bold">Notice:</span>
                 <span>This item is recorded as trade out from stock. (Cards traded in to store are logged separately on Trade In page).</span>
@@ -626,6 +809,184 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             )}
           </div>
         </div>
+
+        {/* Multi-Item Basket Panel (Visible whenever items are in the basket) */}
+        {basketItems.length > 0 && (
+          <div
+            id="panel-sale-basket"
+            className="rounded-2xl bg-indigo-50/70 border border-indigo-200 p-3.5 sm:p-4 space-y-3 animate-fade-in"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <ShoppingCart className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                    Multi-Item Basket ({basketItems.length} {basketItems.length === 1 ? 'item' : 'items'})
+                  </h3>
+                  <p className="text-[11px] text-indigo-700 font-medium">
+                    One combined chime &amp; flash banner on checkout (Fanfare if total &gt; £100)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-indigo-950 tabular-nums bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
+                  Total: {formatCurrency(basketSubtotal)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBasketItems([])}
+                  className="text-[11px] font-bold text-rose-600 hover:text-rose-800 px-2 py-1 rounded-lg hover:bg-rose-50 cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="divide-y divide-indigo-200/70 bg-white rounded-xl border border-indigo-200/80 overflow-hidden">
+              {basketItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold text-zinc-400 w-4 shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: cloudDb.getVendorColor(item.salesmanName) }}
+                    />
+                    <span className="font-bold text-zinc-900 shrink-0">{item.salesmanName}</span>
+                    <span className="text-zinc-400">•</span>
+                    <span className="font-medium text-zinc-700 truncate">{item.itemDescription}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-black text-zinc-950 tabular-nums">
+                      {formatCurrency(item.amount)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBasketItem(item.id)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                      aria-label={`Remove ${item.itemDescription}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {hasUnsavedItemInput && (
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                <span>
+                  You also have details typed above—tap <strong>+ Basket</strong> to include them before checkout.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddCurrentToBasket}
+                  className="font-extrabold text-amber-950 underline shrink-0 cursor-pointer"
+                >
+                  + Add Now
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Split Payment Panel (Visible whenever Split is selected) */}
+        {paymentMode === 'split' && (
+          <div
+            id="panel-split-payment"
+            className="rounded-2xl bg-cyan-50/70 border border-cyan-200 p-3.5 sm:p-4 space-y-3 animate-fade-in"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Split className="w-4 h-4 text-cyan-700 shrink-0" />
+                <span className="text-xs font-black text-cyan-950 uppercase tracking-wider">
+                  Split Payment Allocation
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-zinc-600">
+                  Target: <strong className="text-zinc-950 tabular-nums">{formatCurrency(checkoutTargetTotal)}</strong>
+                </span>
+                {checkoutTargetTotal > 0 && (
+                  <span
+                    className={`px-2 py-0.5 rounded-md font-extrabold text-[11px] tabular-nums border ${
+                      isSplitBalanced
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : splitRemaining > 0
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-rose-100 text-rose-800 border-rose-300'
+                    }`}
+                  >
+                    {isSplitBalanced
+                      ? 'Balanced ✓'
+                      : splitRemaining > 0
+                      ? `Remaining: ${formatCurrency(splitRemaining)}`
+                      : `Over by: ${formatCurrency(Math.abs(splitRemaining))}`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {(
+                [
+                  { key: 'cash', label: 'Cash (£)', color: 'emerald' },
+                  { key: 'card', label: 'Card (£)', color: 'blue' },
+                  { key: 'online', label: 'Online (£)', color: 'violet' },
+                  { key: 'traded_out', label: 'Trade Out (£)', color: 'amber' },
+                ] as const
+              ).map(({ key, label }) => (
+                <div key={key} className="bg-white rounded-xl border border-cyan-200/80 p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-[11px] font-bold text-zinc-700">{label}</label>
+                    {checkoutTargetTotal > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleFillRemainder(key)}
+                        className="text-[10px] font-extrabold text-cyan-700 hover:text-cyan-950 bg-cyan-50 hover:bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-200 cursor-pointer"
+                        title={`Put remaining balance into ${label}`}
+                      >
+                        Rem
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={splitAmounts[key]}
+                      onChange={(e) => {
+                        setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }));
+                        if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
+                      }}
+                      placeholder="0.00"
+                      className="w-full pl-6 pr-2 py-1 text-xs font-black tabular-nums rounded-lg border border-zinc-300 focus:outline-hidden focus:border-cyan-600 text-zinc-950"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {errors.split && <p className="text-[11px] font-bold text-rose-600">{errors.split}</p>}
+          </div>
+        )}
+
+        {errors.checkout && (
+          <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl">
+            {errors.checkout}
+          </p>
+        )}
 
         {/* Optional Notes & Action Submit */}
         <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100">
@@ -641,7 +1002,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
 
           <div className="flex items-stretch gap-2 w-full sm:w-auto">
-            {/* Sound Toggle Button */}
             <button
               type="button"
               id="btn-form-sound-toggle"
@@ -670,11 +1030,16 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             <button
               type="submit"
               id="btn-submit-new-sale"
-              className="flex-1 sm:flex-none min-w-0 min-h-[44px] px-4 sm:px-6 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98 whitespace-nowrap"
+              disabled={isCheckingOut}
+              className="flex-1 sm:flex-none min-w-0 min-h-[44px] px-4 sm:px-6 py-2.5 bg-zinc-950 hover:bg-zinc-800 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98 whitespace-nowrap"
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="truncate">
-                Record Sale {amount && !isNaN(parseFloat(amount)) ? `(£${parseFloat(amount).toFixed(2)})` : ''}
+                {basketItems.length > 0
+                  ? `Checkout Basket (${basketItems.length} • ${formatCurrency(basketSubtotal)})`
+                  : paymentMode === 'split'
+                  ? `Record Split Sale${currentFieldAmount > 0 ? ` (${formatCurrency(currentFieldAmount)})` : ''}`
+                  : `Record Sale${amount && !isNaN(parseFloat(amount)) ? ` (£${parseFloat(amount).toFixed(2)})` : ''}`}
               </span>
             </button>
           </div>

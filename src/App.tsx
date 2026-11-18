@@ -14,10 +14,11 @@ import { SalesSearchTab } from './components/SalesSearchTab';
 import { VendorLeaderboardTab } from './components/VendorLeaderboardTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { SaleFlashBanner } from './components/SaleFlashBanner';
-import { useTotalSalesAuth } from './utils/auth';
+import { CashDrawerTab } from './components/CashDrawerTab';
+import { useTotalSalesAuth, useCashDrawerAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
-import { SaleRecord, PaymentMethod, DaySummary } from './types';
-import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search, Trophy } from 'lucide-react';
+import { SaleRecord, PaymentMethod, DaySummary, BasketItemInput, SplitPaymentBreakdown } from './types';
+import { Cloud, Users, ArrowLeftRight, FileSpreadsheet, PlusCircle, Building2, ShoppingBag, Search, Trophy, Vault, Lock } from 'lucide-react';
 
 export default function App() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(getLocalDateKey());
@@ -78,6 +79,20 @@ export default function App() {
     refreshFromDb();
   };
 
+  const handleCheckoutBasket = async (payload: {
+    items: BasketItemInput[];
+    payments: SplitPaymentBreakdown;
+    notes?: string;
+  }) => {
+    await cloudDb.insertBasketCheckout({
+      items: payload.items,
+      payments: payload.payments,
+      dateKey: currentDateKey,
+      notes: payload.notes,
+    });
+    refreshFromDb();
+  };
+
   const handleAddVendor = (name: string, color?: string) => {
     cloudDb.addVendor(name, color);
     refreshFromDb();
@@ -133,6 +148,7 @@ export default function App() {
   };
 
   const { isUnlocked } = useTotalSalesAuth();
+  const { isUnlocked: isCashDrawerUnlocked } = useCashDrawerAuth();
 
   if (!isUnlocked) {
     return (
@@ -166,7 +182,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 overflow-x-hidden">
         {/* Navigation Tabs Bar - Wraps cleanly into a 2-col mobile grid so every tab button fits inside the screen */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between border-b border-zinc-250 pb-3.5 gap-2.5 w-full max-w-full">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs w-full lg:w-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap items-center gap-1.5 bg-zinc-200/90 p-1.5 rounded-2xl border border-zinc-300/80 shadow-2xs w-full lg:w-auto">
             <button
               type="button"
               id="tab-btn-ledger"
@@ -201,6 +217,23 @@ export default function App() {
                 }`}>
                   {cloudDb.getTradesForDay(currentDateKey).length}
                 </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              id="tab-btn-cash-drawer"
+              onClick={() => setActiveTab('cash-drawer')}
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'cash-drawer'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <Vault className={`w-4 h-4 shrink-0 ${activeTab === 'cash-drawer' ? 'text-emerald-400' : 'text-emerald-700'}`} />
+              <span className="truncate">Cash Drawer</span>
+              {!isCashDrawerUnlocked && (
+                <Lock className={`w-3 h-3 shrink-0 ${activeTab === 'cash-drawer' ? 'text-amber-400' : 'text-zinc-500'}`} />
               )}
             </button>
 
@@ -280,7 +313,7 @@ export default function App() {
               type="button"
               id="tab-btn-manage-vendors"
               onClick={() => setActiveTab('manage-vendors')}
-              className={`col-span-2 sm:col-span-1 min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'manage-vendors'
                   ? 'bg-zinc-950 text-white shadow-sm font-black'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
@@ -366,6 +399,7 @@ export default function App() {
                 currentDateKey={currentDateKey}
                 knownVendors={knownVendors}
                 onSubmitSale={handleRecordSale}
+                onCheckoutBasket={handleCheckoutBasket}
                 onAddVendor={handleAddVendor}
                 onOpenManageVendors={() => setActiveTab('manage-vendors')}
                 onNavigateToTrades={() => setActiveTab('trades')}
@@ -432,6 +466,16 @@ export default function App() {
               onDateChange={setCurrentDateKey}
               knownVendors={knownVendors}
               onSwitchToLedger={() => setActiveTab('ledger')}
+            />
+          </div>
+        )}
+
+        {/* TAB: Dedicated Cash Drawer Reconciliation Tab (Passcode Locked) */}
+        {activeTab === 'cash-drawer' && (
+          <div className="animate-fade-in" id="tab-wrapper-cash-drawer">
+            <CashDrawerTab
+              currentDateKey={currentDateKey}
+              onNavigateToLedger={() => setActiveTab('ledger')}
             />
           </div>
         )}

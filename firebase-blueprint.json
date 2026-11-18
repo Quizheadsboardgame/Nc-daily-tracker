@@ -49,6 +49,22 @@
         "onlineBarcode": {
           "type": "string",
           "description": "Barcode number of the associated online card"
+        },
+        "checkoutGroupId": {
+          "type": "string",
+          "description": "Shared checkout group identifier for multi-item baskets and split payments"
+        },
+        "checkoutTotalAmount": {
+          "type": "number",
+          "description": "Combined checkout total across all basket/split legs in GBP"
+        },
+        "splitSummary": {
+          "type": "string",
+          "description": "Human-readable split payment summary"
+        },
+        "basketItemCount": {
+          "type": "number",
+          "description": "Number of items included in the basket checkout"
         }
       },
       "required": ["salesmanName", "itemDescription", "amount", "paymentMethod", "timestamp", "dateKey"]
@@ -187,6 +203,34 @@
         }
       },
       "required": ["name", "removedAt"]
+    },
+    "CashReconciliation": {
+      "title": "CashReconciliation",
+      "description": "End-of-day till cash drawer reconciliation record per calendar day",
+      "type": "object",
+      "properties": {
+        "dateKey": {
+          "type": "string",
+          "description": "Calendar date string YYYY-MM-DD"
+        },
+        "openingFloat": {
+          "type": "number",
+          "description": "Opening cash float in GBP"
+        },
+        "actualCashCounted": {
+          "type": "number",
+          "description": "Actual physical cash counted at end of day in GBP"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional close-of-day variance or banking notes"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Epoch timestamp in milliseconds when last saved"
+        }
+      },
+      "required": ["dateKey", "openingFloat", "updatedAt"]
     }
   },
   "firestore": {
@@ -209,6 +253,10 @@
     "/removed_vendors/{vendorId}": {
       "schema": "RemovedVendor",
       "description": "Collection of removed vendors synced across all devices"
+    },
+    "/cash_reconciliations/{dateKey}": {
+      "schema": "CashReconciliation",
+      "description": "Collection of daily cash drawer float and end-of-day cash reconciliation counts synced across devices"
     }
   }
 }
