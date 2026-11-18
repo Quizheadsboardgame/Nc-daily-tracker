@@ -175,4 +175,10 @@ export interface VendorLeaderboardSummary {
   entries: VendorLeaderboardEntry[];
 }
 
-
+export interface DailySalesTrendPoint {
+  dateKey: string;
+  shortDate: string;
+  fullDate: string;
+  totalRevenue: number;
+  salesCount: number;
+}

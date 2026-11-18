@@ -5,7 +5,7 @@ import { useTotalSalesAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
 import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
-export type AppTab = 'ledger' | 'search' | 'leaderboard' | 'trades' | 'online-cards' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'trades' | 'search' | 'leaderboard' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -121,6 +121,20 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 type="button"
+                id="nav-tab-trades"
+                onClick={() => onTabChange('trades')}
+                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'trades'
+                    ? 'bg-white text-zinc-950 shadow-sm font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
+                <span>Trade In</span>
+              </button>
+
+              <button
+                type="button"
                 id="nav-tab-search"
                 onClick={() => onTabChange('search')}
                 className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -145,20 +159,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Trophy className={`w-4 h-4 ${activeTab === 'leaderboard' ? 'text-amber-600' : 'text-amber-400'}`} />
                 <span>Leaderboard</span>
-              </button>
-
-              <button
-                type="button"
-                id="nav-tab-trades"
-                onClick={() => onTabChange('trades')}
-                className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === 'trades'
-                    ? 'bg-white text-zinc-950 shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-              >
-                <ArrowLeftRight className={`w-4 h-4 ${activeTab === 'trades' ? 'text-amber-600' : 'text-amber-400'}`} />
-                <span>Trade In</span>
               </button>
 
               <button

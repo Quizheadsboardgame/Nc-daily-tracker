@@ -25,6 +25,7 @@ import {
   OnlineCardsSummary,
   VendorLeaderboardEntry,
   VendorLeaderboardSummary,
+  DailySalesTrendPoint,
 } from '../types';
 import {
   playCheckoutSound,
@@ -1547,6 +1548,43 @@ class CloudSalesDatabase {
     const titleLine = `# Vendor Leaderboard: ${leaderboard.periodLabel} (Total: £${leaderboard.totalRevenue.toFixed(2)}, ${leaderboard.totalSalesCount} sales)`;
 
     return [titleLine, headers.join(','), ...rows].join('\n');
+  }
+
+  public getSalesTrendLastDays(days = 30, endDateKey?: string): DailySalesTrendPoint[] {
+    const refKey = endDateKey || getLocalDateKey();
+    const [endY, endM, endD] = refKey.split('-').map(Number);
+    const endDate = new Date(endY, endM - 1, endD);
+
+    const dailyTotals = new Map<string, { revenue: number; count: number }>();
+    this.salesCache.forEach((sale) => {
+      const existing = dailyTotals.get(sale.dateKey) || { revenue: 0, count: 0 };
+      existing.revenue += sale.amount;
+      existing.count += 1;
+      dailyTotals.set(sale.dateKey, existing);
+    });
+
+    const points: DailySalesTrendPoint[] = [];
+    for (let offset = days - 1; offset >= 0; offset--) {
+      const d = new Date(endDate);
+      d.setDate(endDate.getDate() - offset);
+      const dateKey = getLocalDateKey(d);
+      const totals = dailyTotals.get(dateKey);
+
+      points.push({
+        dateKey,
+        shortDate: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        fullDate: d.toLocaleDateString('en-GB', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }),
+        totalRevenue: totals ? Math.round(totals.revenue * 100) / 100 : 0,
+        salesCount: totals ? totals.count : 0,
+      });
+    }
+
+    return points;
   }
 
   public getAvailableDateKeys(): string[] {

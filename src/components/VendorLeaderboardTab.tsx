@@ -18,8 +18,17 @@ import {
   CheckCircle2,
   Users,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 import { cloudDb, formatCurrency, getLocalDateKey } from '../db/cloudDatabase';
-import { VendorLeaderboardSummary, VendorLeaderboardEntry } from '../types';
+import { VendorLeaderboardSummary, DailySalesTrendPoint } from '../types';
 
 interface VendorLeaderboardTabProps {
   onNavigateToVendorPortal?: (vendorName?: string) => void;
@@ -54,6 +63,27 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
       dateKey: selectedDateKey,
     });
   }, [period, selectedDateKey, dataVersion]);
+
+  // Compute 30-day total sales trend
+  const trend30Days: DailySalesTrendPoint[] = useMemo(() => {
+    void dataVersion;
+    return cloudDb.getSalesTrendLastDays(30);
+  }, [dataVersion]);
+
+  const trendStats = useMemo(() => {
+    const total = trend30Days.reduce((acc, p) => acc + p.totalRevenue, 0);
+    const totalSalesCount = trend30Days.reduce((acc, p) => acc + p.salesCount, 0);
+    const bestDay = trend30Days.reduce<DailySalesTrendPoint | null>(
+      (best, curr) => (!best || curr.totalRevenue > best.totalRevenue ? curr : best),
+      null
+    );
+    return {
+      total: Math.round(total * 100) / 100,
+      dailyAverage: Math.round((total / (trend30Days.length || 30)) * 100) / 100,
+      totalSalesCount,
+      bestDay: bestDay && bestDay.totalRevenue > 0 ? bestDay : null,
+    };
+  }, [trend30Days]);
 
   // Weekly navigation handlers
   const handlePrevWeek = () => {
@@ -356,6 +386,94 @@ export const VendorLeaderboardTab: React.FC<VendorLeaderboardTabProps> = ({
               Vendors with recorded sales
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 30-Day Total Sales Trend Line Chart (Recharts) */}
+      <div
+        className="bg-white rounded-2xl p-4 sm:p-5 border border-zinc-200 shadow-xs space-y-4"
+        id="leaderboard-30-day-trend-card"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-zinc-900 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Total Sales Trend (Last 30 Days)</span>
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Daily store gross revenue across all vendors over the past 30 days.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-600 tabular-nums">
+            <div>
+              <span className="text-zinc-400 font-medium">30d Total: </span>
+              <span className="font-bold text-zinc-900">{formatCurrency(trendStats.total)}</span>
+            </div>
+            <div>
+              <span className="text-zinc-400 font-medium">Daily Avg: </span>
+              <span className="font-bold text-emerald-700">{formatCurrency(trendStats.dailyAverage)}</span>
+            </div>
+            {trendStats.bestDay && (
+              <div>
+                <span className="text-zinc-400 font-medium">Peak: </span>
+                <span className="font-bold text-zinc-900">
+                  {formatCurrency(trendStats.bestDay.totalRevenue)} ({trendStats.bestDay.shortDate})
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="w-full h-60 sm:h-72 min-w-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={trend30Days}
+              margin={{ top: 10, right: 12, left: 0, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
+              <XAxis
+                dataKey="shortDate"
+                tick={{ fontSize: 11, fill: '#71717a' }}
+                tickLine={false}
+                axisLine={{ stroke: '#e4e4e7' }}
+                minTickGap={24}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#71717a' }}
+                tickLine={false}
+                axisLine={false}
+                width={54}
+                tickFormatter={(value: number) => `£${value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}`}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || payload.length === 0) return null;
+                  const point = payload[0].payload as DailySalesTrendPoint;
+                  return (
+                    <div className="bg-zinc-900 text-white px-3 py-2 rounded-xl shadow-lg border border-zinc-700 text-xs space-y-0.5 tabular-nums">
+                      <div className="font-semibold text-zinc-300">{point.fullDate}</div>
+                      <div className="text-sm font-black text-emerald-400">
+                        {formatCurrency(point.totalRevenue)}
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        {point.salesCount} {point.salesCount === 1 ? 'sale' : 'sales'}
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="totalRevenue"
+                name="Total Sales"
+                stroke="#059669"
+                strokeWidth={2.5}
+                dot={{ r: 2.5, fill: '#059669', strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: '#059669', stroke: '#ffffff', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

@@ -183,6 +183,29 @@ export default function App() {
 
             <button
               type="button"
+              id="tab-btn-trades"
+              onClick={() => setActiveTab('trades')}
+              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'trades'
+                  ? 'bg-zinc-950 text-white shadow-sm font-black'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
+              }`}
+            >
+              <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
+              <span className="truncate">Trade In</span>
+              {cloudDb.getTradesForDay(currentDateKey).length > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold shrink-0 ${
+                  activeTab === 'trades'
+                    ? 'bg-amber-400 text-zinc-950'
+                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                }`}>
+                  {cloudDb.getTradesForDay(currentDateKey).length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
               id="tab-btn-search"
               onClick={() => setActiveTab('search')}
               className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -207,29 +230,6 @@ export default function App() {
             >
               <Trophy className={`w-4 h-4 shrink-0 ${activeTab === 'leaderboard' ? 'text-amber-400' : 'text-amber-600'}`} />
               <span className="truncate">Leaderboard</span>
-            </button>
-
-            <button
-              type="button"
-              id="tab-btn-trades"
-              onClick={() => setActiveTab('trades')}
-              className={`min-w-0 min-h-[42px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'trades'
-                  ? 'bg-zinc-950 text-white shadow-sm font-black'
-                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/60'
-              }`}
-            >
-              <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'trades' ? 'text-amber-400' : 'text-amber-600'}`} />
-              <span className="truncate">Trade In</span>
-              {cloudDb.getTradesForDay(currentDateKey).length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold shrink-0 ${
-                  activeTab === 'trades'
-                    ? 'bg-amber-400 text-zinc-950'
-                    : 'bg-amber-100 text-amber-900 border border-amber-300'
-                }`}>
-                  {cloudDb.getTradesForDay(currentDateKey).length}
-                </span>
-              )}
             </button>
 
             <button
