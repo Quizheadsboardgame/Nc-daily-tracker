@@ -26,7 +26,13 @@ import {
   VendorLeaderboardEntry,
   VendorLeaderboardSummary,
 } from '../types';
-import { playCheckoutSound, isSaleSoundRecentlyPlayed, markSaleSoundPlayed } from '../utils/sound';
+import {
+  playCheckoutSound,
+  isSaleSoundRecentlyPlayed,
+  markSaleSoundPlayed,
+  emitSaleFlash,
+  isSaleRecentlyFlashed,
+} from '../utils/sound';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 export const DEFAULT_PRELOADED_SALESMEN = DEFAULT_PRELOADED_VENDORS;
@@ -435,16 +441,45 @@ class CloudSalesDatabase {
           this.lastSyncTimestamp = Date.now();
           const remoteSaleIds = new Set<string>();
 
-          // Trigger Mario Coin sound (or fanfare if > £100) on all connected devices when any new sale is made
+          // Trigger Mario Coin sound (or fanfare if > £100) and 3-second flash banner on all connected devices when any new sale is made
           if (!isInitialSalesSnapshot) {
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
                 const data = change.doc.data();
                 const saleId = change.doc.id;
                 const saleAmount = Number(data.amount) || 0;
+                const rawMethod = (data.paymentMethod || '').toString().toLowerCase().trim();
+                const paymentMethod: PaymentMethod =
+                  rawMethod === 'cash'
+                    ? 'cash'
+                    : rawMethod === 'traded_out' ||
+                      rawMethod === 'trade_out' ||
+                      rawMethod === 'trade out' ||
+                      rawMethod === 'trade' ||
+                      rawMethod === 'traded'
+                    ? 'traded_out'
+                    : rawMethod === 'online'
+                    ? 'online'
+                    : 'card';
+                const vendorName = (data.salesmanName || '').toString().trim() || 'Store';
+                const itemDescription = data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : '');
+
                 // Play sound immediately on this device if not already played locally
                 if (!isSaleSoundRecentlyPlayed(saleId)) {
                   playCheckoutSound(false, saleId, saleAmount);
+                }
+
+                // Flash who the sale is for and how it was paid for 3 seconds
+                if (!isSaleRecentlyFlashed(saleId)) {
+                  emitSaleFlash({
+                    id: saleId,
+                    vendorName,
+                    vendorColor: this.getVendorColor(vendorName),
+                    paymentMethod,
+                    itemDescription,
+                    amount: saleAmount,
+                    isOver100: saleAmount > 100,
+                  });
                 }
               }
             });
@@ -840,6 +875,17 @@ class CloudSalesDatabase {
 
     // Play Mario coin sound (or fanfare if > £100) immediately on this device and mark ID to avoid double-firing
     playCheckoutSound(false, id, record.amount);
+
+    // Flash who the sale is for and how it was paid for 3 seconds
+    emitSaleFlash({
+      id,
+      vendorName: record.salesmanName,
+      vendorColor: this.getVendorColor(record.salesmanName),
+      paymentMethod: record.paymentMethod,
+      itemDescription: record.itemDescription,
+      amount: record.amount,
+      isOver100: record.amount > 100,
+    });
 
     if (!this.salesmenList.includes(record.salesmanName)) {
       this.salesmenList.push(record.salesmanName);

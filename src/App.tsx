@@ -13,6 +13,7 @@ import { OnlineCardsTab } from './components/OnlineCardsTab';
 import { SalesSearchTab } from './components/SalesSearchTab';
 import { VendorLeaderboardTab } from './components/VendorLeaderboardTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
+import { SaleFlashBanner } from './components/SaleFlashBanner';
 import { useTotalSalesAuth } from './utils/auth';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary } from './types';
@@ -135,15 +136,19 @@ export default function App() {
 
   if (!isUnlocked) {
     return (
-      <LockedRegisterScreen
-        knownVendors={knownVendors}
-        onSaleRecorded={refreshFromDb}
-      />
+      <>
+        <SaleFlashBanner />
+        <LockedRegisterScreen
+          knownVendors={knownVendors}
+          onSaleRecorded={refreshFromDb}
+        />
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-zinc-100/70 text-zinc-900 flex flex-col font-sans selection:bg-zinc-800 selection:text-white">
+      <SaleFlashBanner />
       {/* App Header & Navigation */}
       <Header
         currentDateKey={currentDateKey}

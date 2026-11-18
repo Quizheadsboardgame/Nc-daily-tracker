@@ -624,3 +624,64 @@ export function playSaleBeep(isSuccess: boolean = true) {
     // Audio context not allowed or blocked
   }
 }
+
+export interface SaleFlashEvent {
+  id: string;
+  vendorName: string;
+  vendorColor: string;
+  paymentMethod: 'cash' | 'card' | 'traded_out' | 'online';
+  itemDescription?: string;
+  amount?: number;
+  isOver100?: boolean;
+  timestamp: number;
+}
+
+const saleFlashListeners = new Set<(event: SaleFlashEvent) => void>();
+const recentlyFlashedSaleIds = new Map<string, number>();
+
+export function isSaleRecentlyFlashed(saleId: string): boolean {
+  if (!saleId) return false;
+  const time = recentlyFlashedSaleIds.get(saleId);
+  if (!time) return false;
+  if (Date.now() - time < 45000) {
+    return true;
+  }
+  recentlyFlashedSaleIds.delete(saleId);
+  return false;
+}
+
+export function emitSaleFlash(event: Omit<SaleFlashEvent, 'timestamp'>): void {
+  if (event.id) {
+    if (isSaleRecentlyFlashed(event.id)) {
+      return;
+    }
+    const now = Date.now();
+    recentlyFlashedSaleIds.set(event.id, now);
+    for (const [id, t] of recentlyFlashedSaleIds.entries()) {
+      if (now - t > 60000) {
+        recentlyFlashedSaleIds.delete(id);
+      }
+    }
+  }
+
+  const fullEvent: SaleFlashEvent = {
+    ...event,
+    timestamp: Date.now(),
+  };
+
+  saleFlashListeners.forEach((listener) => {
+    try {
+      listener(fullEvent);
+    } catch {
+      // Ignore listener error
+    }
+  });
+}
+
+export function subscribeToSaleFlash(listener: (event: SaleFlashEvent) => void): () => void {
+  saleFlashListeners.add(listener);
+  return () => {
+    saleFlashListeners.delete(listener);
+  };
+}
+
