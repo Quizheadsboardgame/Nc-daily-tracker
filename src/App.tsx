@@ -16,11 +16,7 @@ import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { SaleFlashBanner } from './components/SaleFlashBanner';
 import { CashDrawerTab } from './components/CashDrawerTab';
 import { StoreCreditTab } from './components/StoreCreditTab';
-import { HoldsTab } from './components/HoldsTab';
-import { BusiestHoursHeatmap } from './components/BusiestHoursHeatmap';
-import { DeviceOperatorModal } from './components/DeviceOperatorModal';
 import { useTotalSalesAuth } from './utils/auth';
-import { useDeviceOperator } from './utils/deviceOperator';
 import { cloudDb, getLocalDateKey, formatDisplayDate } from './db/cloudDatabase';
 import { SaleRecord, PaymentMethod, DaySummary, BasketItemInput, SplitPaymentBreakdown } from './types';
 import { Cloud, ArrowLeftRight } from 'lucide-react';
@@ -41,8 +37,6 @@ export default function App() {
   const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isManageVendorsOpen, setIsManageVendorsOpen] = useState(false);
-  const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
-  const { operatorName, hasOperator, selectOperator } = useDeviceOperator();
 
   // Sync state with cloud database
   const refreshFromDb = useCallback(() => {
@@ -72,9 +66,6 @@ export default function App() {
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
-    originalAmount?: number;
-    discountAmount?: number;
-    discountLabel?: string;
     paymentMethod: PaymentMethod;
     tradeDetails?: string;
     tradeAcceptingVendor?: string;
@@ -85,7 +76,6 @@ export default function App() {
   }) => {
     cloudDb.insertSale({
       ...newSale,
-      operatorName: operatorName || undefined,
       dateKey: currentDateKey,
     });
     refreshFromDb();
@@ -95,20 +85,13 @@ export default function App() {
     items: BasketItemInput[];
     payments: SplitPaymentBreakdown;
     notes?: string;
-    discount?: {
-      label: string;
-      amount: number;
-      originalSubtotal: number;
-    };
     storeCredit?: { customerId: string; amount: number };
   }) => {
     await cloudDb.insertBasketCheckout({
       items: payload.items,
       payments: payload.payments,
-      operatorName: operatorName || undefined,
       dateKey: currentDateKey,
       notes: payload.notes,
-      discount: payload.discount,
       storeCredit: payload.storeCredit,
     });
     refreshFromDb();
@@ -196,8 +179,6 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onOpenManageVendors={() => setActiveTab('manage-vendors')}
-        operatorName={operatorName}
-        onOpenOperatorModal={() => setIsOperatorModalOpen(true)}
       />
 
       {/* Main Container - Locked to mobile viewport */}
@@ -321,13 +302,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB: Busiest Hours & Days Heatmap (Owner Passcode Protected) */}
-        {activeTab === 'heatmap' && (
-          <div className="animate-fade-in" id="tab-content-heatmap">
-            <BusiestHoursHeatmap knownVendors={knownVendors} />
-          </div>
-        )}
-
         {/* TAB 2: Dedicated Trades Tab (Independent trade entries & valuations) */}
         {activeTab === 'trades' && (
           <div className="animate-fade-in" id="tab-content-trades">
@@ -336,17 +310,6 @@ export default function App() {
               onDateChange={setCurrentDateKey}
               knownVendors={knownVendors}
               onSwitchToLedger={() => setActiveTab('ledger')}
-            />
-          </div>
-        )}
-
-        {/* TAB: Customer Holds & Deposits (Layaway Tracker) */}
-        {activeTab === 'holds' && (
-          <div className="animate-fade-in" id="tab-content-holds">
-            <HoldsTab
-              knownVendors={knownVendors}
-              currentDateKey={currentDateKey}
-              onNavigateToLedger={() => setActiveTab('ledger')}
             />
           </div>
         )}
@@ -427,17 +390,6 @@ export default function App() {
         vendors={knownVendors}
         onAddVendor={handleAddVendor}
         onRemoveVendor={handleRemoveVendor}
-      />
-
-      {/* Device Till Operator Selector (Required once per new device) */}
-      <DeviceOperatorModal
-        isOpen={!hasOperator || isOperatorModalOpen}
-        requireSelection={!hasOperator}
-        theme="light"
-        knownVendors={knownVendors}
-        currentOperator={operatorName}
-        onSelect={selectOperator}
-        onClose={() => setIsOperatorModalOpen(false)}
       />
 
       {/* Footer */}

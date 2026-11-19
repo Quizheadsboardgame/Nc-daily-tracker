@@ -34,12 +34,6 @@ import {
   StoreCreditTransaction,
   StoreCreditTransactionType,
   StoreCreditOverview,
-  HoldRecord,
-  HoldPayment,
-  HoldStatus,
-  HoldsOverview,
-  HeatmapData,
-  HeatmapCell,
 } from '../types';
 import {
   playCheckoutSound,
@@ -48,7 +42,6 @@ import {
   emitSaleFlash,
   isSaleRecentlyFlashed,
 } from '../utils/sound';
-import { getDeviceOperator } from '../utils/deviceOperator';
 
 export const DEFAULT_PRELOADED_VENDORS = ['Pete', 'Kieron', 'Newtons', 'Roy', 'Connor', 'Charlie'];
 export const DEFAULT_PRELOADED_SALESMEN = DEFAULT_PRELOADED_VENDORS;
@@ -86,7 +79,6 @@ const STORAGE_REMOVED_VENDORS_KEY = 'daily_sales_tracker_removed_vendors_v6';
 const STORAGE_CASH_RECON_KEY = 'daily_sales_tracker_cash_reconciliation_v6';
 const STORAGE_STORE_CREDIT_CUSTOMERS_KEY = 'daily_sales_tracker_store_credit_customers_v6';
 const STORAGE_STORE_CREDIT_TX_KEY = 'daily_sales_tracker_store_credit_tx_v6';
-const STORAGE_HOLDS_KEY = 'daily_sales_tracker_holds_v6';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -237,7 +229,6 @@ class CloudSalesDatabase {
   private cashReconciliationsCache: Map<string, CashReconciliationRecord> = new Map();
   private storeCreditCustomersCache: Map<string, StoreCreditCustomer> = new Map();
   private storeCreditTxCache: Map<string, StoreCreditTransaction> = new Map();
-  private holdsCache: Map<string, HoldRecord> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private removedVendors: Set<string> = new Set(['kerion']);
@@ -382,18 +373,6 @@ class CloudSalesDatabase {
           }
         }
       }
-
-      const storedHolds = localStorage.getItem(STORAGE_HOLDS_KEY);
-      if (storedHolds) {
-        const parsedHolds = JSON.parse(storedHolds);
-        if (Array.isArray(parsedHolds)) {
-          for (const item of parsedHolds) {
-            if (item && item.id) {
-              this.holdsCache.set(item.id, item);
-            }
-          }
-        }
-      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -419,10 +398,6 @@ class CloudSalesDatabase {
       localStorage.setItem(
         STORAGE_STORE_CREDIT_TX_KEY,
         JSON.stringify(Array.from(this.storeCreditTxCache.values()))
-      );
-      localStorage.setItem(
-        STORAGE_HOLDS_KEY,
-        JSON.stringify(Array.from(this.holdsCache.values()))
       );
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
@@ -629,13 +604,9 @@ class CloudSalesDatabase {
             this.salesCache.set(docSnap.id, {
               id: docSnap.id,
               salesmanName: data.salesmanName || '',
-              operatorName: data.operatorName || undefined,
               itemDescription: data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : ''),
               isMiscellaneous: Boolean(data.isMiscellaneous) || data.itemDescription?.trim().toLowerCase() === 'miscellaneous',
               amount: Number(data.amount) || 0,
-              originalAmount: data.originalAmount !== undefined && data.originalAmount !== null ? Number(data.originalAmount) : undefined,
-              discountAmount: data.discountAmount !== undefined && data.discountAmount !== null ? Number(data.discountAmount) : undefined,
-              discountLabel: data.discountLabel || undefined,
               paymentMethod,
               notes: data.notes || undefined,
               timestamp: data.timestamp || Date.now(),
@@ -652,7 +623,6 @@ class CloudSalesDatabase {
               storeCreditCustomerId: data.storeCreditCustomerId || undefined,
               storeCreditCustomerName: data.storeCreditCustomerName || undefined,
               storeCreditAmount: data.storeCreditAmount !== undefined && data.storeCreditAmount !== null ? Number(data.storeCreditAmount) : undefined,
-              relatedHoldId: data.relatedHoldId || undefined,
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
               tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -693,7 +663,6 @@ class CloudSalesDatabase {
             this.tradesCache.set(docSnap.id, {
               id: docSnap.id,
               vendorName: data.vendorName || '',
-              operatorName: data.operatorName || undefined,
               itemDescription: data.itemDescription || '',
               tradeValue: Number(data.tradeValue) || 0,
               tradeType,
@@ -887,75 +856,6 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Store credit transactions Firestore listener error:', error);
-        }
-      );
-
-      // 8. Real-time listener for Customer Holds & Layaways
-      const holdsCol = collection(db, 'holds');
-      onSnapshot(
-        holdsCol,
-        (snapshot) => {
-          this.isCloudConnected = true;
-          this.lastSyncTimestamp = Date.now();
-          const remoteHoldIds = new Set<string>();
-
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            remoteHoldIds.add(docSnap.id);
-            const rawStatus = (data.status || 'active').toString().toLowerCase();
-            const status: HoldStatus =
-              rawStatus === 'completed'
-                ? 'completed'
-                : rawStatus === 'cancelled'
-                ? 'cancelled'
-                : rawStatus === 'expired'
-                ? 'expired'
-                : 'active';
-
-            const payments: HoldPayment[] = Array.isArray(data.payments)
-              ? data.payments.map((p: any) => ({
-                  id: p.id || `hp_${Date.now()}`,
-                  amount: Math.round((Number(p.amount) || 0) * 100) / 100,
-                  paymentMethod: p.paymentMethod || 'cash',
-                  operatorName: p.operatorName || undefined,
-                  saleId: p.saleId || undefined,
-                  notes: p.notes || undefined,
-                  timestamp: p.timestamp || Date.now(),
-                  dateKey: p.dateKey || getLocalDateKey(new Date(p.timestamp || Date.now())),
-                }))
-              : [];
-
-            this.holdsCache.set(docSnap.id, {
-              id: docSnap.id,
-              customerName: data.customerName || 'Customer',
-              customerPhone: data.customerPhone || undefined,
-              vendorName: data.vendorName || '',
-              operatorName: data.operatorName || undefined,
-              itemDescription: data.itemDescription || '',
-              totalPrice: Math.round((Number(data.totalPrice) || 0) * 100) / 100,
-              depositPaid: Math.round((Number(data.depositPaid) || 0) * 100) / 100,
-              remainingBalance: Math.round((Number(data.remainingBalance) || 0) * 100) / 100,
-              status,
-              dueDateKey: data.dueDateKey || undefined,
-              notes: data.notes || undefined,
-              payments,
-              createdAt: data.createdAt || Date.now(),
-              dateKey: data.dateKey || getLocalDateKey(new Date(data.createdAt || Date.now())),
-              updatedAt: data.updatedAt || data.createdAt || Date.now(),
-              completedAt: data.completedAt || undefined,
-            });
-          });
-
-          for (const localId of Array.from(this.holdsCache.keys())) {
-            if (!remoteHoldIds.has(localId)) {
-              this.holdsCache.delete(localId);
-            }
-          }
-
-          this.notify();
-        },
-        (error) => {
-          console.warn('Holds Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -1183,13 +1083,9 @@ class CloudSalesDatabase {
 
   public async insertSale(input: {
     salesmanName: string;
-    operatorName?: string;
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
-    originalAmount?: number;
-    discountAmount?: number;
-    discountLabel?: string;
     paymentMethod: PaymentMethod; // cash, card, traded_out, or online
     notes?: string;
     dateKey?: string;
@@ -1197,7 +1093,6 @@ class CloudSalesDatabase {
     isOnlineSale?: boolean;
     onlineCardId?: string;
     onlineBarcode?: string;
-    relatedHoldId?: string;
     storeCredit?: {
       customerId: string;
       amount: number;
@@ -1208,7 +1103,6 @@ class CloudSalesDatabase {
     const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
     const isMiscellaneous = Boolean(input.isMiscellaneous) || input.itemDescription.trim().toLowerCase() === 'miscellaneous';
     const finalDescription = isMiscellaneous && !input.itemDescription.trim() ? 'Miscellaneous' : input.itemDescription.trim();
-    const resolvedOperator = (input.operatorName ?? getDeviceOperator()).trim() || undefined;
 
     const paymentMethod: PaymentMethod = input.paymentMethod === 'cash'
       ? 'cash'
@@ -1251,32 +1145,17 @@ class CloudSalesDatabase {
       creditUsedAmount = reqPence / 100;
     }
 
-    const discountAmount =
-      input.discountAmount && input.discountAmount > 0
-        ? Math.round(Number(input.discountAmount) * 100) / 100
-        : undefined;
-    const originalAmount =
-      discountAmount && input.originalAmount
-        ? Math.round(Number(input.originalAmount) * 100) / 100
-        : undefined;
-    const discountLabel = discountAmount ? input.discountLabel?.trim() || `Discount (-£${discountAmount.toFixed(2)})` : undefined;
-
-    const discountTag = discountLabel ? `Discount: ${discountLabel}` : '';
     const creditNoteTag = creditCustomer && creditUsedAmount
       ? `Store Credit (${creditCustomer.name}: £${creditUsedAmount.toFixed(2)})`
       : '';
-    const combinedNotes = [discountTag, creditNoteTag, input.notes?.trim() || ''].filter(Boolean).join(' • ') || undefined;
+    const combinedNotes = [creditNoteTag, input.notes?.trim() || ''].filter(Boolean).join(' • ') || undefined;
 
     const record: SaleRecord = {
       id,
       salesmanName: input.salesmanName.trim(),
-      operatorName: resolvedOperator,
       itemDescription: finalDescription,
       isMiscellaneous: isMiscellaneous ? true : undefined,
       amount: Math.round(Number(input.amount) * 100) / 100,
-      originalAmount,
-      discountAmount,
-      discountLabel,
       paymentMethod,
       notes: combinedNotes,
       timestamp,
@@ -1287,7 +1166,6 @@ class CloudSalesDatabase {
       storeCreditCustomerId: creditCustomer?.id,
       storeCreditCustomerName: creditCustomer?.name,
       storeCreditAmount: creditUsedAmount,
-      relatedHoldId: input.relatedHoldId || undefined,
       splitSummary: creditCustomer && creditUsedAmount
         ? `Store Credit (${creditCustomer.name} £${creditUsedAmount.toFixed(2)})`
         : undefined,
@@ -1337,13 +1215,9 @@ class CloudSalesDatabase {
     try {
       await setDoc(doc(db, 'sales', id), {
         salesmanName: record.salesmanName,
-        operatorName: record.operatorName || null,
         itemDescription: record.itemDescription,
         isMiscellaneous: record.isMiscellaneous || false,
         amount: record.amount,
-        originalAmount: record.originalAmount || null,
-        discountAmount: record.discountAmount || null,
-        discountLabel: record.discountLabel || null,
         paymentMethod: record.paymentMethod,
         notes: record.notes || null,
         timestamp: record.timestamp,
@@ -1351,7 +1225,6 @@ class CloudSalesDatabase {
         isOnlineSale: isOnlineSale,
         onlineCardId: input.onlineCardId || null,
         onlineBarcode: input.onlineBarcode || null,
-        relatedHoldId: record.relatedHoldId || null,
         splitSummary: record.splitSummary || null,
         storeCreditCustomerId: record.storeCreditCustomerId || null,
         storeCreditCustomerName: record.storeCreditCustomerName || null,
@@ -1371,15 +1244,9 @@ class CloudSalesDatabase {
   public async insertBasketCheckout(input: {
     items: BasketItemInput[];
     payments: SplitPaymentBreakdown;
-    operatorName?: string;
     dateKey?: string;
     timestamp?: number;
     notes?: string;
-    discount?: {
-      label: string;
-      amount: number;
-      originalSubtotal: number;
-    };
     storeCredit?: {
       customerId: string;
       amount: number;
@@ -1392,11 +1259,10 @@ class CloudSalesDatabase {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
     const checkoutGroupId = 'chk_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-    const resolvedOperator = (input.operatorName ?? getDeviceOperator()).trim() || undefined;
 
     // 1. Validate items & online card duplicates
     const seenCardIds = new Set<string>();
-    const rawItemPence: number[] = [];
+    const itemPence: number[] = [];
     for (const item of input.items) {
       const pence = Math.round(Number(item.amount) * 100);
       if (isNaN(pence) || pence <= 0) {
@@ -1419,48 +1285,11 @@ class CloudSalesDatabase {
           );
         }
       }
-      rawItemPence.push(pence);
+      itemPence.push(pence);
     }
 
-    const rawTotalPence = rawItemPence.reduce((a, b) => a + b, 0);
-    const requestedDiscountPence =
-      input.discount && input.discount.amount > 0
-        ? Math.min(rawTotalPence - 1, Math.round(Number(input.discount.amount) * 100))
-        : 0;
-
-    // Proportionally distribute discount across items in integer pence (largest remainder)
-    const itemDiscountPence = Array(rawItemPence.length).fill(0);
-    if (requestedDiscountPence > 0 && rawTotalPence > 0) {
-      const fracs: { idx: number; frac: number }[] = [];
-      let assigned = 0;
-      for (let i = 0; i < rawItemPence.length; i++) {
-        const exact = (rawItemPence[i] * requestedDiscountPence) / rawTotalPence;
-        const floored = Math.min(rawItemPence[i] - 1, Math.floor(exact));
-        itemDiscountPence[i] = Math.max(0, floored);
-        assigned += itemDiscountPence[i];
-        fracs.push({ idx: i, frac: exact - floored });
-      }
-      fracs.sort((a, b) => b.frac - a.frac);
-      let rem = requestedDiscountPence - assigned;
-      let cursor = 0;
-      while (rem > 0 && cursor < fracs.length * 3) {
-        const targetIdx = fracs[cursor % fracs.length].idx;
-        if (rawItemPence[targetIdx] - itemDiscountPence[targetIdx] > 1) {
-          itemDiscountPence[targetIdx] += 1;
-          rem -= 1;
-        }
-        cursor++;
-      }
-    }
-
-    const itemPence = rawItemPence.map((p, i) => p - itemDiscountPence[i]);
     const totalPence = itemPence.reduce((a, b) => a + b, 0);
     const totalCheckoutAmount = Math.round(totalPence) / 100;
-    const totalDiscountAppliedPence = itemDiscountPence.reduce((a, b) => a + b, 0);
-    const discountLabel =
-      totalDiscountAppliedPence > 0
-        ? input.discount?.label?.trim() || `Discount (-£${(totalDiscountAppliedPence / 100).toFixed(2)})`
-        : undefined;
 
     // 2. Validate payment breakdown in integer pence
     const orderedMethods: PaymentMethod[] = ['cash', 'card', 'online', 'traded_out'];
@@ -1612,34 +1441,16 @@ class CloudSalesDatabase {
         this.salesmenList.sort();
       }
 
-      // Compute leg discount split for this item
-      const activeColsForItem = alloc[i]
-        .map((p, cIdx) => ({ cIdx, p }))
-        .filter((x) => x.p > 0);
-      const itemDiscP = itemDiscountPence[i] || 0;
-      const itemNetP = itemPence[i] || 1;
-      let discAssigned = 0;
-
-      for (let k = 0; k < activeColsForItem.length; k++) {
-        const { cIdx: c, p: legPence } = activeColsForItem[k];
-        const isLastLegOfItem = k === activeColsForItem.length - 1;
-        const legDiscPence =
-          itemDiscP > 0
-            ? isLastLegOfItem
-              ? itemDiscP - discAssigned
-              : Math.round((legPence * itemDiscP) / itemNetP)
-            : 0;
-        discAssigned += legDiscPence;
+      for (let c = 0; c < cols; c++) {
+        const legPence = alloc[i][c];
+        if (legPence <= 0) continue;
 
         const method = activeMethods[c];
         const legAmount = Math.round(legPence) / 100;
-        const legDiscountAmount = legDiscPence > 0 ? legDiscPence / 100 : undefined;
-        const legOriginalAmount = legDiscPence > 0 ? (legPence + legDiscPence) / 100 : undefined;
         const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 
         const attachCreditInfo = Boolean(creditCustomer && creditUsedAmount && method === 'traded_out');
         const noteParts = [
-          discountLabel ? `Discount: ${discountLabel}` : '',
           attachCreditInfo ? `Store Credit (${creditCustomer!.name})` : '',
           splitSummary ? `Split (${splitSummary})` : '',
           basketNotePrefix,
@@ -1656,13 +1467,9 @@ class CloudSalesDatabase {
         const record: SaleRecord = {
           id,
           salesmanName: vendor,
-          operatorName: resolvedOperator,
           itemDescription: baseDesc,
           isMiscellaneous: isMisc ? true : undefined,
           amount: legAmount,
-          originalAmount: legOriginalAmount,
-          discountAmount: legDiscountAmount,
-          discountLabel,
           paymentMethod: method,
           notes: combinedNotes,
           timestamp: timestamp + createdRecords.length,
@@ -1687,13 +1494,9 @@ class CloudSalesDatabase {
         firestoreWrites.push(
           setDoc(doc(db, 'sales', id), {
             salesmanName: record.salesmanName,
-            operatorName: record.operatorName || null,
             itemDescription: record.itemDescription,
             isMiscellaneous: record.isMiscellaneous || false,
             amount: record.amount,
-            originalAmount: record.originalAmount || null,
-            discountAmount: record.discountAmount || null,
-            discountLabel: record.discountLabel || null,
             paymentMethod: record.paymentMethod,
             notes: record.notes || null,
             timestamp: record.timestamp,
@@ -1908,7 +1711,6 @@ class CloudSalesDatabase {
 
   public async insertTrade(input: {
     vendorName: string;
-    operatorName?: string;
     itemDescription: string;
     tradeValue: number;
     tradeType: TradeType; // 'cash' or 'credit'
@@ -1922,7 +1724,6 @@ class CloudSalesDatabase {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
     const cleanVendor = input.vendorName.trim();
-    const resolvedOperator = (input.operatorName ?? getDeviceOperator()).trim() || undefined;
     const cleanItem = input.itemDescription.trim();
     const val = Math.round(Number(input.tradeValue) * 100) / 100;
     const tradeType: TradeType = input.tradeType === 'cash' ? 'cash' : 'credit';
@@ -1956,7 +1757,6 @@ class CloudSalesDatabase {
     const record: TradeRecord = {
       id,
       vendorName: cleanVendor,
-      operatorName: resolvedOperator,
       itemDescription: cleanItem,
       tradeValue: isNaN(val) ? 0 : val,
       tradeType,
@@ -1980,7 +1780,6 @@ class CloudSalesDatabase {
     try {
       await setDoc(doc(db, 'trades', id), {
         vendorName: record.vendorName,
-        operatorName: record.operatorName || null,
         itemDescription: record.itemDescription,
         tradeValue: record.tradeValue,
         tradeType: record.tradeType,
@@ -2166,7 +1965,6 @@ class CloudSalesDatabase {
       'Date',
       'Time',
       'Vendor Taking In Cards',
-      'Rang By (Operator)',
       'Cards / Item Traded In',
       'Trade Valuation (£) [Before Commission]',
       'Traded In For',
@@ -2193,7 +1991,6 @@ class CloudSalesDatabase {
         escape(t.dateKey),
         escape(time),
         escape(t.vendorName),
-        escape(t.operatorName || ''),
         escape(t.itemDescription),
         t.tradeValue.toFixed(2),
         escape(t.tradeType === 'cash' ? 'Cash Payout' : "Vendor's Credit"),
@@ -2231,11 +2028,8 @@ class CloudSalesDatabase {
       'Date',
       'Time',
       'Vendor',
-      'Rang By (Operator)',
       'Description',
       'Amount (£)',
-      'Discount (£)',
-      'Discount Label',
       'Payment Method',
       'Channel',
       'Barcode',
@@ -2261,11 +2055,8 @@ class CloudSalesDatabase {
         escape(s.dateKey),
         escape(time),
         escape(s.salesmanName),
-        escape(s.operatorName || ''),
         escape(s.itemDescription),
         s.amount.toFixed(2),
-        s.discountAmount ? s.discountAmount.toFixed(2) : '0.00',
-        escape(s.discountLabel || ''),
         escape(s.paymentMethod),
         escape(s.isOnlineSale || s.paymentMethod === 'online' ? 'Online' : 'In-Person'),
         escape(s.onlineBarcode || ''),
@@ -3080,10 +2871,6 @@ class CloudSalesDatabase {
     options?: {
       targetDateKey?: string;
       customPrice?: number;
-      originalAmount?: number;
-      discountAmount?: number;
-      discountLabel?: string;
-      operatorName?: string;
       notes?: string;
       paymentMethod?: PaymentMethod;
     }
@@ -3144,12 +2931,8 @@ class CloudSalesDatabase {
 
     const sale = await this.insertSale({
       salesmanName: card.vendorName,
-      operatorName: options?.operatorName,
       itemDescription: saleDescription,
       amount: soldPrice,
-      originalAmount: options?.originalAmount,
-      discountAmount: options?.discountAmount,
-      discountLabel: options?.discountLabel,
       paymentMethod,
       notes: saleNotes,
       dateKey: soldDateKey,
@@ -3725,474 +3508,6 @@ class CloudSalesDatabase {
     }
   }
 
-  // --- Customer Holds, Deposits & Layaway Tracker ---
-
-  public getHolds(filter?: {
-    status?: 'all' | HoldStatus;
-    vendor?: string;
-    query?: string;
-  }): HoldRecord[] {
-    let list = Array.from(this.holdsCache.values());
-
-    if (filter) {
-      if (filter.status && filter.status !== 'all') {
-        list = list.filter((h) => h.status === filter.status);
-      }
-      if (filter.vendor && filter.vendor !== 'all') {
-        const v = filter.vendor.trim().toLowerCase();
-        list = list.filter((h) => h.vendorName.trim().toLowerCase() === v);
-      }
-      if (filter.query && filter.query.trim()) {
-        const q = filter.query.trim().toLowerCase();
-        list = list.filter(
-          (h) =>
-            h.customerName.toLowerCase().includes(q) ||
-            h.itemDescription.toLowerCase().includes(q) ||
-            h.vendorName.toLowerCase().includes(q) ||
-            (h.customerPhone && h.customerPhone.toLowerCase().includes(q)) ||
-            (h.operatorName && h.operatorName.toLowerCase().includes(q)) ||
-            (h.notes && h.notes.toLowerCase().includes(q))
-        );
-      }
-    }
-
-    return list.sort((a, b) => {
-      if (a.status === 'active' && b.status !== 'active') return -1;
-      if (a.status !== 'active' && b.status === 'active') return 1;
-      return b.updatedAt - a.updatedAt;
-    });
-  }
-
-  public getHoldById(id: string): HoldRecord | undefined {
-    return this.holdsCache.get(id);
-  }
-
-  public getHoldsOverview(): HoldsOverview {
-    const todayKey = getLocalDateKey();
-    let activeCount = 0;
-    let completedCount = 0;
-    let overdueCount = 0;
-    let totalActivePence = 0;
-    let totalDepositsPence = 0;
-    let totalRemainingPence = 0;
-
-    this.holdsCache.forEach((h) => {
-      if (h.status === 'active') {
-        activeCount++;
-        totalActivePence += Math.round((h.totalPrice || 0) * 100);
-        totalDepositsPence += Math.round((h.depositPaid || 0) * 100);
-        totalRemainingPence += Math.max(0, Math.round((h.remainingBalance || 0) * 100));
-        if (h.dueDateKey && h.dueDateKey < todayKey) {
-          overdueCount++;
-        }
-      } else if (h.status === 'completed') {
-        completedCount++;
-      }
-    });
-
-    return {
-      activeCount,
-      completedCount,
-      overdueCount,
-      totalActiveValue: totalActivePence / 100,
-      totalDepositsCollected: totalDepositsPence / 100,
-      totalRemainingDue: totalRemainingPence / 100,
-    };
-  }
-
-  public async createHold(input: {
-    customerName: string;
-    customerPhone?: string;
-    vendorName: string;
-    operatorName?: string;
-    itemDescription: string;
-    totalPrice: number;
-    initialDeposit?: number;
-    depositPaymentMethod?: PaymentMethod;
-    dueDateKey?: string;
-    notes?: string;
-    dateKey?: string;
-  }): Promise<HoldRecord> {
-    const now = Date.now();
-    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
-    const cleanCustomer = input.customerName.trim();
-    const cleanVendor = input.vendorName.trim();
-    const cleanItem = input.itemDescription.trim();
-    const resolvedOperator = (input.operatorName ?? getDeviceOperator()).trim() || undefined;
-
-    if (!cleanCustomer) throw new Error('Customer name is required for a hold.');
-    if (!cleanVendor) throw new Error('Vendor is required for a hold.');
-    if (!cleanItem) throw new Error('Item description is required for a hold.');
-
-    const totalPence = Math.round(Number(input.totalPrice) * 100);
-    if (isNaN(totalPence) || totalPence <= 0) {
-      throw new Error('Total item price must be greater than £0.00.');
-    }
-
-    const depositPence = Math.max(
-      0,
-      Math.min(totalPence, Math.round((Number(input.initialDeposit) || 0) * 100))
-    );
-    const remainingPence = totalPence - depositPence;
-    const id = 'hold_' + Math.random().toString(36).substring(2, 9) + now.toString(36);
-
-    const payments: HoldPayment[] = [];
-    let status: HoldStatus = remainingPence === 0 ? 'completed' : 'active';
-
-    if (depositPence > 0) {
-      const payMethod: PaymentMethod = input.depositPaymentMethod || 'cash';
-      const depositAmount = depositPence / 100;
-      const sale = await this.insertSale({
-        salesmanName: cleanVendor,
-        operatorName: resolvedOperator,
-        itemDescription:
-          remainingPence === 0
-            ? `Layaway Paid in Full: ${cleanItem} (${cleanCustomer})`
-            : `Layaway Deposit: ${cleanItem} (${cleanCustomer})`,
-        amount: depositAmount,
-        paymentMethod: payMethod,
-        notes: input.notes?.trim() || undefined,
-        dateKey,
-        timestamp: now,
-        relatedHoldId: id,
-      });
-
-      payments.push({
-        id: 'hp_' + Math.random().toString(36).substring(2, 9),
-        amount: depositAmount,
-        paymentMethod: payMethod,
-        operatorName: resolvedOperator,
-        saleId: sale.id,
-        notes: 'Initial Deposit',
-        timestamp: now,
-        dateKey,
-      });
-    }
-
-    const record: HoldRecord = {
-      id,
-      customerName: cleanCustomer,
-      customerPhone: input.customerPhone?.trim() || undefined,
-      vendorName: cleanVendor,
-      operatorName: resolvedOperator,
-      itemDescription: cleanItem,
-      totalPrice: totalPence / 100,
-      depositPaid: depositPence / 100,
-      remainingBalance: remainingPence / 100,
-      status,
-      dueDateKey: input.dueDateKey?.trim() || undefined,
-      notes: input.notes?.trim() || undefined,
-      payments,
-      createdAt: now,
-      dateKey,
-      updatedAt: now,
-      completedAt: status === 'completed' ? now : undefined,
-    };
-
-    this.holdsCache.set(id, record);
-    this.notify();
-
-    try {
-      await setDoc(doc(db, 'holds', id), {
-        customerName: record.customerName,
-        customerPhone: record.customerPhone || null,
-        vendorName: record.vendorName,
-        operatorName: record.operatorName || null,
-        itemDescription: record.itemDescription,
-        totalPrice: record.totalPrice,
-        depositPaid: record.depositPaid,
-        remainingBalance: record.remainingBalance,
-        status: record.status,
-        dueDateKey: record.dueDateKey || null,
-        notes: record.notes || null,
-        payments: record.payments,
-        createdAt: record.createdAt,
-        dateKey: record.dateKey,
-        updatedAt: record.updatedAt,
-        completedAt: record.completedAt || null,
-      });
-    } catch (e) {
-      console.warn('Hold saved locally; Firestore sync pending:', e);
-    }
-
-    return record;
-  }
-
-  public async recordHoldPayment(
-    holdId: string,
-    input: {
-      amount: number;
-      paymentMethod: PaymentMethod;
-      operatorName?: string;
-      notes?: string;
-      dateKey?: string;
-    }
-  ): Promise<HoldRecord> {
-    const existing = this.holdsCache.get(holdId);
-    if (!existing) throw new Error('Hold record not found.');
-    if (existing.status === 'cancelled' || existing.status === 'expired') {
-      throw new Error(`Cannot add payment to a ${existing.status} hold.`);
-    }
-
-    const now = Date.now();
-    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
-    const resolvedOperator = (input.operatorName ?? getDeviceOperator()).trim() || undefined;
-    const remainingPence = Math.max(0, Math.round(existing.remainingBalance * 100));
-    const payPence = Math.round(Number(input.amount) * 100);
-
-    if (isNaN(payPence) || payPence <= 0) {
-      throw new Error('Payment amount must be greater than £0.00.');
-    }
-    if (payPence > remainingPence) {
-      throw new Error(
-        `Payment (£${(payPence / 100).toFixed(2)}) exceeds remaining balance (£${(remainingPence / 100).toFixed(2)}).`
-      );
-    }
-
-    const paidAmount = payPence / 100;
-    const nextRemainingPence = remainingPence - payPence;
-    const nextDepositPence = Math.round(existing.depositPaid * 100) + payPence;
-    const isFinalPickup = nextRemainingPence === 0;
-
-    const sale = await this.insertSale({
-      salesmanName: existing.vendorName,
-      operatorName: resolvedOperator,
-      itemDescription: isFinalPickup
-        ? `Layaway Final Pickup: ${existing.itemDescription} (${existing.customerName})`
-        : `Layaway Payment: ${existing.itemDescription} (${existing.customerName})`,
-      amount: paidAmount,
-      paymentMethod: input.paymentMethod,
-      notes: input.notes?.trim() || undefined,
-      dateKey,
-      timestamp: now,
-      relatedHoldId: holdId,
-    });
-
-    const newPayment: HoldPayment = {
-      id: 'hp_' + Math.random().toString(36).substring(2, 9) + now.toString(36),
-      amount: paidAmount,
-      paymentMethod: input.paymentMethod,
-      operatorName: resolvedOperator,
-      saleId: sale.id,
-      notes: input.notes?.trim() || (isFinalPickup ? 'Final Balance & Pickup' : 'Installment Payment'),
-      timestamp: now,
-      dateKey,
-    };
-
-    const updated: HoldRecord = {
-      ...existing,
-      depositPaid: nextDepositPence / 100,
-      remainingBalance: nextRemainingPence / 100,
-      status: isFinalPickup ? 'completed' : 'active',
-      payments: [...existing.payments, newPayment],
-      updatedAt: now,
-      completedAt: isFinalPickup ? now : existing.completedAt,
-    };
-
-    this.holdsCache.set(holdId, updated);
-    this.notify();
-
-    try {
-      await updateDoc(doc(db, 'holds', holdId), {
-        depositPaid: updated.depositPaid,
-        remainingBalance: updated.remainingBalance,
-        status: updated.status,
-        payments: updated.payments,
-        updatedAt: updated.updatedAt,
-        completedAt: updated.completedAt || null,
-      });
-    } catch (e) {
-      console.warn('Hold payment updated locally; Firestore sync pending:', e);
-    }
-
-    return updated;
-  }
-
-  public async updateHoldStatus(holdId: string, status: HoldStatus, notes?: string): Promise<void> {
-    const existing = this.holdsCache.get(holdId);
-    if (!existing) return;
-    const now = Date.now();
-    const updated: HoldRecord = {
-      ...existing,
-      status,
-      notes: notes !== undefined ? notes.trim() || undefined : existing.notes,
-      updatedAt: now,
-      completedAt: status === 'completed' ? existing.completedAt || now : undefined,
-    };
-    this.holdsCache.set(holdId, updated);
-    this.notify();
-
-    try {
-      await updateDoc(doc(db, 'holds', holdId), {
-        status,
-        notes: updated.notes || null,
-        updatedAt: now,
-        completedAt: updated.completedAt || null,
-      });
-    } catch (e) {
-      console.warn('Hold status updated locally; Firestore sync pending:', e);
-    }
-  }
-
-  public async deleteHold(holdId: string): Promise<void> {
-    this.holdsCache.delete(holdId);
-    this.notify();
-    try {
-      await deleteDoc(doc(db, 'holds', holdId));
-    } catch (e) {
-      console.warn('Hold deleted locally; Firestore sync pending:', e);
-    }
-  }
-
-  // --- Busiest Hours & Days Heatmap Analytics ---
-
-  public getBusiestHoursHeatmapData(options?: {
-    rangeDays?: 30 | 90 | 'all';
-    vendor?: string;
-  }): HeatmapData {
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const rangeDays = options?.rangeDays ?? 'all';
-    const filterVendor = options?.vendor && options.vendor !== 'all' ? options.vendor.trim().toLowerCase() : null;
-
-    let minDateKey: string | null = null;
-    if (rangeDays !== 'all') {
-      const d = new Date();
-      d.setDate(d.getDate() - rangeDays + 1);
-      minDateKey = getLocalDateKey(d);
-    }
-
-    const filteredSales = Array.from(this.salesCache.values()).filter((s) => {
-      if (minDateKey && s.dateKey < minDateKey) return false;
-      if (filterVendor && s.salesmanName.trim().toLowerCase() !== filterVendor) return false;
-      return true;
-    });
-
-    // Determine visible trading hour span (default 9..20, expand dynamically if sales exist outside)
-    let minHour = 9;
-    let maxHour = 20;
-    for (const s of filteredSales) {
-      const h = new Date(s.timestamp).getHours();
-      if (h < minHour) minHour = h;
-      if (h > maxHour) maxHour = h;
-    }
-    const hours: number[] = [];
-    for (let h = minHour; h <= maxHour; h++) hours.push(h);
-
-    // Initialize 7xH matrix (dayIndex 0=Mon .. 6=Sun)
-    const cells: HeatmapCell[][] = dayLabels.map((dayLabel, dayIndex) =>
-      hours.map((hour) => ({
-        dayIndex,
-        dayLabel,
-        hour,
-        salesCount: 0,
-        totalRevenue: 0,
-        avgTicket: 0,
-        cashCount: 0,
-        cardCount: 0,
-        onlineCount: 0,
-        tradedOutCount: 0,
-        topPaymentMethod: null,
-      }))
-    );
-
-    const formatHour = (h: number) => `${String(h).padStart(2, '0')}:00`;
-    const dayTotals = dayLabels.map((label) => ({ label, revenue: 0, count: 0 }));
-    const hourTotals = hours.map((hour) => ({ hour, label: formatHour(hour), revenue: 0, count: 0 }));
-
-    let totalRevenue = 0;
-    let totalSalesCount = 0;
-
-    for (const s of filteredSales) {
-      const dt = new Date(s.timestamp);
-      const jsDay = dt.getDay(); // 0=Sun..6=Sat
-      const dayIndex = (jsDay + 6) % 7; // 0=Mon..6=Sun
-      const hr = dt.getHours();
-      const hourIndex = hr - minHour;
-      if (hourIndex < 0 || hourIndex >= hours.length) continue;
-
-      const cell = cells[dayIndex][hourIndex];
-      cell.salesCount += 1;
-      cell.totalRevenue += s.amount;
-
-      if (s.paymentMethod === 'cash') cell.cashCount += 1;
-      else if (s.paymentMethod === 'online' || s.isOnlineSale) cell.onlineCount += 1;
-      else if (s.paymentMethod === 'traded_out') cell.tradedOutCount += 1;
-      else cell.cardCount += 1;
-
-      dayTotals[dayIndex].revenue += s.amount;
-      dayTotals[dayIndex].count += 1;
-      hourTotals[hourIndex].revenue += s.amount;
-      hourTotals[hourIndex].count += 1;
-
-      totalRevenue += s.amount;
-      totalSalesCount += 1;
-    }
-
-    let goldenSlot: HeatmapCell | null = null;
-
-    for (let d = 0; d < 7; d++) {
-      dayTotals[d].revenue = Math.round(dayTotals[d].revenue * 100) / 100;
-      for (let hIdx = 0; hIdx < hours.length; hIdx++) {
-        const cell = cells[d][hIdx];
-        cell.totalRevenue = Math.round(cell.totalRevenue * 100) / 100;
-        cell.avgTicket = cell.salesCount > 0 ? Math.round((cell.totalRevenue / cell.salesCount) * 100) / 100 : 0;
-
-        if (cell.salesCount > 0) {
-          const methodCounts: { m: PaymentMethod; c: number }[] = [
-            { m: 'card', c: cell.cardCount },
-            { m: 'cash', c: cell.cashCount },
-            { m: 'online', c: cell.onlineCount },
-            { m: 'traded_out', c: cell.tradedOutCount },
-          ];
-          methodCounts.sort((a, b) => b.c - a.c);
-          cell.topPaymentMethod = methodCounts[0].c > 0 ? methodCounts[0].m : null;
-
-          if (!goldenSlot || cell.totalRevenue > goldenSlot.totalRevenue) {
-            goldenSlot = cell;
-          }
-        }
-      }
-    }
-
-    for (let hIdx = 0; hIdx < hours.length; hIdx++) {
-      hourTotals[hIdx].revenue = Math.round(hourTotals[hIdx].revenue * 100) / 100;
-    }
-
-    const activeDays = dayTotals.filter((d) => d.count > 0);
-    const busiestDay =
-      activeDays.length > 0
-        ? [...activeDays].sort((a, b) => b.revenue - a.revenue)[0]
-        : null;
-
-    const activeHours = hourTotals.filter((h) => h.count > 0);
-    const peakHourRaw =
-      activeHours.length > 0
-        ? [...activeHours].sort((a, b) => b.revenue - a.revenue)[0]
-        : null;
-    const quietestHourRaw =
-      activeHours.length > 0
-        ? [...activeHours].sort((a, b) => a.revenue - b.revenue)[0]
-        : null;
-
-    return {
-      hours,
-      dayLabels,
-      cells,
-      totalSalesCount,
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
-      busiestDay,
-      peakHour: peakHourRaw
-        ? { hour: peakHourRaw.hour, label: formatHour(peakHourRaw.hour), revenue: peakHourRaw.revenue, count: peakHourRaw.count }
-        : null,
-      goldenSlot,
-      quietestHour: quietestHourRaw
-        ? { hour: quietestHourRaw.hour, label: formatHour(quietestHourRaw.hour), revenue: quietestHourRaw.revenue, count: quietestHourRaw.count }
-        : null,
-      dayTotals,
-      hourTotals,
-    };
-  }
-
   public getSyncStatus(): {
     isConnected: boolean;
     lastSyncTimestamp: number;
@@ -4287,13 +3602,9 @@ class CloudSalesDatabase {
         this.salesCache.set(docSnap.id, {
           id: docSnap.id,
           salesmanName: data.salesmanName || '',
-          operatorName: data.operatorName || undefined,
           itemDescription: data.itemDescription || (data.isMiscellaneous ? 'Miscellaneous' : ''),
           isMiscellaneous: Boolean(data.isMiscellaneous),
           amount: Number(data.amount) || 0,
-          originalAmount: data.originalAmount !== undefined && data.originalAmount !== null ? Number(data.originalAmount) : undefined,
-          discountAmount: data.discountAmount !== undefined && data.discountAmount !== null ? Number(data.discountAmount) : undefined,
-          discountLabel: data.discountLabel || undefined,
           paymentMethod,
           notes: data.notes || undefined,
           timestamp: data.timestamp || Date.now(),
@@ -4307,10 +3618,6 @@ class CloudSalesDatabase {
           basketItemCount: data.basketItemCount !== undefined && data.basketItemCount !== null ? Number(data.basketItemCount) : undefined,
           checkoutVendorSummary: data.checkoutVendorSummary || undefined,
           checkoutItemSummary: data.checkoutItemSummary || undefined,
-          storeCreditCustomerId: data.storeCreditCustomerId || undefined,
-          storeCreditCustomerName: data.storeCreditCustomerName || undefined,
-          storeCreditAmount: data.storeCreditAmount !== undefined && data.storeCreditAmount !== null ? Number(data.storeCreditAmount) : undefined,
-          relatedHoldId: data.relatedHoldId || undefined,
           tradeDetails: data.tradeDetails || undefined,
           tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
           tradeValue: data.tradeValue !== undefined && data.tradeValue !== null ? Number(data.tradeValue) : undefined,
@@ -4328,14 +3635,12 @@ class CloudSalesDatabase {
         this.tradesCache.set(docSnap.id, {
           id: docSnap.id,
           vendorName: data.vendorName || '',
-          operatorName: data.operatorName || undefined,
           itemDescription: data.itemDescription || '',
           tradeValue: Number(data.tradeValue) || 0,
           tradeType,
           dateKey: data.dateKey || getLocalDateKey(new Date(data.timestamp || Date.now())),
           timestamp: data.timestamp || Date.now(),
           customerName: data.customerName || undefined,
-          storeCreditCustomerId: data.storeCreditCustomerId || undefined,
           notes: data.notes || undefined,
           isStandalone: data.isStandalone !== undefined ? Boolean(data.isStandalone) : true,
           soldItemDescription: data.soldItemDescription || undefined,
@@ -4402,52 +3707,6 @@ class CloudSalesDatabase {
         });
       });
 
-      // 7. Customer Holds & Layaways
-      const holdsSnap = await getDocs(collection(db, 'holds'));
-      holdsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        const rawStatus = (data.status || 'active').toString().toLowerCase();
-        const status: HoldStatus =
-          rawStatus === 'completed'
-            ? 'completed'
-            : rawStatus === 'cancelled'
-            ? 'cancelled'
-            : rawStatus === 'expired'
-            ? 'expired'
-            : 'active';
-        const payments: HoldPayment[] = Array.isArray(data.payments)
-          ? data.payments.map((p: any) => ({
-              id: p.id || `hp_${Date.now()}`,
-              amount: Math.round((Number(p.amount) || 0) * 100) / 100,
-              paymentMethod: p.paymentMethod || 'cash',
-              operatorName: p.operatorName || undefined,
-              saleId: p.saleId || undefined,
-              notes: p.notes || undefined,
-              timestamp: p.timestamp || Date.now(),
-              dateKey: p.dateKey || getLocalDateKey(new Date(p.timestamp || Date.now())),
-            }))
-          : [];
-        this.holdsCache.set(docSnap.id, {
-          id: docSnap.id,
-          customerName: data.customerName || 'Customer',
-          customerPhone: data.customerPhone || undefined,
-          vendorName: data.vendorName || '',
-          operatorName: data.operatorName || undefined,
-          itemDescription: data.itemDescription || '',
-          totalPrice: Math.round((Number(data.totalPrice) || 0) * 100) / 100,
-          depositPaid: Math.round((Number(data.depositPaid) || 0) * 100) / 100,
-          remainingBalance: Math.round((Number(data.remainingBalance) || 0) * 100) / 100,
-          status,
-          dueDateKey: data.dueDateKey || undefined,
-          notes: data.notes || undefined,
-          payments,
-          createdAt: data.createdAt || Date.now(),
-          dateKey: data.dateKey || getLocalDateKey(new Date(data.createdAt || Date.now())),
-          updatedAt: data.updatedAt || data.createdAt || Date.now(),
-          completedAt: data.completedAt || undefined,
-        });
-      });
-
       this.isCloudConnected = true;
       this.lastSyncTimestamp = Date.now();
       this.saveToStorage();
@@ -4483,11 +3742,8 @@ class CloudSalesDatabase {
       'Date',
       'Time',
       'Vendor',
-      'Rang By (Operator)',
       'Item Sold',
       'Gross Amount (£) [Before Commission]',
-      'Discount (£)',
-      'Discount Label',
       'Payment Method',
       'Notes',
     ];
@@ -4497,11 +3753,8 @@ class CloudSalesDatabase {
       sale.dateKey,
       new Date(sale.timestamp).toLocaleTimeString(),
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
-      `"${(sale.operatorName || '').replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.discountAmount ? sale.discountAmount.toFixed(2) : '0.00',
-      `"${(sale.discountLabel || '').replace(/"/g, '""')}"`,
       sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod === 'online' ? 'ONLINE SALE' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
@@ -4521,11 +3774,8 @@ class CloudSalesDatabase {
       'Date',
       'Time',
       'Vendor',
-      'Rang By (Operator)',
       'Item Sold',
       'Gross Amount (£) [Before Commission]',
-      'Discount (£)',
-      'Discount Label',
       'Payment Method',
       'Notes',
     ];
@@ -4534,11 +3784,8 @@ class CloudSalesDatabase {
       sale.dateKey,
       new Date(sale.timestamp).toLocaleTimeString(),
       `"${sale.salesmanName.replace(/"/g, '""')}"`,
-      `"${(sale.operatorName || '').replace(/"/g, '""')}"`,
       `"${sale.itemDescription.replace(/"/g, '""')}"`,
       sale.amount.toFixed(2),
-      sale.discountAmount ? sale.discountAmount.toFixed(2) : '0.00',
-      `"${(sale.discountLabel || '').replace(/"/g, '""')}"`,
       sale.paymentMethod === 'traded_out' ? 'TRADE OUT' : sale.paymentMethod === 'online' ? 'ONLINE SALE' : sale.paymentMethod.toUpperCase(),
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);

@@ -21,7 +21,6 @@ import {
   Lock,
   Unlock,
   KeyRound,
-  UserCheck,
 } from 'lucide-react';
 import { TradeRecord, TradeDaySummary, TradeType } from '../types';
 import { cloudDb, formatCurrency, formatDisplayDate, getLocalDateKey } from '../db/cloudDatabase';
@@ -93,8 +92,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
       const matchVendor = t.vendorName.toLowerCase().includes(q);
       const matchCustomer = t.customerName?.toLowerCase().includes(q);
       const matchNotes = t.notes?.toLowerCase().includes(q);
-      const matchOperator = t.operatorName?.toLowerCase().includes(q);
-      if (!matchItem && !matchVendor && !matchCustomer && !matchNotes && !matchOperator) {
+      if (!matchItem && !matchVendor && !matchCustomer && !matchNotes) {
         return false;
       }
     }
@@ -1068,15 +1066,7 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                     </div>
 
                     <div className="text-xs text-zinc-800 font-semibold break-words">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{t.itemDescription}</span>
-                        {t.operatorName && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
-                            <UserCheck className="w-2.5 h-2.5 text-sky-600" />
-                            Rang by {t.operatorName}
-                          </span>
-                        )}
-                      </div>
+                      <span>{t.itemDescription}</span>
                       {t.customerName && (
                         <p className="text-[11px] text-zinc-600 font-medium mt-0.5">
                           Customer: {t.customerName}
@@ -1183,12 +1173,6 @@ export const TradesTab: React.FC<TradesTabProps> = ({
                           />
                           <span>{t.vendorName}</span>
                         </div>
-                        {t.operatorName && (
-                          <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded">
-                            <UserCheck className="w-2.5 h-2.5 text-sky-600" />
-                            <span>Rang by {t.operatorName}</span>
-                          </div>
-                        )}
                       </td>
 
                       {/* Cards Item */}

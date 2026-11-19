@@ -22,14 +22,10 @@ export interface BasketItemInput {
 
 export interface SaleRecord {
   id: string;
-  salesmanName: string; // Vendor name (item/stock owner)
-  operatorName?: string; // Counter operator who rang up the transaction on this device
+  salesmanName: string; // Vendor name
   itemDescription: string;
   isMiscellaneous?: boolean;
-  amount: number; // Final net sale price / valuation collected in GBP (£)
-  originalAmount?: number; // Pre-discount subtotal/price in GBP (£) if discounted
-  discountAmount?: number; // Total discount applied in GBP (£)
-  discountLabel?: string; // e.g. "10% Off", "-£2.00", "Bundle: 3 for £10"
+  amount: number; // Gross sale price / valuation in GBP (£)
   paymentMethod: PaymentMethod; // cash, card, traded_out, or online
   notes?: string;
   timestamp: number; // Unix timestamp in milliseconds
@@ -48,8 +44,6 @@ export interface SaleRecord {
   storeCreditCustomerId?: string;
   storeCreditCustomerName?: string;
   storeCreditAmount?: number;
-  // Hold / layaway linkage
-  relatedHoldId?: string;
   // Backward compatibility fields if legacy records exist
   tradeDetails?: string;
   tradeAcceptingVendor?: string;
@@ -105,7 +99,6 @@ export interface DaySummary {
 export interface TradeRecord {
   id: string;
   vendorName: string; // Vendor who accepted / is holding the trade
-  operatorName?: string; // Counter operator who rang up the trade on this device
   itemDescription: string; // Cards / Item traded in description
   tradeValue: number; // Valuation in GBP (£)
   tradeType: TradeType; // 'cash' (cash payout) or 'credit' (vendor credit)
@@ -282,76 +275,3 @@ export interface StoreCreditOverview {
   totalLifetimeIssued: number;
   totalLifetimeRedeemed: number;
 }
-
-export type HoldStatus = 'active' | 'completed' | 'cancelled' | 'expired';
-
-export interface HoldPayment {
-  id: string;
-  amount: number;
-  paymentMethod: PaymentMethod;
-  operatorName?: string;
-  saleId?: string;
-  notes?: string;
-  timestamp: number;
-  dateKey: string;
-}
-
-export interface HoldRecord {
-  id: string;
-  customerName: string;
-  customerPhone?: string;
-  vendorName: string;
-  operatorName?: string;
-  itemDescription: string;
-  totalPrice: number;
-  depositPaid: number;
-  remainingBalance: number;
-  status: HoldStatus;
-  dueDateKey?: string;
-  notes?: string;
-  payments: HoldPayment[];
-  createdAt: number;
-  dateKey: string;
-  updatedAt: number;
-  completedAt?: number;
-}
-
-export interface HoldsOverview {
-  activeCount: number;
-  completedCount: number;
-  overdueCount: number;
-  totalActiveValue: number;
-  totalDepositsCollected: number;
-  totalRemainingDue: number;
-}
-
-export type HeatmapMetric = 'revenue' | 'count' | 'avgTicket';
-
-export interface HeatmapCell {
-  dayIndex: number; // 0 = Mon ... 6 = Sun
-  dayLabel: string;
-  hour: number; // 0..23
-  salesCount: number;
-  totalRevenue: number;
-  avgTicket: number;
-  cashCount: number;
-  cardCount: number;
-  onlineCount: number;
-  tradedOutCount: number;
-  topPaymentMethod: PaymentMethod | null;
-}
-
-export interface HeatmapData {
-  hours: number[];
-  dayLabels: string[];
-  cells: HeatmapCell[][]; // [dayIndex][hourIndex]
-  totalSalesCount: number;
-  totalRevenue: number;
-  busiestDay: { label: string; revenue: number; count: number } | null;
-  peakHour: { hour: number; label: string; revenue: number; count: number } | null;
-  goldenSlot: HeatmapCell | null;
-  quietestHour: { hour: number; label: string; revenue: number; count: number } | null;
-  dayTotals: { label: string; revenue: number; count: number }[];
-  hourTotals: { hour: number; label: string; revenue: number; count: number }[];
-}
-

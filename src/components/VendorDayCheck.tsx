@@ -16,11 +16,7 @@ import {
   CalendarDays,
   Ticket,
   FileSpreadsheet,
-  Globe,
-  Copy,
-  Check,
-  FileText,
-  Percent
+  Globe
 } from 'lucide-react';
 import { SaleRecord, DaySummary } from '../types';
 import { 
@@ -32,13 +28,6 @@ import {
   WeekRangeInfo,
   getLocalDateKey
 } from '../db/cloudDatabase';
-import { useDeviceVendor } from '../utils/deviceVendor';
-import { DeviceVendorBar } from './DeviceVendorBar';
-import {
-  calculateVendorSettlement,
-  buildVendorSettlementText,
-  downloadVendorSettlementPdf,
-} from '../utils/settlementPdf';
 
 interface VendorDayCheckProps {
   currentDateKey: string;
@@ -83,25 +72,9 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   allVendors,
   sales,
 }) => {
-  const {
-    rememberedVendor,
-    pinVendor,
-    clearPinnedVendor,
-  } = useDeviceVendor(allVendors);
-
   const [selectedVendorName, setSelectedVendorName] = useState<string>(() => {
-    if (rememberedVendor && allVendors.includes(rememberedVendor)) {
-      return rememberedVendor;
-    }
     return allVendors.length > 0 ? allVendors[0] : '';
   });
-
-  // Sync automatically if user pins a vendor on this device
-  React.useEffect(() => {
-    if (rememberedVendor && allVendors.includes(rememberedVendor)) {
-      setSelectedVendorName(rememberedVendor);
-    }
-  }, [rememberedVendor, allVendors]);
 
   // Mode: Weekly (Sunday to Saturday) vs Daily
   const [viewMode, setViewMode] = useState<PeriodViewMode>('weekly');
@@ -117,10 +90,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   // Filter by a specific day within the weekly view (optional drilldown)
   const [weekFilterDayKey, setWeekFilterDayKey] = useState<string | 'all'>('all');
 
-  // Weekly Settlement Statement state (commission rate preview & copy confirmation)
-  const [commissionRateInput, setCommissionRateInput] = useState<string>('0');
-  const [copiedSettlement, setCopiedSettlement] = useState<boolean>(false);
-
   // Ensure active vendor is valid
   const activeVendor = useMemo(() => {
     if (allVendors.includes(selectedVendorName)) {
@@ -130,7 +99,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   }, [allVendors, selectedVendorName]);
 
   const vendorColor = activeVendor ? cloudDb.getVendorColor(activeVendor) : '#2563eb';
-  const dayEventsMap = useMemo(() => cloudDb.getDayEventsMap(), [sales, currentWeek.startDateKey]);
 
   // Weekly data computation for the Sunday-to-Saturday week
   const weekData = useMemo(() => {
@@ -330,16 +298,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               );
             })}
           </div>
-          <div className="mt-2.5">
-            <DeviceVendorBar
-              theme="light"
-              selectedVendor={activeVendor}
-              rememberedVendor={rememberedVendor}
-              onPinVendor={pinVendor}
-              onClearPinnedVendor={clearPinnedVendor}
-              onSelectVendor={(vendor) => setSelectedVendorName(vendor)}
-            />
-          </div>
         </div>
 
         {/* Period Selector Bar */}
@@ -399,7 +357,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5 sm:gap-2">
               {currentWeek.days.map((day) => {
                 const dayStat = weekData?.dayBreakdown.find((d) => d.dateKey === day.dateKey);
-                const dayEvent = dayEventsMap.get(day.dateKey);
                 const isDaySelected = weekFilterDayKey === day.dateKey;
                 const hasSales = (dayStat?.totalRevenue || 0) > 0;
                 const hasTrade = (dayStat?.tradeTakenInAmount || 0) > 0;
@@ -423,12 +380,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
                       </span>
                       {day.isToday && (
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-600" title="Today" />
-                      )}
-                      {dayEvent?.isEvent && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full bg-amber-500"
-                          title={`Event: ${dayEvent.eventName}`}
-                        />
                       )}
                     </div>
                     <span className={`text-[10px] block font-medium ${isDaySelected ? 'text-blue-200' : 'text-zinc-500'}`}>
@@ -723,203 +674,6 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
               </div>
             </div>
           </div>
-
-          {/* WEEKLY SETTLEMENT STATEMENT (1-Click Copy & PDF Export with optional Commission Rate Preview) */}
-          {(() => {
-            const parsedCommission = Math.max(0, Math.min(100, parseFloat(commissionRateInput) || 0));
-            const settlement = calculateVendorSettlement(weekData, parsedCommission);
-
-            const handleCopySettlement = async () => {
-              const summaryText = buildVendorSettlementText(weekData, parsedCommission, dayEventsMap);
-              try {
-                await navigator.clipboard.writeText(summaryText);
-                setCopiedSettlement(true);
-                setTimeout(() => setCopiedSettlement(false), 2500);
-              } catch {
-                // Fallback textarea copy if clipboard permission blocked
-                const ta = document.createElement('textarea');
-                ta.value = summaryText;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                setCopiedSettlement(true);
-                setTimeout(() => setCopiedSettlement(false), 2500);
-              }
-            };
-
-            const handleDownloadPdf = () => {
-              downloadVendorSettlementPdf(weekData, parsedCommission, dayEventsMap);
-            };
-
-            return (
-              <div
-                id="card-weekly-settlement-statement"
-                className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden"
-              >
-                <div className="px-5 py-4 border-b border-zinc-100 bg-zinc-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2 flex-wrap">
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Weekly Settlement Statement • {weekData.vendorName}</span>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-zinc-200/70 text-zinc-700">
-                        {currentWeek.startDisplay} – {currentWeek.endDisplay}
-                      </span>
-                    </h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      Share a clean weekly summary via text/WhatsApp or download a PDF statement.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      id="btn-copy-settlement-text"
-                      onClick={handleCopySettlement}
-                      className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                        copiedSettlement
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-white hover:bg-zinc-100 text-zinc-800 border-zinc-300'
-                      }`}
-                    >
-                      {copiedSettlement ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 shrink-0" />
-                          <span>Copied Summary!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-                          <span>Copy Text / WhatsApp</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      id="btn-download-settlement-pdf"
-                      onClick={handleDownloadPdf}
-                      className="min-h-[40px] px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Download Statement PDF</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-4 sm:p-5 space-y-4">
-                  {/* Commission Preview Rate Controls */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50 border border-zinc-200/80 rounded-xl p-3">
-                    <div className="flex items-center gap-2">
-                      <Percent className="w-4 h-4 text-zinc-600 shrink-0" />
-                      <div>
-                        <span className="text-xs font-bold text-zinc-800 block">
-                          Commission Rate Preview
-                        </span>
-                        <span className="text-[11px] text-zinc-500">
-                          {parsedCommission === 0
-                            ? '0% — Showing gross ledger figures before commission reductions'
-                            : `Previewing ${parsedCommission}% commission deduction on gross sales`}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {[0, 10, 15, 20].map((rate) => {
-                        const isActiveRate = parsedCommission === rate;
-                        return (
-                          <button
-                            key={rate}
-                            type="button"
-                            onClick={() => setCommissionRateInput(String(rate))}
-                            className={`min-h-[34px] px-2.5 py-1 rounded-lg text-xs font-bold border cursor-pointer transition-colors whitespace-nowrap ${
-                              isActiveRate
-                                ? 'bg-zinc-900 text-white border-zinc-900'
-                                : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-300'
-                            }`}
-                          >
-                            {rate === 0 ? '0% (Gross)' : `${rate}%`}
-                          </button>
-                        );
-                      })}
-                      <div className="relative w-20">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          aria-label="Custom commission percentage"
-                          value={commissionRateInput}
-                          onChange={(e) => setCommissionRateInput(e.target.value)}
-                          className="w-full min-h-[34px] pl-2.5 pr-6 py-1 rounded-lg border border-zinc-300 bg-white text-xs font-bold text-zinc-900 tabular-nums focus:outline-hidden focus:ring-2 focus:ring-zinc-900/15"
-                        />
-                        <span className="absolute right-2 top-2 text-[11px] font-bold text-zinc-400 pointer-events-none">%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Settlement Numbers Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 tabular-nums">
-                    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                        Gross Sales
-                      </span>
-                      <span className="text-base font-black text-zinc-900 mt-0.5 block">
-                        {formatCurrency(settlement.grossSales)}
-                      </span>
-                      <span className="text-[10px] text-zinc-400">{weekData.salesCount} sales</span>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                        Commission ({settlement.commissionPercent}%)
-                      </span>
-                      <span className="text-base font-black text-rose-600 mt-0.5 block">
-                        -{formatCurrency(settlement.commissionAmount)}
-                      </span>
-                      <span className="text-[10px] text-zinc-400">
-                        {settlement.commissionPercent === 0 ? 'Before reductions' : 'Store fee preview'}
-                      </span>
-                    </div>
-
-                    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                        After Commission
-                      </span>
-                      <span className="text-base font-black text-zinc-900 mt-0.5 block">
-                        {formatCurrency(settlement.netSalesAfterCommission)}
-                      </span>
-                      <span className="text-[10px] text-zinc-400">Sales subtotal</span>
-                    </div>
-
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-                        Cash Trades Out
-                      </span>
-                      <span className="text-base font-black text-amber-700 mt-0.5 block">
-                        -{formatCurrency(settlement.cashTradesPaidOut)}
-                      </span>
-                      <span className="text-[10px] text-amber-700/80">
-                        {weekData.cashTradeCount} cash • Credit: {formatCurrency(settlement.creditTradesIssued)}
-                      </span>
-                    </div>
-
-                    <div className="col-span-2 lg:col-span-1 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/70 p-3">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-900 block">
-                        {settlement.commissionPercent > 0 ? 'Net Settlement' : 'Gross Less Cash Trades'}
-                      </span>
-                      <span className="text-lg font-black text-emerald-700 mt-0.5 block">
-                        {formatCurrency(settlement.netSettlementDue)}
-                      </span>
-                      <span className="text-[10px] text-emerald-800 font-semibold">
-                        {settlement.commissionPercent > 0 ? 'Estimated payout' : 'Before commission reductions'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Sunday-to-Saturday Day-by-Day Table */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs overflow-hidden">

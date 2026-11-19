@@ -30,36 +30,11 @@ import {
   ShoppingCart,
   Trash2,
   Split,
-  BookmarkCheck,
-  Percent,
-  Package,
-  UserCheck,
-  Phone,
-  Clock,
-  AlertTriangle,
-  ChevronUp,
 } from 'lucide-react';
-import {
-  PaymentMethod,
-  OnlineCard,
-  TradeType,
-  BasketItemInput,
-  SplitPaymentBreakdown,
-  StoreCreditCustomer,
-  HoldRecord,
-} from '../types';
+import { PaymentMethod, OnlineCard, TradeType, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
 import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
-import { DeviceOperatorModal } from './DeviceOperatorModal';
-import { useDeviceOperator } from '../utils/deviceOperator';
-import {
-  DiscountSelection,
-  QUICK_DISCOUNT_PERCENTS,
-  QUICK_DISCOUNT_FLATS,
-  QUICK_BUNDLE_PRESETS,
-  calculateCheckoutPricing,
-} from '../utils/checkoutDiscount';
 import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
@@ -74,12 +49,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
   const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
   const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
-  const { operatorName, hasOperator, selectOperator } = useDeviceOperator();
-  const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
   const currentDateKey = getLocalDateKey();
 
-  // Terminal Mode: 'sale' (Counter Sale), 'trade' (Trade In), vs 'hold' (Customer Holds & Deposits)
-  const [terminalMode, setTerminalMode] = useState<'sale' | 'trade' | 'hold'>('sale');
+  // Terminal Mode: 'sale' (Counter Sale) vs 'trade' (Trade In)
+  const [terminalMode, setTerminalMode] = useState<'sale' | 'trade'>('sale');
 
   // Sale form states
   const [selectedVendor, setSelectedVendor] = useState<string>('');
@@ -101,9 +74,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     customer: StoreCreditCustomer;
     amountToUse: number;
   } | null>(null);
-  const [activeDiscount, setActiveDiscount] = useState<DiscountSelection>(null);
-  const [customDealMode, setCustomDealMode] = useState<'flat' | 'bundle'>('flat');
-  const [customDealInput, setCustomDealInput] = useState<string>('');
 
   // Trade-In form states
   const [tradeVendor, setTradeVendor] = useState<string>('');
@@ -117,37 +87,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [tradeVendorSearch, setTradeVendorSearch] = useState('');
   const [isAddingTradeVendor, setIsAddingTradeVendor] = useState(false);
   const [newTradeVendorName, setNewTradeVendorName] = useState('');
-
-  // Customer Holds / Layaway states (Never displays storewide sales totals)
-  const [holdsList, setHoldsList] = useState<HoldRecord[]>(() =>
-    cloudDb.getHolds({ status: 'active' })
-  );
-  const [holdSubView, setHoldSubView] = useState<'list' | 'create'>('list');
-  const [holdSearch, setHoldSearch] = useState('');
-  const [holdCustomerName, setHoldCustomerName] = useState('');
-  const [holdCustomerPhone, setHoldCustomerPhone] = useState('');
-  const [holdVendor, setHoldVendor] = useState('');
-  const [holdItemDescription, setHoldItemDescription] = useState('');
-  const [holdTotalPrice, setHoldTotalPrice] = useState('');
-  const [holdInitialDeposit, setHoldInitialDeposit] = useState('');
-  const [holdDepositMethod, setHoldDepositMethod] = useState<PaymentMethod>('cash');
-  const [holdDueDate, setHoldDueDate] = useState('');
-  const [holdNotes, setHoldNotes] = useState('');
-  const [isHoldVendorDropdownOpen, setIsHoldVendorDropdownOpen] = useState(false);
-  const [holdVendorSearch, setHoldVendorSearch] = useState('');
-  const [isAddingHoldVendor, setIsAddingHoldVendor] = useState(false);
-  const [newHoldVendorName, setNewHoldVendorName] = useState('');
-  const [payingHoldId, setPayingHoldId] = useState<string | null>(null);
-  const [payHoldAmount, setPayHoldAmount] = useState('');
-  const [payHoldMethod, setPayHoldMethod] = useState<PaymentMethod>('cash');
-  const [payHoldNotes, setPayHoldNotes] = useState('');
-  const [holdSuccessNotice, setHoldSuccessNotice] = useState<{
-    customerName: string;
-    item: string;
-    paidNow: number;
-    remainingBalance: number;
-    completed: boolean;
-  } | null>(null);
 
   // Quick Add Vendor modal/inline state
   const [isAddingVendor, setIsAddingVendor] = useState(false);
@@ -174,14 +113,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const [vendorSearch, setVendorSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const tradeDropdownRef = useRef<HTMLDivElement>(null);
-  const holdDropdownRef = useRef<HTMLDivElement>(null);
 
   // Form input refs
   const itemInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const tradeItemInputRef = useRef<HTMLInputElement>(null);
-  const holdItemInputRef = useRef<HTMLInputElement>(null);
 
   // Filter vendors by search
   const filteredVendors = knownVendors.filter((v) =>
@@ -190,19 +127,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const filteredTradeVendors = knownVendors.filter((v) =>
     v.toLowerCase().includes(tradeVendorSearch.toLowerCase().trim())
   );
-  const filteredHoldVendors = knownVendors.filter((v) =>
-    v.toLowerCase().includes(holdVendorSearch.toLowerCase().trim())
-  );
-  const filteredActiveHolds = holdsList.filter((h) => {
-    if (!holdSearch.trim()) return true;
-    const q = holdSearch.trim().toLowerCase();
-    return (
-      h.customerName.toLowerCase().includes(q) ||
-      h.itemDescription.toLowerCase().includes(q) ||
-      h.vendorName.toLowerCase().includes(q) ||
-      (h.customerPhone && h.customerPhone.toLowerCase().includes(q))
-    );
-  });
 
   // Reactive online cards availability (disables Online sale & Barcode scanning unless cards are online)
   const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
@@ -217,7 +141,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     const syncDbState = () => {
       setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
       setFrequentVendors(cloudDb.getFrequentVendors(3));
-      setHoldsList(cloudDb.getHolds({ status: 'active' }));
     };
     syncDbState();
     return cloudDb.subscribe(syncDbState);
@@ -245,9 +168,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       }
       if (tradeDropdownRef.current && !tradeDropdownRef.current.contains(e.target as Node)) {
         setIsTradeVendorDropdownOpen(false);
-      }
-      if (holdDropdownRef.current && !holdDropdownRef.current.contains(e.target as Node)) {
-        setIsHoldVendorDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -393,9 +313,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
   const basketSubtotal = Math.round(basketItems.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
   const currentFieldAmount = parseFloat(amount) || 0;
-  const rawCheckoutSubtotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
-  const pricing = calculateCheckoutPricing(rawCheckoutSubtotal, activeDiscount);
-  const checkoutTargetTotal = pricing.finalTotal;
+  const checkoutTargetTotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
 
   const splitSum = (() => {
     const c = parseFloat(splitAmounts.cash) || 0;
@@ -554,17 +472,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       ];
     }
 
-    const rawTotalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
-    const submitPricing = calculateCheckoutPricing(rawTotalVal, activeDiscount);
-    const totalVal = submitPricing.finalTotal;
-    const discountPayload =
-      submitPricing.discountAmount > 0
-        ? {
-            label: submitPricing.discountLabel || 'Discount',
-            amount: submitPricing.discountAmount,
-            originalSubtotal: submitPricing.rawSubtotal,
-          }
-        : undefined;
+    const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
 
     let storeCreditPayload: { customerId: string; amount: number } | undefined;
     if (storeCreditSelection && storeCreditSelection.amountToUse > 0) {
@@ -620,24 +528,16 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       if (isSinglePurePayment && itemsToCheckout[0].onlineCardId && !storeCreditPayload) {
         await cloudDb.sellOnlineCard(itemsToCheckout[0].onlineCardId, {
           targetDateKey: currentDateKey,
-          customPrice: totalVal,
-          originalAmount: discountPayload ? submitPricing.rawSubtotal : undefined,
-          discountAmount: discountPayload ? discountPayload.amount : undefined,
-          discountLabel: discountPayload ? discountPayload.label : undefined,
-          operatorName: operatorName || undefined,
+          customPrice: itemsToCheckout[0].amount,
           notes: notes.trim() || undefined,
           paymentMethod: paymentMode as PaymentMethod,
         });
       } else if (isSinglePurePayment && !itemsToCheckout[0].onlineCardId) {
         await cloudDb.insertSale({
           salesmanName: itemsToCheckout[0].salesmanName,
-          operatorName: operatorName || undefined,
           itemDescription: itemsToCheckout[0].itemDescription,
           isMiscellaneous: itemsToCheckout[0].isMiscellaneous,
-          amount: totalVal,
-          originalAmount: discountPayload ? submitPricing.rawSubtotal : undefined,
-          discountAmount: discountPayload ? discountPayload.amount : undefined,
-          discountLabel: discountPayload ? discountPayload.label : undefined,
+          amount: itemsToCheckout[0].amount,
           paymentMethod: paymentMode as PaymentMethod,
           notes: notes.trim() || undefined,
           dateKey: currentDateKey,
@@ -647,10 +547,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         await cloudDb.insertBasketCheckout({
           items: itemsToCheckout,
           payments,
-          operatorName: operatorName || undefined,
           dateKey: currentDateKey,
           notes: notes.trim() || undefined,
-          discount: discountPayload,
           storeCredit: storeCreditPayload,
         });
       }
@@ -681,8 +579,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
       setBasketItems([]);
       setStoreCreditSelection(null);
-      setActiveDiscount(null);
-      setCustomDealInput('');
       if (!isMiscellaneous) {
         setItemDescription('');
       }
@@ -756,7 +652,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     try {
       await cloudDb.insertTrade({
         vendorName: tradeVendor.trim(),
-        operatorName: operatorName || undefined,
         itemDescription: tradeItemDescription.trim(),
         tradeValue: parsedValue,
         tradeType,
@@ -791,121 +686,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       }, 100);
     } catch (err: any) {
       setFormError(err.message || 'Error recording trade-in.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateHoldVendor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = newHoldVendorName.trim();
-    if (!clean) return;
-    await cloudDb.addVendor(clean);
-    setHoldVendor(clean);
-    setNewHoldVendorName('');
-    setIsAddingHoldVendor(false);
-    setIsHoldVendorDropdownOpen(false);
-    holdItemInputRef.current?.focus();
-  };
-
-  const handleCreateHold = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-    if (!holdCustomerName.trim()) {
-      setFormError('Customer name is required to place an item on hold.');
-      return;
-    }
-    if (!holdVendor.trim()) {
-      setFormError('Please select a vendor for this hold.');
-      return;
-    }
-    if (!holdItemDescription.trim()) {
-      setFormError('Please describe the item(s) being held.');
-      return;
-    }
-    const totalNum = parseFloat(holdTotalPrice);
-    if (isNaN(totalNum) || totalNum <= 0) {
-      setFormError('Total item price must be greater than £0.00.');
-      return;
-    }
-    const depositNum = parseFloat(holdInitialDeposit) || 0;
-    if (depositNum < 0 || depositNum > totalNum) {
-      setFormError('Initial deposit must be between £0.00 and the total item price.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const created = await cloudDb.createHold({
-        customerName: holdCustomerName.trim(),
-        customerPhone: holdCustomerPhone.trim() || undefined,
-        vendorName: holdVendor.trim(),
-        operatorName: operatorName || undefined,
-        itemDescription: holdItemDescription.trim(),
-        totalPrice: totalNum,
-        initialDeposit: depositNum,
-        depositPaymentMethod: holdDepositMethod,
-        dueDateKey: holdDueDate || undefined,
-        notes: holdNotes.trim() || undefined,
-        dateKey: currentDateKey,
-      });
-
-      setHoldSuccessNotice({
-        customerName: created.customerName,
-        item: created.itemDescription,
-        paidNow: created.depositPaid,
-        remainingBalance: created.remainingBalance,
-        completed: created.status === 'completed',
-      });
-      setHoldCustomerName('');
-      setHoldCustomerPhone('');
-      setHoldItemDescription('');
-      setHoldTotalPrice('');
-      setHoldInitialDeposit('');
-      setHoldDueDate('');
-      setHoldNotes('');
-      setHoldSubView('list');
-      onSaleRecorded?.();
-      setTimeout(() => setHoldSuccessNotice(null), 5000);
-    } catch (err: any) {
-      setFormError(err.message || 'Error creating customer hold.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRecordHoldPayment = async (hold: HoldRecord) => {
-    setFormError(null);
-    const payNum = parseFloat(payHoldAmount);
-    if (isNaN(payNum) || payNum <= 0) {
-      setFormError('Please enter a valid payment amount greater than £0.00.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const updated = await cloudDb.recordHoldPayment(hold.id, {
-        amount: payNum,
-        paymentMethod: payHoldMethod,
-        operatorName: operatorName || undefined,
-        notes: payHoldNotes.trim() || undefined,
-        dateKey: currentDateKey,
-      });
-
-      setHoldSuccessNotice({
-        customerName: updated.customerName,
-        item: updated.itemDescription,
-        paidNow: payNum,
-        remainingBalance: updated.remainingBalance,
-        completed: updated.status === 'completed',
-      });
-      setPayingHoldId(null);
-      setPayHoldAmount('');
-      setPayHoldNotes('');
-      onSaleRecorded?.();
-      setTimeout(() => setHoldSuccessNotice(null), 5000);
-    } catch (err: any) {
-      setFormError(err.message || 'Error collecting layaway payment.');
     } finally {
       setIsSubmitting(false);
     }
@@ -951,18 +731,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               <Calendar className="w-3.5 h-3.5 text-cyan-400" />
               <span>{formatDisplayDate(currentDateKey)}</span>
             </div>
-
-            {/* Till Operator Switcher (Set once per device) */}
-            <button
-              type="button"
-              id="btn-pos-operator-switch"
-              onClick={() => setIsOperatorModalOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-extrabold rounded-xl bg-fuchsia-500/20 border border-fuchsia-400/70 text-fuchsia-200 hover:bg-fuchsia-500/30 hover:text-white transition-all cursor-pointer whitespace-nowrap shadow-sm"
-              title="Counter operator for this device (who rang up the sale)"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" />
-              <span>Till: {operatorName || 'Select'}</span>
-            </button>
 
             {/* Audio Unlock Warning / Prompt if device browser blocked audio */}
             {!isAudioActive && soundEnabled && (
@@ -1056,8 +824,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           </div>
         </div>
 
-        {/* Terminal Mode Switcher: Record Sale, Trade In, Holds & Layaway */}
-        <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-inner">
+        {/* Terminal Mode Switcher: Record Sale vs Trade In */}
+        <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-inner">
           <button
             type="button"
             id="btn-lockscreen-mode-sale"
@@ -1065,7 +833,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               setTerminalMode('sale');
               setFormError(null);
             }}
-            className={`min-h-[44px] py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
               terminalMode === 'sale'
                 ? 'bg-gradient-to-r from-emerald-400 to-green-400 text-zinc-950 shadow-lg shadow-emerald-500/30'
                 : 'text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/25'
@@ -1082,7 +850,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               setTerminalMode('trade');
               setFormError(null);
             }}
-            className={`min-h-[44px] py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
               terminalMode === 'trade'
                 ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-zinc-950 shadow-lg shadow-amber-500/30'
                 : 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 border border-amber-500/25'
@@ -1090,32 +858,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           >
             <ArrowLeftRight className={`w-4 h-4 shrink-0 ${terminalMode === 'trade' ? 'text-zinc-950' : 'text-amber-400'}`} />
             <span>Trade In</span>
-          </button>
-
-          <button
-            type="button"
-            id="btn-lockscreen-mode-hold"
-            onClick={() => {
-              setTerminalMode('hold');
-              setFormError(null);
-            }}
-            className={`min-h-[44px] py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
-              terminalMode === 'hold'
-                ? 'bg-gradient-to-r from-sky-400 to-cyan-400 text-zinc-950 shadow-lg shadow-sky-500/30'
-                : 'text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 border border-sky-500/25'
-            }`}
-          >
-            <BookmarkCheck className={`w-4 h-4 shrink-0 ${terminalMode === 'hold' ? 'text-zinc-950' : 'text-sky-400'}`} />
-            <span className="truncate">Holds</span>
-            {holdsList.length > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
-                  terminalMode === 'hold' ? 'bg-zinc-950 text-sky-300' : 'bg-sky-500/30 text-sky-200'
-                }`}
-              >
-                {holdsList.length}
-              </span>
-            )}
           </button>
         </div>
 
@@ -1163,37 +905,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
             </div>
             <p className="text-xs text-amber-200/80 font-medium">
               Vendor taking trade: <strong className="text-white">{tradeSuccessNotice.vendor}</strong> • Ready for next trade.
-            </p>
-          </div>
-        )}
-
-        {/* Success Notice Toast Banner (Hold / Layaway) */}
-        {holdSuccessNotice && terminalMode === 'hold' && (
-          <div className="p-4 rounded-2xl bg-sky-950/90 border-2 border-sky-400/80 text-white shadow-xl animate-scale-up space-y-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-black text-sm text-sky-300">
-                <CheckCircle2 className="w-5 h-5 text-sky-400" />
-                <span>
-                  {holdSuccessNotice.completed
-                    ? 'Hold Paid in Full & Ready for Pickup!'
-                    : 'Customer Hold / Payment Recorded!'}
-                </span>
-              </div>
-              <span className="text-xs font-mono font-bold text-sky-200 bg-sky-900/70 px-2.5 py-0.5 rounded-lg border border-sky-400/40">
-                {holdSuccessNotice.completed ? 'COMPLETED' : 'ACTIVE HOLD'}
-              </span>
-            </div>
-            <div className="text-base font-extrabold text-white flex items-center justify-between pt-1">
-              <span>
-                {holdSuccessNotice.customerName} — {holdSuccessNotice.item}
-              </span>
-              <span className="text-lg text-sky-300 tabular-nums font-black">
-                {holdSuccessNotice.paidNow > 0 ? `Paid ${formatCurrency(holdSuccessNotice.paidNow)}` : 'Reserved'}
-              </span>
-            </div>
-            <p className="text-xs text-sky-200/90 font-medium">
-              Remaining balance due:{' '}
-              <strong className="text-white">{formatCurrency(holdSuccessNotice.remainingBalance)}</strong>
             </p>
           </div>
         )}
@@ -1658,14 +1369,11 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-black text-white tabular-nums bg-zinc-950 px-2.5 py-1 rounded-lg border border-indigo-500/40">
-                      {formatCurrency(pricing.finalTotal)}
+                      {formatCurrency(basketSubtotal)}
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setBasketItems([]);
-                        setActiveDiscount(null);
-                      }}
+                      onClick={() => setBasketItems([])}
                       className="text-xs font-bold text-rose-400 hover:text-rose-300 px-2 py-1 cursor-pointer"
                     >
                       Clear
@@ -1914,158 +1622,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               </div>
             )}
 
-            {/* Quick Discounts & Bundle Deals (POS Terminal) */}
-            <div className="rounded-2xl bg-zinc-950/90 border border-rose-500/40 p-3.5 space-y-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
-                  <Percent className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Quick Discounts &amp; Bundle Deals</span>
-                </span>
-
-                {pricing.discountAmount > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-rose-500/25 text-rose-200 border border-rose-400/60 tabular-nums">
-                      {pricing.discountLabel}: Was {formatCurrency(pricing.rawSubtotal)} &rarr;{' '}
-                      {formatCurrency(pricing.finalTotal)} (-{formatCurrency(pricing.discountAmount)})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDiscount(null)}
-                      className="text-[11px] font-bold text-rose-300 hover:text-white underline cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                {QUICK_DISCOUNT_PERCENTS.map((pct) => {
-                  const isSelected = activeDiscount?.kind === 'percent' && activeDiscount.value === pct;
-                  return (
-                    <button
-                      key={`pos-pct-${pct}`}
-                      type="button"
-                      disabled={rawCheckoutSubtotal <= 0}
-                      onClick={() =>
-                        setActiveDiscount(isSelected ? null : { kind: 'percent', value: pct, label: `${pct}% Off` })
-                      }
-                      className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-xs font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
-                        isSelected
-                          ? 'bg-rose-500 text-white border-rose-300 shadow-sm shadow-rose-500/30'
-                          : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border-rose-400/50'
-                      }`}
-                    >
-                      -{pct}%
-                    </button>
-                  );
-                })}
-
-                {QUICK_DISCOUNT_FLATS.map((amt) => {
-                  const isSelected = activeDiscount?.kind === 'flat' && activeDiscount.value === amt;
-                  return (
-                    <button
-                      key={`pos-flat-${amt}`}
-                      type="button"
-                      disabled={rawCheckoutSubtotal <= amt}
-                      onClick={() =>
-                        setActiveDiscount(isSelected ? null : { kind: 'flat', value: amt, label: `-£${amt} Off` })
-                      }
-                      className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-xs font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
-                        isSelected
-                          ? 'bg-amber-400 text-zinc-950 border-amber-200 shadow-sm shadow-amber-500/30'
-                          : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/50'
-                      }`}
-                    >
-                      -£{amt}
-                    </button>
-                  );
-                })}
-
-                {QUICK_BUNDLE_PRESETS.map((bundle) => {
-                  const isSelected =
-                    activeDiscount?.kind === 'bundle' && activeDiscount.targetPrice === bundle.price;
-                  return (
-                    <button
-                      key={`pos-${bundle.label}`}
-                      type="button"
-                      onClick={() => {
-                        if (basketItems.length === 0 && currentFieldAmount <= 0) {
-                          if (!itemDescription.trim() && !isMiscellaneous) {
-                            setItemDescription(`Bundle (${bundle.label})`);
-                          }
-                          setAmount(bundle.price.toFixed(2));
-                          setActiveDiscount(null);
-                          setFormError(null);
-                        } else {
-                          setActiveDiscount(
-                            isSelected
-                              ? null
-                              : { kind: 'bundle', targetPrice: bundle.price, label: `Bundle: ${bundle.label}` }
-                          );
-                        }
-                      }}
-                      className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-xs font-black flex items-center gap-1 cursor-pointer transition-all ${
-                        isSelected
-                          ? 'bg-indigo-400 text-zinc-950 border-indigo-200 shadow-sm shadow-indigo-500/30'
-                          : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 border-indigo-400/50'
-                      }`}
-                    >
-                      <Package className="w-3 h-3" />
-                      <span>{bundle.label}</span>
-                    </button>
-                  );
-                })}
-
-                <div className="flex items-center gap-1 ml-auto">
-                  <select
-                    value={customDealMode}
-                    onChange={(e) => setCustomDealMode(e.target.value as 'flat' | 'bundle')}
-                    className="min-h-[34px] px-2 py-1 text-xs font-bold rounded-lg border border-zinc-700 bg-zinc-900 text-white cursor-pointer"
-                  >
-                    <option value="flat">Custom -£</option>
-                    <option value="bundle">Bundle £</option>
-                  </select>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={customDealInput}
-                    onChange={(e) => setCustomDealInput(e.target.value)}
-                    placeholder="0.00"
-                    className="w-16 min-h-[34px] px-2 py-1 text-xs font-bold tabular-nums rounded-lg border border-zinc-700 bg-zinc-900 text-white"
-                  />
-                  <button
-                    type="button"
-                    disabled={!parseFloat(customDealInput) || parseFloat(customDealInput) <= 0}
-                    onClick={() => {
-                      const val = parseFloat(customDealInput);
-                      if (!val || val <= 0) return;
-                      if (customDealMode === 'flat') {
-                        setActiveDiscount({ kind: 'flat', value: val, label: `-£${val.toFixed(2)} Off` });
-                      } else if (basketItems.length === 0 && currentFieldAmount <= 0) {
-                        if (!itemDescription.trim() && !isMiscellaneous) {
-                          setItemDescription(`Custom Bundle (£${val.toFixed(2)})`);
-                        }
-                        setAmount(val.toFixed(2));
-                        setActiveDiscount(null);
-                      } else {
-                        setActiveDiscount({
-                          kind: 'bundle',
-                          targetPrice: val,
-                          label: `Bundle: £${val.toFixed(2)}`,
-                        });
-                      }
-                      setCustomDealInput('');
-                    }}
-                    className="min-h-[34px] px-2.5 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 disabled:opacity-40 text-white text-xs font-black cursor-pointer"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {/* Customer Store Credit Lookup & Apply (POS Terminal) */}
             <StoreCreditCheckoutPicker
               theme="dark"
@@ -2101,10 +1657,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 {isSubmitting
                   ? 'Adding to Ledger...'
                   : basketItems.length > 0
-                  ? `Checkout Basket (${basketItems.length} items • ${formatCurrency(pricing.finalTotal)})`
+                  ? `Checkout Basket (${basketItems.length} items • ${formatCurrency(basketSubtotal)})`
                   : paymentMode === 'split'
-                  ? `Record Split Sale (${formatCurrency(pricing.finalTotal)})`
-                  : `Record & Add (${formatCurrency(pricing.finalTotal)})`}
+                  ? `Record Split Sale (${formatCurrency(currentFieldAmount)})`
+                  : `Record & Add (${formatCurrency(currentFieldAmount)})`}
               </span>
             </button>
           </form>
@@ -2523,648 +2079,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           </form>
         </div>
         )}
-
-        {/* Holds & Layaway Mode (Locked Counter Terminal - NO global revenue totals shown) */}
-        {terminalMode === 'hold' && (
-          <div
-            id="card-lockscreen-holds"
-            className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-7 shadow-2xl relative overflow-hidden ring-1 ring-white/5 space-y-5"
-          >
-            {/* Hold Mode Banner */}
-            <div className="p-3.5 rounded-2xl bg-sky-500/15 border border-sky-400/60 flex items-start justify-between gap-3 flex-wrap">
-              <div className="flex items-start gap-2.5">
-                <BookmarkCheck className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" />
-                <div className="text-xs text-sky-100 leading-relaxed">
-                  <strong className="text-sky-300">Customer Holds &amp; Deposits:</strong> Start a new layaway or collect an installment / pickup balance. Deposits immediately log to the sales ledger.
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto">
-                <button
-                  type="button"
-                  id="btn-lockscreen-holds-list"
-                  onClick={() => {
-                    setHoldSubView('list');
-                    setFormError(null);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black cursor-pointer transition-all whitespace-nowrap ${
-                    holdSubView === 'list'
-                      ? 'bg-sky-400 text-zinc-950 shadow-xs'
-                      : 'text-sky-200 hover:bg-zinc-900'
-                  }`}
-                >
-                  Active Holds ({holdsList.length})
-                </button>
-                <button
-                  type="button"
-                  id="btn-lockscreen-holds-create"
-                  onClick={() => {
-                    setHoldSubView('create');
-                    setFormError(null);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black cursor-pointer transition-all whitespace-nowrap ${
-                    holdSubView === 'create'
-                      ? 'bg-sky-400 text-zinc-950 shadow-xs'
-                      : 'text-sky-200 hover:bg-zinc-900'
-                  }`}
-                >
-                  + New Hold
-                </button>
-              </div>
-            </div>
-
-            {holdSubView === 'list' ? (
-              <div className="space-y-4">
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3.5 top-3 text-sky-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    id="input-lockscreen-hold-search"
-                    value={holdSearch}
-                    onChange={(e) => setHoldSearch(e.target.value)}
-                    placeholder="Search customer name, phone, card/item, or vendor..."
-                    className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium rounded-2xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-sky-400"
-                  />
-                </div>
-
-                {filteredActiveHolds.length === 0 ? (
-                  <div className="py-10 text-center space-y-3 bg-zinc-950/60 rounded-2xl border border-zinc-800">
-                    <BookmarkCheck className="w-8 h-8 text-sky-400 mx-auto" />
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-bold text-white">No Active Customer Holds</h3>
-                      <p className="text-xs text-zinc-400">
-                        {holdSearch.trim()
-                          ? 'No active holds match your search.'
-                          : 'Tap "+ New Hold" above to put a card or sealed item on layaway.'}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredActiveHolds.map((hold) => {
-                      const pct =
-                        hold.totalPrice > 0
-                          ? Math.min(100, Math.round((hold.depositPaid / hold.totalPrice) * 100))
-                          : 0;
-                      const isOverdue = Boolean(hold.dueDateKey && hold.dueDateKey < currentDateKey);
-                      const isPaying = payingHoldId === hold.id;
-                      const vendorColor = cloudDb.getVendorColor(hold.vendorName);
-
-                      return (
-                        <div
-                          key={hold.id}
-                          className={`p-4 rounded-2xl border bg-zinc-950 space-y-3 ${
-                            isOverdue ? 'border-rose-500/70' : 'border-sky-500/40'
-                          }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                            <div className="space-y-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-black text-white truncate">
-                                  {hold.customerName}
-                                </span>
-                                {hold.customerPhone && (
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded-md border border-zinc-800">
-                                    <Phone className="w-3 h-3 text-sky-400" />
-                                    {hold.customerPhone}
-                                  </span>
-                                )}
-                                {isOverdue && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-500 text-white">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    OVERDUE
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs font-bold text-sky-200 break-words">
-                                {hold.itemDescription}
-                              </p>
-                              <div className="flex items-center gap-2 flex-wrap text-[11px] text-zinc-400">
-                                <span className="inline-flex items-center gap-1.5 font-semibold text-zinc-200">
-                                  <span
-                                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                                    style={{ backgroundColor: vendorColor }}
-                                  />
-                                  {hold.vendorName}
-                                </span>
-                                {hold.dueDateKey && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-zinc-500" />
-                                    Due {formatDisplayDate(hold.dueDateKey)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="sm:text-right shrink-0 space-y-0.5">
-                              <span className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-                                Remaining Balance
-                              </span>
-                              <span className="text-lg font-black text-sky-300 tabular-nums">
-                                {formatCurrency(hold.remainingBalance)}
-                              </span>
-                              <span className="block text-[11px] text-zinc-400 tabular-nums">
-                                Paid {formatCurrency(hold.depositPaid)} of {formatCurrency(hold.totalPrice)} ({pct}%)
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Progress Bar */}
-                          <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden border border-zinc-800">
-                            <div
-                              className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-
-                          {/* Take Payment / Pickup Toggle */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <span className="text-[11px] text-zinc-400 truncate">
-                              {hold.notes ? `Note: ${hold.notes}` : `${hold.payments.length} payment(s) logged`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isPaying) {
-                                  setPayingHoldId(null);
-                                  setPayHoldAmount('');
-                                  setPayHoldNotes('');
-                                } else {
-                                  setPayingHoldId(hold.id);
-                                  setPayHoldAmount(hold.remainingBalance.toFixed(2));
-                                  setPayHoldMethod('cash');
-                                  setPayHoldNotes('');
-                                  setFormError(null);
-                                }
-                              }}
-                              className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
-                                isPaying
-                                  ? 'bg-zinc-800 text-zinc-200 border border-zinc-700'
-                                  : 'bg-gradient-to-r from-sky-400 to-cyan-400 text-zinc-950 hover:from-sky-300 hover:to-cyan-300 shadow-md shadow-sky-500/25'
-                              }`}
-                            >
-                              {isPaying ? (
-                                <>
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                  <span>Close</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Banknote className="w-3.5 h-3.5" />
-                                  <span>Take Payment / Pickup</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-
-                          {/* Inline Payment Collector */}
-                          {isPaying && (
-                            <div className="mt-2 p-3.5 rounded-2xl bg-zinc-900 border border-sky-400/50 space-y-3 animate-fade-in">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-xs font-black text-sky-300 uppercase tracking-wider">
-                                  Collect Installment or Final Pickup
-                                </span>
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setPayHoldAmount(hold.remainingBalance.toFixed(2))}
-                                    className="px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 text-sky-200 border border-sky-400/50 text-[11px] font-black cursor-pointer"
-                                  >
-                                    Full Balance ({formatCurrency(hold.remainingBalance)})
-                                  </button>
-                                  {hold.remainingBalance >= 10 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPayHoldAmount('10.00')}
-                                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-bold cursor-pointer"
-                                    >
-                                      £10
-                                    </button>
-                                  )}
-                                  {hold.remainingBalance >= 20 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPayHoldAmount('20.00')}
-                                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-bold cursor-pointer"
-                                    >
-                                      £20
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                                    Payment Amount (£)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    max={hold.remainingBalance}
-                                    value={payHoldAmount}
-                                    onChange={(e) => setPayHoldAmount(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm font-black tabular-nums rounded-xl border border-zinc-700 bg-zinc-950 text-white focus:outline-hidden focus:border-sky-400"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                                    Payment Method
-                                  </label>
-                                  <div className="grid grid-cols-3 gap-1.5">
-                                    {(
-                                      [
-                                        { id: 'cash', label: 'Cash' },
-                                        { id: 'card', label: 'Card' },
-                                        { id: 'traded_out', label: 'Trade Out' },
-                                      ] as const
-                                    ).map((m) => (
-                                      <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() => setPayHoldMethod(m.id)}
-                                        className={`min-h-[38px] px-2 py-1.5 rounded-xl border text-xs font-black cursor-pointer transition-all ${
-                                          payHoldMethod === m.id
-                                            ? 'bg-sky-400 text-zinc-950 border-sky-200'
-                                            : 'bg-zinc-950 text-zinc-300 border-zinc-700 hover:border-zinc-500'
-                                        }`}
-                                      >
-                                        {m.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={payHoldNotes}
-                                  onChange={(e) => setPayHoldNotes(e.target.value)}
-                                  placeholder="Optional payment note..."
-                                  className="flex-1 px-3 py-2 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={isSubmitting}
-                                  onClick={() => handleRecordHoldPayment(hold)}
-                                  className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-green-400 hover:from-emerald-300 hover:to-green-300 disabled:opacity-50 text-zinc-950 text-xs font-black cursor-pointer shrink-0"
-                                >
-                                  {isSubmitting ? 'Processing...' : 'Confirm Payment'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Create New Hold Form */
-              <form onSubmit={handleCreateHold} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Customer Name <span className="text-sky-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 absolute left-3.5 top-3 text-zinc-500 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={holdCustomerName}
-                        onChange={(e) => setHoldCustomerName(e.target.value)}
-                        placeholder="Customer full name..."
-                        className="w-full pl-10 pr-3 py-2.5 text-sm font-bold rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-sky-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Phone / Handle <span className="text-zinc-500 font-normal">(Optional)</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 absolute left-3.5 top-3 text-zinc-500 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={holdCustomerPhone}
-                        onChange={(e) => setHoldCustomerPhone(e.target.value)}
-                        placeholder="07... or @handle"
-                        className="w-full pl-10 pr-3 py-2.5 text-sm font-medium rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-sky-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vendor for Hold */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
-                      Vendor <span className="text-sky-400">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingHoldVendor(true)}
-                      className="text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add New Vendor</span>
-                    </button>
-                  </div>
-
-                  {frequentVendors.length > 0 && (
-                    <div
-                      className={`grid gap-2 w-full mb-2.5 ${
-                        frequentVendors.length === 1
-                          ? 'grid-cols-1'
-                          : frequentVendors.length === 2
-                          ? 'grid-cols-2'
-                          : 'grid-cols-3'
-                      }`}
-                    >
-                      {frequentVendors.map((vendor) => {
-                        const isSelected = holdVendor.toLowerCase() === vendor.toLowerCase();
-                        const color = cloudDb.getVendorColor(vendor);
-                        return (
-                          <button
-                            key={`hold-quick-${vendor}`}
-                            type="button"
-                            onClick={() => {
-                              setHoldVendor(vendor);
-                              setIsHoldVendorDropdownOpen(false);
-                              setFormError(null);
-                              holdItemInputRef.current?.focus();
-                            }}
-                            className={`min-w-0 min-h-[40px] px-2.5 py-1.5 rounded-xl border-2 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-white text-zinc-950 border-sky-400 ring-2 ring-sky-400/50 shadow-md'
-                                : 'bg-zinc-950/90 text-zinc-100 border-zinc-700 hover:border-sky-400/70 hover:bg-zinc-800'
-                            }`}
-                          >
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/40"
-                              style={{ backgroundColor: color }}
-                            />
-                            <span className="truncate">{vendor}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="relative" ref={holdDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setIsHoldVendorDropdownOpen(!isHoldVendorDropdownOpen)}
-                      className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                        holdVendor
-                          ? 'bg-zinc-950 border-sky-500/60 ring-2 ring-sky-500/20'
-                          : 'bg-zinc-950 border-zinc-700 hover:border-zinc-600'
-                      }`}
-                    >
-                      {holdVendor ? (
-                        <div className="flex items-center gap-2.5 truncate">
-                          <span
-                            className="w-3.5 h-3.5 rounded-full shrink-0"
-                            style={{ backgroundColor: cloudDb.getVendorColor(holdVendor) }}
-                          />
-                          <span className="font-bold text-sm text-white truncate">{holdVendor}</span>
-                        </div>
-                      ) : (
-                        <span className="text-zinc-500 text-sm font-medium">Select vendor...</span>
-                      )}
-                      <ChevronDown
-                        className={`w-4 h-4 text-zinc-400 transition-transform ${
-                          isHoldVendorDropdownOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {isHoldVendorDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden p-2 space-y-1 max-h-60 overflow-y-auto">
-                        <div className="relative mb-1">
-                          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-500" />
-                          <input
-                            type="text"
-                            value={holdVendorSearch}
-                            onChange={(e) => setHoldVendorSearch(e.target.value)}
-                            placeholder="Search vendors..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-zinc-950 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-hidden focus:border-sky-400"
-                            autoFocus
-                          />
-                        </div>
-                        {filteredHoldVendors.map((vendor) => (
-                          <button
-                            key={`hold-dd-${vendor}`}
-                            type="button"
-                            onClick={() => {
-                              setHoldVendor(vendor);
-                              setIsHoldVendorDropdownOpen(false);
-                              setHoldVendorSearch('');
-                              holdItemInputRef.current?.focus();
-                            }}
-                            className={`w-full px-3 py-2 rounded-xl text-left text-xs font-bold flex items-center justify-between cursor-pointer ${
-                              holdVendor === vendor
-                                ? 'bg-sky-500/20 text-sky-300'
-                                : 'text-zinc-200 hover:bg-zinc-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <span
-                                className="w-3 h-3 rounded-full shrink-0"
-                                style={{ backgroundColor: cloudDb.getVendorColor(vendor) }}
-                              />
-                              <span className="truncate">{vendor}</span>
-                            </div>
-                            {holdVendor === vendor && <CheckCircle2 className="w-4 h-4 text-sky-400" />}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {isAddingHoldVendor && (
-                    <div className="mt-2.5 p-3 rounded-2xl bg-zinc-950 border border-sky-500/50 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={newHoldVendorName}
-                        onChange={(e) => setNewHoldVendorName(e.target.value)}
-                        placeholder="New vendor name..."
-                        className="flex-1 px-3 py-2 text-xs rounded-xl bg-zinc-900 border border-zinc-700 text-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCreateHoldVendor}
-                        disabled={!newHoldVendorName.trim()}
-                        className="px-3.5 min-h-[38px] bg-sky-400 text-zinc-950 font-black text-xs rounded-xl cursor-pointer"
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAddingHoldVendor(false);
-                          setNewHoldVendorName('');
-                        }}
-                        className="px-2.5 min-h-[38px] text-zinc-400 hover:text-white text-xs cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Item Description */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Item(s) Held / Layaway Description <span className="text-sky-400">*</span>
-                  </label>
-                  <input
-                    ref={holdItemInputRef}
-                    type="text"
-                    value={holdItemDescription}
-                    onChange={(e) => setHoldItemDescription(e.target.value)}
-                    placeholder="e.g. PSA 10 Umbreon VMAX, Prismatic Booster Box..."
-                    className="w-full px-4 py-2.5 text-sm font-bold rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-sky-400"
-                  />
-                </div>
-
-                {/* Total Price, Initial Deposit & Method */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Total Price (£) <span className="text-sky-400">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={holdTotalPrice}
-                      onChange={(e) => setHoldTotalPrice(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3.5 py-2.5 text-base font-black tabular-nums rounded-xl border border-zinc-700 bg-zinc-950 text-white focus:outline-hidden focus:border-sky-400"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
-                        Initial Deposit (£)
-                      </label>
-                      {parseFloat(holdTotalPrice) > 0 && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setHoldInitialDeposit((parseFloat(holdTotalPrice) * 0.2).toFixed(2))
-                            }
-                            className="text-[10px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/50 cursor-pointer"
-                          >
-                            20%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setHoldInitialDeposit((parseFloat(holdTotalPrice) * 0.5).toFixed(2))
-                            }
-                            className="text-[10px] font-black px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/50 cursor-pointer"
-                          >
-                            50%
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={holdInitialDeposit}
-                      onChange={(e) => setHoldInitialDeposit(e.target.value)}
-                      placeholder="0.00 (Optional)"
-                      className="w-full px-3.5 py-2.5 text-base font-black tabular-nums rounded-xl border border-zinc-700 bg-zinc-950 text-white focus:outline-hidden focus:border-sky-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Due Date <span className="text-zinc-500 font-normal">(Opt.)</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={holdDueDate}
-                      onChange={(e) => setHoldDueDate(e.target.value)}
-                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-zinc-700 bg-zinc-950 text-white [color-scheme:dark]"
-                    />
-                  </div>
-                </div>
-
-                {parseFloat(holdInitialDeposit) > 0 && (
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                      Deposit Payment Method
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(
-                        [
-                          { id: 'cash', label: 'Cash' },
-                          { id: 'card', label: 'Card' },
-                          { id: 'traded_out', label: 'Trade Out' },
-                        ] as const
-                      ).map((m) => (
-                        <button
-                          key={`hold-dep-${m.id}`}
-                          type="button"
-                          onClick={() => setHoldDepositMethod(m.id)}
-                          className={`min-h-[40px] px-3 py-2 rounded-xl border-2 text-xs font-black cursor-pointer transition-all ${
-                            holdDepositMethod === m.id
-                              ? 'bg-sky-400 text-zinc-950 border-sky-200'
-                              : 'bg-zinc-950 text-zinc-300 border-zinc-700 hover:border-zinc-500'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                    Notes <span className="text-zinc-500 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={holdNotes}
-                    onChange={(e) => setHoldNotes(e.target.value)}
-                    placeholder="Binder location, shelf slot, pickup notes..."
-                    className="w-full px-4 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  id="btn-lockscreen-submit-hold"
-                  disabled={isSubmitting}
-                  className="w-full min-h-[48px] px-4 py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 via-cyan-400 to-teal-400 hover:from-sky-300 hover:to-teal-300 disabled:opacity-50 text-zinc-950 font-black text-sm sm:text-base shadow-xl shadow-sky-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <BookmarkCheck className="w-5 h-5 text-zinc-950 shrink-0" />
-                  <span>
-                    {isSubmitting
-                      ? 'Saving Hold...'
-                      : parseFloat(holdInitialDeposit) > 0
-                      ? `Save Hold & Take ${formatCurrency(parseFloat(holdInitialDeposit))} Deposit`
-                      : 'Reserve Item on Hold'}
-                  </span>
-                </button>
-              </form>
-            )}
-          </div>
-        )}
       </main>
 
       {/* Footer Info */}
@@ -3178,17 +2092,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         onClose={() => setIsPasscodeModalOpen(false)}
         title="Manager Sign In"
         subtitle="Enter authorization code to unlock the full app experience."
-      />
-
-      {/* Device Till Operator Selector (Required once on a new device) */}
-      <DeviceOperatorModal
-        isOpen={!hasOperator || isOperatorModalOpen}
-        requireSelection={!hasOperator}
-        theme="dark"
-        knownVendors={knownVendors}
-        currentOperator={operatorName}
-        onSelect={selectOperator}
-        onClose={() => setIsOperatorModalOpen(false)}
       />
     </div>
   );
