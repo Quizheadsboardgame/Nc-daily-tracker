@@ -355,3 +355,53 @@ export interface HeatmapData {
   hourTotals: { hour: number; label: string; revenue: number; count: number }[];
 }
 
+export type PresetColorKey = 'blue' | 'emerald' | 'violet' | 'amber' | 'rose' | 'cyan';
+
+export interface CounterPreset {
+  id: string;
+  label: string;
+  itemDescription: string;
+  price: number;
+  defaultVendor?: string;
+  categoryColor: PresetColorKey;
+  sortOrder?: number;
+  updatedAt?: number;
+}
+
+export interface DayEventInfo {
+  dateKey: string;
+  isEvent: boolean;
+  eventName: string;
+  location?: string;
+  tableCost?: number;
+  notes?: string;
+  updatedAt?: number;
+}
+
+export interface EventBucketStats {
+  daysCount: number;
+  totalRevenue: number;
+  salesCount: number;
+  avgDailyRevenue: number;
+  averageTicket: number;
+  totalTradesValue: number;
+  totalTableCost: number;
+  netAfterTableCost: number;
+}
+
+export interface EventDaySummaryItem {
+  dateKey: string;
+  eventName: string;
+  location?: string;
+  tableCost?: number;
+  revenue: number;
+  salesCount: number;
+  tradesValue: number;
+}
+
+export interface EventVsShopComparison {
+  eventStats: EventBucketStats;
+  shopStats: EventBucketStats;
+  recentEvents: EventDaySummaryItem[];
+}
+

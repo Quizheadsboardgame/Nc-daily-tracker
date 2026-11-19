@@ -40,6 +40,11 @@ import {
   HoldsOverview,
   HeatmapData,
   HeatmapCell,
+  CounterPreset,
+  PresetColorKey,
+  DayEventInfo,
+  EventVsShopComparison,
+  EventDaySummaryItem,
 } from '../types';
 import {
   playCheckoutSound,
@@ -87,6 +92,15 @@ const STORAGE_CASH_RECON_KEY = 'daily_sales_tracker_cash_reconciliation_v6';
 const STORAGE_STORE_CREDIT_CUSTOMERS_KEY = 'daily_sales_tracker_store_credit_customers_v6';
 const STORAGE_STORE_CREDIT_TX_KEY = 'daily_sales_tracker_store_credit_tx_v6';
 const STORAGE_HOLDS_KEY = 'daily_sales_tracker_holds_v6';
+const STORAGE_DAY_EVENTS_KEY = 'daily_sales_tracker_day_events_v6';
+const STORAGE_COUNTER_PRESETS_KEY = 'daily_sales_tracker_counter_presets_v6';
+
+const DEFAULT_COUNTER_PRESETS: CounterPreset[] = [
+  { id: 'preset_booster', label: 'Booster Pack', itemDescription: 'Booster Pack', price: 4.5, categoryColor: 'blue', sortOrder: 1 },
+  { id: 'preset_sleeves', label: 'Sleeves / Toploaders', itemDescription: 'Card Sleeves & Toploaders', price: 3.0, categoryColor: 'emerald', sortOrder: 2 },
+  { id: 'preset_binder', label: 'Binder Singles', itemDescription: 'Binder Singles', price: 5.0, categoryColor: 'violet', sortOrder: 3 },
+  { id: 'preset_etb', label: 'ETB / Sealed Box', itemDescription: 'Elite Trainer Box', price: 49.99, categoryColor: 'amber', sortOrder: 4 },
+];
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
@@ -238,6 +252,8 @@ class CloudSalesDatabase {
   private storeCreditCustomersCache: Map<string, StoreCreditCustomer> = new Map();
   private storeCreditTxCache: Map<string, StoreCreditTransaction> = new Map();
   private holdsCache: Map<string, HoldRecord> = new Map();
+  private dayEventsCache: Map<string, DayEventInfo> = new Map();
+  private counterPresetsCache: Map<string, CounterPreset> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private removedVendors: Set<string> = new Set(['kerion']);
@@ -394,6 +410,32 @@ class CloudSalesDatabase {
           }
         }
       }
+
+      const storedDayEvents = localStorage.getItem(STORAGE_DAY_EVENTS_KEY);
+      if (storedDayEvents) {
+        const parsedEvents = JSON.parse(storedDayEvents);
+        if (Array.isArray(parsedEvents)) {
+          for (const ev of parsedEvents) {
+            if (ev && ev.dateKey && ev.eventName) {
+              this.dayEventsCache.set(ev.dateKey, ev);
+            }
+          }
+        }
+      }
+
+      const storedPresets = localStorage.getItem(STORAGE_COUNTER_PRESETS_KEY);
+      if (storedPresets) {
+        const parsedPresets = JSON.parse(storedPresets);
+        if (Array.isArray(parsedPresets)) {
+          for (const preset of parsedPresets) {
+            if (preset && preset.id) {
+              this.counterPresetsCache.set(preset.id, preset);
+            }
+          }
+        }
+      } else {
+        DEFAULT_COUNTER_PRESETS.forEach((p) => this.counterPresetsCache.set(p.id, { ...p }));
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -423,6 +465,14 @@ class CloudSalesDatabase {
       localStorage.setItem(
         STORAGE_HOLDS_KEY,
         JSON.stringify(Array.from(this.holdsCache.values()))
+      );
+      localStorage.setItem(
+        STORAGE_DAY_EVENTS_KEY,
+        JSON.stringify(Array.from(this.dayEventsCache.values()))
+      );
+      localStorage.setItem(
+        STORAGE_COUNTER_PRESETS_KEY,
+        JSON.stringify(Array.from(this.counterPresetsCache.values()))
       );
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
@@ -3019,6 +3069,17 @@ class CloudSalesDatabase {
     return card;
   }
 
+  public async addOnlineCardsBatch(
+    items: { vendorName: string; cardName: string; price: number; notes?: string }[]
+  ): Promise<OnlineCard[]> {
+    const added: OnlineCard[] = [];
+    for (const item of items) {
+      const card = await this.addOnlineCard(item);
+      added.push(card);
+    }
+    return added;
+  }
+
   public async updateOnlineCard(
     id: string,
     updates: Partial<Omit<OnlineCard, 'id' | 'barcode'>>
@@ -4191,6 +4252,246 @@ class CloudSalesDatabase {
       dayTotals,
       hourTotals,
     };
+  }
+
+  // --- Card Show / Day Events & Comparisons ---
+
+  public getDayEventsMap(): Map<string, DayEventInfo> {
+    return new Map(this.dayEventsCache);
+  }
+
+  public getDayEvent(dateKey: string): DayEventInfo | null {
+    return this.dayEventsCache.get(dateKey) || null;
+  }
+
+  public async saveDayEvent(input: DayEventInfo): Promise<DayEventInfo> {
+    const record: DayEventInfo = {
+      dateKey: input.dateKey,
+      isEvent: true,
+      eventName: input.eventName.trim(),
+      location: input.location?.trim() || undefined,
+      tableCost: input.tableCost !== undefined && !isNaN(Number(input.tableCost)) ? Math.round(Number(input.tableCost) * 100) / 100 : undefined,
+      notes: input.notes?.trim() || undefined,
+      updatedAt: Date.now(),
+    };
+
+    this.dayEventsCache.set(record.dateKey, record);
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'day_events', record.dateKey), {
+        dateKey: record.dateKey,
+        isEvent: true,
+        eventName: record.eventName,
+        location: record.location || null,
+        tableCost: record.tableCost ?? null,
+        notes: record.notes || null,
+        updatedAt: record.updatedAt,
+      });
+    } catch (e) {
+      console.warn('Day event saved locally; Firestore sync pending:', e);
+    }
+
+    return record;
+  }
+
+  public async clearDayEvent(dateKey: string): Promise<void> {
+    this.dayEventsCache.delete(dateKey);
+    this.notify();
+
+    try {
+      await deleteDoc(doc(db, 'day_events', dateKey));
+    } catch (e) {
+      console.warn('Day event cleared locally; Firestore sync pending:', e);
+    }
+  }
+
+  public getEventVsShopComparison(startDateKey?: string, endDateKey?: string): EventVsShopComparison {
+    const salesByDate = new Map<string, { revenue: number; count: number }>();
+    const tradesByDate = new Map<string, number>();
+
+    this.salesCache.forEach((sale) => {
+      if (startDateKey && sale.dateKey < startDateKey) return;
+      if (endDateKey && sale.dateKey > endDateKey) return;
+      const prev = salesByDate.get(sale.dateKey) || { revenue: 0, count: 0 };
+      prev.revenue += sale.amount;
+      prev.count += 1;
+      salesByDate.set(sale.dateKey, prev);
+    });
+
+    this.tradesCache.forEach((trade) => {
+      if (startDateKey && trade.dateKey < startDateKey) return;
+      if (endDateKey && trade.dateKey > endDateKey) return;
+      tradesByDate.set(trade.dateKey, (tradesByDate.get(trade.dateKey) || 0) + trade.tradeValue);
+    });
+
+    const eventDateKeys = new Set<string>();
+    this.dayEventsCache.forEach((ev, key) => {
+      if (!ev.isEvent) return;
+      if (startDateKey && key < startDateKey) return;
+      if (endDateKey && key > endDateKey) return;
+      eventDateKeys.add(key);
+    });
+
+    let eventRevenue = 0;
+    let eventSalesCount = 0;
+    let eventTradesValue = 0;
+    let eventTableCost = 0;
+    const recentEvents: EventDaySummaryItem[] = [];
+
+    eventDateKeys.forEach((dateKey) => {
+      const ev = this.dayEventsCache.get(dateKey)!;
+      const daySales = salesByDate.get(dateKey) || { revenue: 0, count: 0 };
+      const dayTrades = tradesByDate.get(dateKey) || 0;
+      const cost = ev.tableCost || 0;
+
+      eventRevenue += daySales.revenue;
+      eventSalesCount += daySales.count;
+      eventTradesValue += dayTrades;
+      eventTableCost += cost;
+
+      recentEvents.push({
+        dateKey,
+        eventName: ev.eventName,
+        location: ev.location,
+        tableCost: ev.tableCost,
+        revenue: Math.round(daySales.revenue * 100) / 100,
+        salesCount: daySales.count,
+        tradesValue: Math.round(dayTrades * 100) / 100,
+      });
+    });
+
+    recentEvents.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+    const shopDateKeys = new Set<string>();
+    salesByDate.forEach((_val, dateKey) => {
+      if (!eventDateKeys.has(dateKey)) shopDateKeys.add(dateKey);
+    });
+    tradesByDate.forEach((_val, dateKey) => {
+      if (!eventDateKeys.has(dateKey)) shopDateKeys.add(dateKey);
+    });
+
+    let shopRevenue = 0;
+    let shopSalesCount = 0;
+    let shopTradesValue = 0;
+
+    shopDateKeys.forEach((dateKey) => {
+      const daySales = salesByDate.get(dateKey) || { revenue: 0, count: 0 };
+      const dayTrades = tradesByDate.get(dateKey) || 0;
+      shopRevenue += daySales.revenue;
+      shopSalesCount += daySales.count;
+      shopTradesValue += dayTrades;
+    });
+
+    const eventDays = eventDateKeys.size;
+    const shopDays = shopDateKeys.size;
+
+    return {
+      eventStats: {
+        daysCount: eventDays,
+        totalRevenue: Math.round(eventRevenue * 100) / 100,
+        salesCount: eventSalesCount,
+        avgDailyRevenue: eventDays > 0 ? Math.round((eventRevenue / eventDays) * 100) / 100 : 0,
+        averageTicket: eventSalesCount > 0 ? Math.round((eventRevenue / eventSalesCount) * 100) / 100 : 0,
+        totalTradesValue: Math.round(eventTradesValue * 100) / 100,
+        totalTableCost: Math.round(eventTableCost * 100) / 100,
+        netAfterTableCost: Math.round((eventRevenue - eventTableCost) * 100) / 100,
+      },
+      shopStats: {
+        daysCount: shopDays,
+        totalRevenue: Math.round(shopRevenue * 100) / 100,
+        salesCount: shopSalesCount,
+        avgDailyRevenue: shopDays > 0 ? Math.round((shopRevenue / shopDays) * 100) / 100 : 0,
+        averageTicket: shopSalesCount > 0 ? Math.round((shopRevenue / shopSalesCount) * 100) / 100 : 0,
+        totalTradesValue: Math.round(shopTradesValue * 100) / 100,
+        totalTableCost: 0,
+        netAfterTableCost: Math.round(shopRevenue * 100) / 100,
+      },
+      recentEvents,
+    };
+  }
+
+  // --- Counter Quick Presets ---
+
+  public getCounterPresets(): CounterPreset[] {
+    return Array.from(this.counterPresetsCache.values()).sort(
+      (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || a.label.localeCompare(b.label)
+    );
+  }
+
+  public async saveCounterPreset(input: {
+    id?: string;
+    label: string;
+    itemDescription: string;
+    price: number;
+    defaultVendor?: string;
+    categoryColor: PresetColorKey;
+  }): Promise<CounterPreset> {
+    const id = input.id || `preset_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+    const existing = this.counterPresetsCache.get(id);
+    const preset: CounterPreset = {
+      id,
+      label: input.label.trim(),
+      itemDescription: input.itemDescription.trim() || input.label.trim(),
+      price: Math.round(Number(input.price) * 100) / 100,
+      defaultVendor: input.defaultVendor?.trim() || undefined,
+      categoryColor: input.categoryColor,
+      sortOrder: existing?.sortOrder ?? this.counterPresetsCache.size + 1,
+      updatedAt: Date.now(),
+    };
+
+    this.counterPresetsCache.set(id, preset);
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'counter_presets', id), {
+        id: preset.id,
+        label: preset.label,
+        itemDescription: preset.itemDescription,
+        price: preset.price,
+        defaultVendor: preset.defaultVendor || null,
+        categoryColor: preset.categoryColor,
+        sortOrder: preset.sortOrder,
+        updatedAt: preset.updatedAt,
+      });
+    } catch (e) {
+      console.warn('Counter preset saved locally; Firestore sync pending:', e);
+    }
+
+    return preset;
+  }
+
+  public async deleteCounterPreset(id: string): Promise<void> {
+    this.counterPresetsCache.delete(id);
+    this.notify();
+
+    try {
+      await deleteDoc(doc(db, 'counter_presets', id));
+    } catch (e) {
+      console.warn('Counter preset deleted locally; Firestore sync pending:', e);
+    }
+  }
+
+  public async resetDefaultCounterPresets(): Promise<void> {
+    this.counterPresetsCache.clear();
+    for (const preset of DEFAULT_COUNTER_PRESETS) {
+      this.counterPresetsCache.set(preset.id, { ...preset, updatedAt: Date.now() });
+    }
+    this.notify();
+
+    try {
+      await Promise.allSettled(
+        DEFAULT_COUNTER_PRESETS.map((preset) =>
+          setDoc(doc(db, 'counter_presets', preset.id), {
+            ...preset,
+            defaultVendor: preset.defaultVendor || null,
+            updatedAt: Date.now(),
+          })
+        )
+      );
+    } catch (e) {
+      console.warn('Default counter presets saved locally; Firestore sync pending:', e);
+    }
   }
 
   public getSyncStatus(): {

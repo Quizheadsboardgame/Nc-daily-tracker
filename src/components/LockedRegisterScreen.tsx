@@ -11,7 +11,6 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   AlertCircle,
-  Cloud,
   Calendar,
   ChevronDown,
   X,
@@ -575,28 +574,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
       {/* Main Terminal Body */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
-        {/* Security & Terminal Mode Banner */}
-        <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-700/80 text-zinc-200 shadow-md flex items-start sm:items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/25 shrink-0">
-              <Lock className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-black text-white">
-                Locked Register Mode Active
-              </h2>
-              <p className="text-xs text-zinc-300 mt-0.5">
-                Record counter sales and card trade-ins here. Historical totals, ledgers, and reports remain hidden until a manager logs in.
-              </p>
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/25 text-emerald-200 border border-emerald-400/70 shadow-sm shrink-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <Cloud className="w-3.5 h-3.5 text-emerald-300" />
-            <span>Cloud Synced</span>
-          </div>
-        </div>
-
         {/* Terminal Mode Switcher: Record Sale vs Trade In */}
         <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-inner">
           <button
