@@ -27,6 +27,8 @@ import {
   Banknote,
   CreditCard,
   ArrowLeftRight,
+  ListPlus,
+  ClipboardPaste,
 } from 'lucide-react';
 import { OnlineCard, OnlineCardsSummary, SaleRecord, PaymentMethod } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
@@ -34,6 +36,8 @@ import { VendorDropdown } from './VendorDropdown';
 import { downloadSingleLabelPdf, downloadBatchLabelsPdf, generateBarcodeDataUrl } from '../utils/labelPdf';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { playCheckoutSound, playSaleBeep } from '../utils/sound';
+import { useDeviceVendor } from '../utils/deviceVendor';
+import { DeviceVendorBar } from './DeviceVendorBar';
 
 interface OnlineCardsTabProps {
   onNavigateToLedger?: () => void;
@@ -66,7 +70,8 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'price-high' | 'price-low' | 'name'>('newest');
 
-  // Form State
+  // Form Mode & Single Card Form State
+  const [addMode, setAddMode] = useState<'single' | 'bulk'>('single');
   const [formVendor, setFormVendor] = useState('');
   const [formCardName, setFormCardName] = useState('');
   const [formPrice, setFormPrice] = useState('');
@@ -75,6 +80,13 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [justAddedCard, setJustAddedCard] = useState<OnlineCard | null>(null);
+
+  // Bulk Import State
+  const [bulkDefaultVendor, setBulkDefaultVendor] = useState('');
+  const [bulkRawText, setBulkRawText] = useState('');
+  const [bulkAutoDownloadPdf, setBulkAutoDownloadPdf] = useState(true);
+  const [isImportingBulk, setIsImportingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState('');
 
   // Barcode Scanner State
   const [scanInput, setScanInput] = useState('');
@@ -123,6 +135,115 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
       ? propKnownVendors
       : cloudDb.getKnownVendors();
   }, [propKnownVendors]);
+
+  const {
+    rememberedVendor,
+    pinVendor,
+    clearPinnedVendor,
+  } = useDeviceVendor(allVendors);
+
+  // Pre-fill vendor fields from remembered device vendor
+  useEffect(() => {
+    if (rememberedVendor) {
+      setFormVendor((prev) => prev || rememberedVendor);
+      setBulkDefaultVendor((prev) => prev || rememberedVendor);
+    }
+  }, [rememberedVendor]);
+
+  // Parse bulk import lines live:
+  // Supports:
+  //   Card Name, 45.00 [, Notes]
+  //   Card Name | 45.00 [| Notes]
+  //   Vendor | Card Name | 45.00 [| Notes]
+  //   Card Name - £45.00
+  const parsedBulkResult = useMemo(() => {
+    const rawLines = bulkRawText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    const validItems: { vendorName: string; cardName: string; price: number; notes?: string }[] = [];
+    const invalidLines: { lineNumber: number; text: string; reason: string }[] = [];
+
+    const parsePriceToken = (token: string): number => {
+      const cleaned = token.replace(/[£$€,\s]/g, '');
+      if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return NaN;
+      return parseFloat(cleaned);
+    };
+
+    rawLines.forEach((line, idx) => {
+      const lineNum = idx + 1;
+      let parts: string[] = [];
+      if (line.includes('|')) {
+        parts = line.split('|').map((p) => p.trim());
+      } else if (line.includes('\t')) {
+        parts = line.split('\t').map((p) => p.trim());
+      } else if (line.includes(',')) {
+        parts = line.split(',').map((p) => p.trim());
+      } else {
+        const dashMatch = line.match(/^(.+?)\s+[-–]\s*£?\s*(\d+(?:\.\d{1,2})?)(?:\s+[-–]\s*(.+))?$/);
+        if (dashMatch) {
+          parts = [dashMatch[1].trim(), dashMatch[2].trim()];
+          if (dashMatch[3]?.trim()) parts.push(dashMatch[3].trim());
+        }
+      }
+
+      if (parts.length < 2) {
+        invalidLines.push({
+          lineNumber: lineNum,
+          text: line,
+          reason: 'Expected "Card Name, Price [, Notes]"',
+        });
+        return;
+      }
+
+      // Check if first token is a known vendor (4-part or 3-part with vendor at index 0 and price at index 2)
+      const firstIsVendor =
+        parts.length >= 3 &&
+        allVendors.some((v) => v.toLowerCase() === parts[0].toLowerCase()) &&
+        !isNaN(parsePriceToken(parts[2]));
+
+      let vendorName = bulkDefaultVendor.trim();
+      let cardName = '';
+      let priceNum = NaN;
+      let notes: string | undefined;
+
+      if (firstIsVendor) {
+        const matchedVendor = allVendors.find((v) => v.toLowerCase() === parts[0].toLowerCase()) || parts[0];
+        vendorName = matchedVendor;
+        cardName = parts[1];
+        priceNum = parsePriceToken(parts[2]);
+        notes = parts.slice(3).filter(Boolean).join(', ') || undefined;
+      } else {
+        cardName = parts[0];
+        priceNum = parsePriceToken(parts[1]);
+        notes = parts.slice(2).filter(Boolean).join(', ') || undefined;
+      }
+
+      if (!vendorName) {
+        invalidLines.push({
+          lineNumber: lineNum,
+          text: line,
+          reason: 'Select a Default Vendor above or include Vendor | Card | Price',
+        });
+        return;
+      }
+
+      if (!cardName) {
+        invalidLines.push({ lineNumber: lineNum, text: line, reason: 'Missing card name' });
+        return;
+      }
+
+      if (isNaN(priceNum) || priceNum <= 0) {
+        invalidLines.push({ lineNumber: lineNum, text: line, reason: 'Invalid £ price' });
+        return;
+      }
+
+      validItems.push({ vendorName, cardName, price: priceNum, notes });
+    });
+
+    return { validItems, invalidLines, totalLines: rawLines.length };
+  }, [bulkRawText, bulkDefaultVendor, allVendors]);
 
   // Sync data from database
   const refreshData = () => {
@@ -363,6 +484,38 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
       setFormError(err.message || 'Could not save online card');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Bulk import multiple online cards at once
+  const handleBulkImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkError('');
+
+    if (parsedBulkResult.validItems.length === 0) {
+      setBulkError('Paste at least one valid card line (e.g. "Charizard ex 199/165, 85.00, Near Mint").');
+      return;
+    }
+
+    setIsImportingBulk(true);
+    try {
+      const added = await cloudDb.addOnlineCardsBatch(parsedBulkResult.validItems);
+      setBulkRawText('');
+
+      if (bulkAutoDownloadPdf && added.length > 0) {
+        downloadBatchLabelsPdf(added, (name) => cloudDb.getVendorColor(name));
+      }
+
+      setScanMessage({
+        type: 'success',
+        text: `Imported ${added.length} online ${added.length === 1 ? 'card' : 'cards'} with unique barcodes${
+          bulkAutoDownloadPdf ? ' and generated combined A4 PDF label sheet' : ''
+        }!`,
+      });
+    } catch (err: any) {
+      setBulkError(err.message || 'Could not bulk import cards');
+    } finally {
+      setIsImportingBulk(false);
     }
   };
 
@@ -1035,133 +1188,357 @@ export const OnlineCardsTab: React.FC<OnlineCardsTabProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* ADD NEW ONLINE CARD FORM */}
+      {/* ADD NEW ONLINE CARD FORM (SINGLE & BULK IMPORT) */}
       {/* ========================================================================= */}
       <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-xs relative" id="card-add-online-form">
         <div className="h-1.5 bg-gradient-to-r from-violet-600 via-indigo-500 to-purple-600 rounded-t-2xl" />
-        <form onSubmit={handleAddCard} className="p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="p-4 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-violet-100 text-violet-800">
-                <Plus className="w-4 h-4 text-violet-700" />
+              <div className="p-2 rounded-xl bg-violet-100 text-violet-800 shrink-0">
+                {addMode === 'single' ? (
+                  <Plus className="w-4 h-4 text-violet-700" />
+                ) : (
+                  <ListPlus className="w-4 h-4 text-violet-700" />
+                )}
               </div>
-              <h3 className="text-sm sm:text-base font-black text-zinc-950">
-                Add Online Card & Generate PDF Barcode Label
-              </h3>
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-zinc-950">
+                  {addMode === 'single'
+                    ? 'Add Online Card & Generate PDF Barcode Label'
+                    : 'Bulk Import Online Cards & A4 Label Sheet'}
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  {addMode === 'single'
+                    ? 'Select vendor, enter card name & price'
+                    : 'Paste a list of cards (one per line) to assign barcodes in 1 click'}
+                </p>
+              </div>
             </div>
-            <span className="text-xs text-zinc-500">
-              Select vendor, enter card name & price
-            </span>
+
+            {/* Single vs Bulk Import Switcher */}
+            <div className="bg-zinc-100 p-1 rounded-xl grid grid-cols-2 sm:inline-flex items-center border border-zinc-200/80 shrink-0">
+              <button
+                type="button"
+                id="btn-mode-single-online-card"
+                onClick={() => setAddMode('single')}
+                className={`px-3 py-1.5 min-h-[36px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all whitespace-nowrap ${
+                  addMode === 'single'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                <span>Single Card</span>
+              </button>
+              <button
+                type="button"
+                id="btn-mode-bulk-online-cards"
+                onClick={() => setAddMode('bulk')}
+                className={`px-3 py-1.5 min-h-[36px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all whitespace-nowrap ${
+                  addMode === 'bulk'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                <ClipboardPaste className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                <span>Bulk Import</span>
+              </button>
+            </div>
           </div>
 
-          {formError && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{formError}</span>
-            </div>
-          )}
+          {addMode === 'single' ? (
+            <form onSubmit={handleAddCard} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
-            {/* Vendor Selector with dots */}
-            <div className="sm:col-span-4">
-              <label className="block text-xs font-bold text-zinc-700 mb-1">
-                Vendor <span className="text-rose-500">*</span>
-              </label>
-              <VendorDropdown
-                id="select-online-vendor"
-                value={formVendor}
-                onChange={setFormVendor}
-                vendors={allVendors}
-                placeholder="Select Vendor..."
-              />
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                {/* Vendor Selector with dots */}
+                <div className="sm:col-span-4 space-y-2">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Vendor <span className="text-rose-500">*</span>
+                    </label>
+                    <VendorDropdown
+                      id="select-online-vendor"
+                      value={formVendor}
+                      onChange={setFormVendor}
+                      vendors={allVendors}
+                      placeholder="Select Vendor..."
+                    />
+                  </div>
+                  <DeviceVendorBar
+                    theme="light"
+                    compact
+                    selectedVendor={formVendor}
+                    rememberedVendor={rememberedVendor}
+                    onPinVendor={pinVendor}
+                    onClearPinnedVendor={clearPinnedVendor}
+                    onSelectVendor={setFormVendor}
+                  />
+                </div>
 
-            {/* Card Name */}
-            <div className="sm:col-span-5">
-              <label className="block text-xs font-bold text-zinc-700 mb-1">
-                Card Name / Description <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="input-online-card-name"
-                value={formCardName}
-                onChange={(e) => setFormCardName(e.target.value)}
-                placeholder="e.g. Charizard ex 199/165 SIR / Gengar VMAX Alt Art"
-                className="w-full px-3.5 py-2 text-xs font-semibold rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900"
-                required
-              />
-            </div>
+                {/* Card Name */}
+                <div className="sm:col-span-5">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Card Name / Description <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="input-online-card-name"
+                    value={formCardName}
+                    onChange={(e) => setFormCardName(e.target.value)}
+                    placeholder="e.g. Charizard ex 199/165 SIR / Gengar VMAX Alt Art"
+                    className="w-full px-3.5 py-2 text-xs font-semibold rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900"
+                    required
+                  />
+                </div>
 
-            {/* Price in GBP */}
-            <div className="sm:col-span-3">
-              <label className="block text-xs font-bold text-zinc-700 mb-1">
-                Price (£) <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-xs font-bold text-zinc-400">£</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  id="input-online-price"
-                  value={formPrice}
-                  onChange={(e) => setFormPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full pl-7 pr-3 py-2 text-xs font-black rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900 tabular-nums"
-                  required
-                />
+                {/* Price in GBP */}
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Price (£) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-zinc-400">£</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      id="input-online-price"
+                      value={formPrice}
+                      onChange={(e) => setFormPrice(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-7 pr-3 py-2 text-xs font-black rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900 tabular-nums"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Notes / Condition (Optional) */}
+                <div className="sm:col-span-9">
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Notes / Condition / SKU (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="input-online-notes"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    placeholder="e.g. Near Mint, PSA 9, Sleeve Box #3, English 151"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900"
+                  />
+                </div>
+
+                {/* Checkbox: Auto-download PDF Label */}
+                <div className="sm:col-span-3 flex items-center pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      id="check-auto-download-pdf"
+                      checked={autoDownloadPdf}
+                      onChange={(e) => setAutoDownloadPdf(e.target.checked)}
+                      className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-zinc-300"
+                    />
+                    <span className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                      <Printer className="w-3.5 h-3.5 text-violet-600" />
+                      Auto-download PDF label
+                    </span>
+                  </label>
+                </div>
               </div>
-            </div>
 
-            {/* Notes / Condition (Optional) */}
-            <div className="sm:col-span-9">
-              <label className="block text-xs font-bold text-zinc-700 mb-1">
-                Notes / Condition / SKU (Optional)
-              </label>
-              <input
-                type="text"
-                id="input-online-notes"
-                value={formNotes}
-                onChange={(e) => setFormNotes(e.target.value)}
-                placeholder="e.g. Near Mint, PSA 9, Sleeve Box #3, English 151"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-zinc-300 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 text-zinc-900"
-              />
-            </div>
-
-            {/* Checkbox: Auto-download PDF Label */}
-            <div className="sm:col-span-3 flex items-center pt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  id="check-auto-download-pdf"
-                  checked={autoDownloadPdf}
-                  onChange={(e) => setAutoDownloadPdf(e.target.checked)}
-                  className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-zinc-300"
-                />
-                <span className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                  <Printer className="w-3.5 h-3.5 text-violet-600" />
-                  Auto-download PDF label
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-zinc-100 gap-2.5">
+                <span className="text-xs text-zinc-500 font-medium">
+                  A unique Code 128 barcode will be assigned automatically.
                 </span>
-              </label>
-            </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-zinc-100 gap-2.5">
-            <span className="text-xs text-zinc-500 font-medium">
-              A unique Code 128 barcode will be assigned automatically.
-            </span>
+                <button
+                  type="submit"
+                  id="btn-add-online-card-submit"
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto min-h-[44px] justify-center px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 shrink-0" />
+                  <span>{isSubmitting ? 'Saving Card...' : 'Add Online Card & Generate Barcode'}</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleBulkImport} className="space-y-4">
+              {bulkError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{bulkError}</span>
+                </div>
+              )}
 
-            <button
-              type="submit"
-              id="btn-add-online-card-submit"
-              disabled={isSubmitting}
-              className="w-full sm:w-auto min-h-[44px] justify-center px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span>{isSubmitting ? 'Saving Card...' : 'Add Online Card & Generate Barcode'}</span>
-            </button>
-          </div>
-        </form>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-5 space-y-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Default Vendor (applied when line omits vendor)
+                    </label>
+                    <VendorDropdown
+                      id="select-bulk-online-vendor"
+                      value={bulkDefaultVendor}
+                      onChange={setBulkDefaultVendor}
+                      vendors={allVendors}
+                      placeholder="Select Default Vendor..."
+                    />
+                  </div>
+                  <DeviceVendorBar
+                    theme="light"
+                    compact
+                    selectedVendor={bulkDefaultVendor}
+                    rememberedVendor={rememberedVendor}
+                    onPinVendor={pinVendor}
+                    onClearPinnedVendor={clearPinnedVendor}
+                    onSelectVendor={setBulkDefaultVendor}
+                  />
+
+                  <div className="rounded-xl bg-violet-50/70 border border-violet-200 p-3 space-y-1.5 text-[11px] text-violet-950">
+                    <span className="font-black uppercase tracking-wider text-violet-800 block">
+                      Supported Line Formats
+                    </span>
+                    <p className="font-mono text-[10px] bg-white/80 px-2 py-1 rounded border border-violet-200/80">
+                      Charizard ex 199/165, 85.00, NM
+                    </p>
+                    <p className="font-mono text-[10px] bg-white/80 px-2 py-1 rounded border border-violet-200/80">
+                      Gengar VMAX | 120 | PSA 9
+                    </p>
+                    <p className="font-mono text-[10px] bg-white/80 px-2 py-1 rounded border border-violet-200/80">
+                      Vendor | Pikachu Promo | 18.50
+                    </p>
+                  </div>
+                </div>
+
+                <div className="md:col-span-7 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="textarea-bulk-online-cards" className="block text-xs font-bold text-zinc-700">
+                      Paste Cards List (1 card per line)
+                    </label>
+                    {bulkRawText.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setBulkRawText('')}
+                        className="text-[11px] font-bold text-zinc-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        Clear Text
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    id="textarea-bulk-online-cards"
+                    rows={6}
+                    value={bulkRawText}
+                    onChange={(e) => {
+                      setBulkRawText(e.target.value);
+                      if (bulkError) setBulkError('');
+                    }}
+                    placeholder={`Charizard ex 199/165, 85.00, Near Mint\nUmbreon VMAX Alt Art, 650.00, PSA 10\nPikachu Grey Felt Hat, 95.00`}
+                    className="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-zinc-300 bg-zinc-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600 text-zinc-900"
+                  />
+                </div>
+              </div>
+
+              {/* Live Parsed Preview */}
+              {parsedBulkResult.totalLines > 0 && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-emerald-700">
+                        {parsedBulkResult.validItems.length} ready to import
+                      </span>
+                      {parsedBulkResult.invalidLines.length > 0 && (
+                        <span className="font-bold text-rose-600">
+                          • {parsedBulkResult.invalidLines.length} line(s) need fixing
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-bold text-zinc-700 tabular-nums">
+                      Total value:{' '}
+                      {formatCurrency(
+                        parsedBulkResult.validItems.reduce((sum, i) => sum + i.price, 0)
+                      )}
+                    </span>
+                  </div>
+
+                  {parsedBulkResult.invalidLines.length > 0 && (
+                    <div className="rounded-lg bg-rose-50 border border-rose-200 p-2 space-y-1 text-[11px] text-rose-800">
+                      {parsedBulkResult.invalidLines.slice(0, 4).map((bad) => (
+                        <div key={`bad-${bad.lineNumber}`}>
+                          Line {bad.lineNumber}: <span className="font-mono">{bad.text}</span> — <strong>{bad.reason}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {parsedBulkResult.validItems.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto divide-y divide-zinc-200/70 bg-white rounded-lg border border-zinc-200">
+                      {parsedBulkResult.validItems.map((item, idx) => (
+                        <div key={`preview-${idx}`} className="px-3 py-1.5 flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cloudDb.getVendorColor(item.vendorName) }}
+                            />
+                            <span className="font-bold text-zinc-700 shrink-0">{item.vendorName}</span>
+                            <span className="font-semibold text-zinc-950 truncate">{item.cardName}</span>
+                            {item.notes && (
+                              <span className="text-[11px] text-zinc-500 italic truncate hidden sm:inline">
+                                ({item.notes})
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-black text-emerald-700 tabular-nums shrink-0">
+                            {formatCurrency(item.price)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-zinc-100 gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    id="check-bulk-auto-download-pdf"
+                    checked={bulkAutoDownloadPdf}
+                    onChange={(e) => setBulkAutoDownloadPdf(e.target.checked)}
+                    className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-zinc-300"
+                  />
+                  <span className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                    <FileDown className="w-3.5 h-3.5 text-violet-600" />
+                    Auto-download combined A4 PDF label sheet
+                  </span>
+                </label>
+
+                <button
+                  type="submit"
+                  id="btn-bulk-import-online-submit"
+                  disabled={isImportingBulk || parsedBulkResult.validItems.length === 0}
+                  className="w-full sm:w-auto min-h-[44px] justify-center px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-45 disabled:cursor-not-allowed text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <ListPlus className="w-4 h-4 shrink-0" />
+                  <span>
+                    {isImportingBulk
+                      ? 'Importing Cards...'
+                      : `Import ${parsedBulkResult.validItems.length} ${
+                          parsedBulkResult.validItems.length === 1 ? 'Card' : 'Cards'
+                        } & Generate Barcodes`}
+                  </span>
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
 
       {/* ========================================================================= */}

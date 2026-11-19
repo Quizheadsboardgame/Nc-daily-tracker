@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Volume2, VolumeX, Search, Trophy, Vault, Ticket, ChevronDown, Check } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Volume2, VolumeX, Search, Trophy, Vault, Ticket, ChevronDown, Check, BookmarkCheck, Flame, UserCheck } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth, useCashDrawerAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
 import { useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
-export type AppTab = 'ledger' | 'trades' | 'cash-drawer' | 'store-credit' | 'search' | 'leaderboard' | 'online-cards' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'trades' | 'holds' | 'cash-drawer' | 'store-credit' | 'search' | 'leaderboard' | 'heatmap' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -18,6 +18,8 @@ interface HeaderProps {
   onTabChange?: (tab: AppTab) => void;
   onOpenManageVendors?: () => void;
   onOpenManageSalesmen?: () => void;
+  operatorName?: string;
+  onOpenOperatorModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,6 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewSale,
   activeTab = 'ledger',
   onTabChange,
+  operatorName,
+  onOpenOperatorModal,
 }) => {
   const { isUnlocked, lock } = useTotalSalesAuth();
   const { isUnlocked: isCashDrawerUnlocked } = useCashDrawerAuth();
@@ -86,6 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const dayTradesCount = cloudDb.getTradesForDay(currentDateKey).length;
+  const activeHoldsCount = cloudDb.getHoldsOverview().activeCount;
   const activeCreditCustomers = cloudDb.getStoreCreditOverview().activeCustomersCount;
   const availableOnlineCards = cloudDb.getOnlineCardsSummary().availableCount;
 
@@ -110,6 +115,13 @@ export const Header: React.FC<HeaderProps> = ({
       badgeClass: 'bg-amber-400/20 text-amber-300 border border-amber-500/40',
     },
     {
+      id: 'holds',
+      label: 'Holds & Layaway',
+      icon: <BookmarkCheck className="w-4 h-4 text-sky-400 shrink-0" />,
+      badge: activeHoldsCount > 0 ? activeHoldsCount : undefined,
+      badgeClass: 'bg-sky-400/20 text-sky-300 border border-sky-500/40',
+    },
+    {
       id: 'cash-drawer',
       label: 'Cash Drawer',
       icon: <Vault className="w-4 h-4 text-emerald-400 shrink-0" />,
@@ -131,6 +143,13 @@ export const Header: React.FC<HeaderProps> = ({
       id: 'leaderboard',
       label: 'Leaderboard',
       icon: <Trophy className="w-4 h-4 text-amber-400 shrink-0" />,
+    },
+    {
+      id: 'heatmap',
+      label: 'Peak Hours',
+      icon: <Flame className="w-4 h-4 text-orange-400 shrink-0" />,
+      badge: 'Owner',
+      badgeClass: 'bg-orange-400/20 text-orange-300 border border-orange-500/40',
     },
     {
       id: 'online-cards',
@@ -372,6 +391,19 @@ export const Header: React.FC<HeaderProps> = ({
                   title="Test Mario Coin sound effect on this device"
                 >
                   <span>Test 🪙</span>
+                </button>
+              )}
+
+              {onOpenOperatorModal && (
+                <button
+                  type="button"
+                  id="btn-header-operator-switch"
+                  onClick={onOpenOperatorModal}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-xs font-bold text-sky-200 bg-zinc-900 border border-sky-500/40 hover:border-sky-400 rounded-xl hover:bg-zinc-800 transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                  title="Switch counter operator on this device (who rang up the sale)"
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Till: {operatorName || 'Set User'}</span>
                 </button>
               )}
 

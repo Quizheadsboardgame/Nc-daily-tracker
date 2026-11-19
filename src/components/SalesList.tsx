@@ -10,6 +10,8 @@ import {
   Clock,
   SlidersHorizontal,
   Ticket,
+  UserCheck,
+  Tag,
 } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { formatCurrency, cloudDb } from '../db/cloudDatabase';
@@ -71,6 +73,8 @@ export const SalesList: React.FC<SalesListProps> = ({
         (s) =>
           s.itemDescription.toLowerCase().includes(q) ||
           s.salesmanName.toLowerCase().includes(q) ||
+          (s.operatorName && s.operatorName.toLowerCase().includes(q)) ||
+          (s.discountLabel && s.discountLabel.toLowerCase().includes(q)) ||
           (s.notes && s.notes.toLowerCase().includes(q)) ||
           (s.onlineBarcode && s.onlineBarcode.toLowerCase().includes(q)) ||
           (s.storeCreditCustomerName && s.storeCreditCustomerName.toLowerCase().includes(q)) ||
@@ -344,6 +348,18 @@ export const SalesList: React.FC<SalesListProps> = ({
                             : ''}
                         </span>
                       )}
+                      {sale.discountAmount && sale.discountAmount > 0 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                          <Tag className="w-2.5 h-2.5 text-rose-600" />
+                          {sale.discountLabel || `-${formatCurrency(sale.discountAmount)}`}
+                        </span>
+                      )}
+                      {sale.operatorName && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
+                          <UserCheck className="w-2.5 h-2.5 text-sky-600" />
+                          Rang by {sale.operatorName}
+                        </span>
+                      )}
                     </div>
                     {sale.notes && (
                       <p className="text-[11px] text-zinc-500 font-normal italic mt-0.5 break-words">
@@ -353,8 +369,15 @@ export const SalesList: React.FC<SalesListProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                    <div className="text-sm font-black text-zinc-950 tabular-nums">
-                      {formatCurrency(sale.amount)}
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-sm font-black text-zinc-950 tabular-nums">
+                        {formatCurrency(sale.amount)}
+                      </span>
+                      {sale.discountAmount && sale.discountAmount > 0 && sale.originalAmount && (
+                        <span className="text-[11px] text-zinc-400 line-through tabular-nums">
+                          {formatCurrency(sale.originalAmount)}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -456,6 +479,12 @@ export const SalesList: React.FC<SalesListProps> = ({
                         />
                         <span>{sale.salesmanName}</span>
                       </div>
+                      {sale.operatorName && (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded">
+                          <UserCheck className="w-2.5 h-2.5 text-sky-600" />
+                          <span>Rang by {sale.operatorName}</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Item Description */}
@@ -493,12 +522,23 @@ export const SalesList: React.FC<SalesListProps> = ({
                               : ''}
                           </span>
                         )}
+                        {sale.discountAmount && sale.discountAmount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                            <Tag className="w-2.5 h-2.5 text-rose-600" />
+                            {sale.discountLabel || `-${formatCurrency(sale.discountAmount)}`}
+                          </span>
+                        )}
                       </div>
                     </td>
 
                     {/* Amount */}
                     <td className="py-3 px-4 whitespace-nowrap text-right font-black text-sm text-zinc-950 tabular-nums">
-                      {formatCurrency(sale.amount)}
+                      <div>{formatCurrency(sale.amount)}</div>
+                      {sale.discountAmount && sale.discountAmount > 0 && sale.originalAmount && (
+                        <div className="text-[10px] font-medium text-zinc-400 line-through">
+                          {formatCurrency(sale.originalAmount)}
+                        </div>
+                      )}
                     </td>
 
                     {/* Payment Method Badge */}

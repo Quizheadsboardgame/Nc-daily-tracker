@@ -9,20 +9,14 @@ import {
   CreditCard,
   Globe,
   ArrowLeftRight,
-  Barcode,
   CheckCircle2,
   AlertCircle,
   Cloud,
   Calendar,
-  Sparkles,
-  ShoppingBag,
-  Layers,
   ChevronDown,
   X,
   Search,
   Plus,
-  BookOpen,
-  Boxes,
   Volume2,
   VolumeX,
   Ticket,
@@ -31,10 +25,9 @@ import {
   Trash2,
   Split,
 } from 'lucide-react';
-import { PaymentMethod, OnlineCard, TradeType, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
+import { PaymentMethod, TradeType, BasketItemInput, SplitPaymentBreakdown } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
-import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
 import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
@@ -66,14 +59,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     online: string;
     traded_out: string;
   }>({ cash: '', card: '', online: '', traded_out: '' });
-  const [notes, setNotes] = useState<string>('');
-  const [barcodeInput, setBarcodeInput] = useState<string>('');
-  const [scannedCardInfo, setScannedCardInfo] = useState<OnlineCard | null>(null);
   const [basketItems, setBasketItems] = useState<BasketItemInput[]>([]);
-  const [storeCreditSelection, setStoreCreditSelection] = useState<{
-    customer: StoreCreditCustomer;
-    amountToUse: number;
-  } | null>(null);
 
   // Trade-In form states
   const [tradeVendor, setTradeVendor] = useState<string>('');
@@ -117,7 +103,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   // Form input refs
   const itemInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const tradeItemInputRef = useRef<HTMLInputElement>(null);
 
   // Filter vendors by search
@@ -154,11 +139,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       if (splitAmounts.online) {
         setSplitAmounts((prev) => ({ ...prev, online: '' }));
       }
-      if (scannedCardInfo) {
-        setScannedCardInfo(null);
-      }
     }
-  }, [hasOnlineCards, paymentMode, splitAmounts.online, scannedCardInfo]);
+  }, [hasOnlineCards, paymentMode, splitAmounts.online]);
 
   // Close vendor dropdown on outside click
   useEffect(() => {
@@ -174,127 +156,16 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle Barcode Scan / Lookup
-  const handleBarcodeLookup = (codeToLookup?: string) => {
-    if (!hasOnlineCards) {
-      setFormError('Barcode scanning is disabled because no cards are currently listed online.');
-      return;
-    }
-
-    const code = (codeToLookup || barcodeInput).trim();
-    if (!code) return;
-
-    setFormError(null);
-
-    // 1. Strict duplicate check
-    if (cloudDb.isOnlineCardAlreadySold(code)) {
-      playSaleBeep(false);
-      const existingCard = cloudDb.getOnlineCardByBarcode(code);
-      setFormError(
-        `DUPLICATE BLOCKED: Card "${existingCard ? existingCard.cardName : code}" (${code}) is ALREADY sold and logged in sales! Duplicate sales are prevented.`
-      );
-      setScannedCardInfo(null);
-      return;
-    }
-
-    const card = cloudDb.getOnlineCardByBarcode(code);
-    if (!card) {
-      playSaleBeep(false);
-      setFormError(`No cataloged card found matching barcode "${code}". You can enter details manually below.`);
-      return;
-    }
-
-    if (card.status === 'sold') {
-      playSaleBeep(false);
-      setFormError(`Card "${card.cardName}" (${card.barcode}) was already sold and cannot be entered again.`);
-      setScannedCardInfo(null);
-      return;
-    }
-
-    if (basketItems.some((b) => b.onlineCardId === card.id || b.onlineBarcode === card.barcode)) {
-      playSaleBeep(false);
-      setFormError(`Card "${card.cardName}" (${card.barcode}) is already in your basket!`);
-      return;
-    }
-
-    // Auto-populate form
-    playSaleBeep(true);
-    setScannedCardInfo(card);
-    setSelectedVendor(card.vendorName);
-    setItemDescription(card.cardName);
-    setIsMiscellaneous(false);
-    setAmount(card.price.toFixed(2));
-    if (paymentMode === 'online' || paymentMode === 'traded_out') {
-      setPaymentMode('card');
-    }
-    setNotes(`Scanned Barcode: ${card.barcode}`);
-    setBarcodeInput('');
-    amountInputRef.current?.focus();
-  };
-
   const handleToggleMisc = (checked: boolean) => {
     setIsMiscellaneous(checked);
     if (checked) {
       setItemDescription('Miscellaneous');
-      setScannedCardInfo(null);
       setTimeout(() => amountInputRef.current?.focus(), 50);
     } else {
       if (itemDescription === 'Miscellaneous') {
         setItemDescription('');
       }
       setTimeout(() => itemInputRef.current?.focus(), 50);
-    }
-  };
-
-  const resolveTargetVendor = (target: 'Kieron' | 'Newtons'): string => {
-    if (target === 'Kieron') {
-      const found = knownVendors.find(
-        (v) => v.toLowerCase() === 'kieron'
-      );
-      return found || '';
-    }
-    if (target === 'Newtons') {
-      const found = knownVendors.find(
-        (v) => v.toLowerCase().startsWith('newton')
-      );
-      return found || '';
-    }
-    return '';
-  };
-
-  const handleSelectQuickCategory = (category: 'misc' | 'comics' | 'accessories' | 'packs') => {
-    setScannedCardInfo(null);
-    setFormError(null);
-
-    if (category === 'misc') {
-      setIsMiscellaneous(true);
-      setItemDescription('Miscellaneous');
-      setTimeout(() => amountInputRef.current?.focus(), 50);
-      return;
-    }
-
-    setIsMiscellaneous(false);
-
-    if (category === 'comics') {
-      setItemDescription('Comics');
-      const vendor = resolveTargetVendor('Kieron');
-      setSelectedVendor(vendor);
-      setTimeout(() => amountInputRef.current?.focus(), 50);
-    } else if (category === 'accessories') {
-      setItemDescription('Accessories');
-      const vendor = resolveTargetVendor('Newtons');
-      setSelectedVendor(vendor);
-      setTimeout(() => amountInputRef.current?.focus(), 50);
-    } else if (category === 'packs') {
-      setItemDescription('Packs');
-      // Packs can be any vendor: if a vendor is already selected, focus amount, else prompt vendor
-      if (selectedVendor) {
-        setTimeout(() => amountInputRef.current?.focus(), 50);
-      } else {
-        setTimeout(() => {
-          setIsVendorDropdownOpen(true);
-        }, 50);
-      }
     }
   };
 
@@ -346,38 +217,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       return;
     }
 
-    if (scannedCardInfo) {
-      if (cloudDb.isOnlineCardAlreadySold(scannedCardInfo.barcode)) {
-        playSaleBeep(false);
-        setFormError(`Duplicate prevented: Card "${scannedCardInfo.cardName}" is already sold.`);
-        return;
-      }
-      if (basketItems.some((b) => b.onlineCardId === scannedCardInfo.id)) {
-        playSaleBeep(false);
-        setFormError(`Card "${scannedCardInfo.cardName}" is already in the basket.`);
-        return;
-      }
-    }
-
     const newItem: BasketItemInput = {
       id: 'bkt_' + Math.random().toString(36).substring(2, 9),
       salesmanName: selectedVendor.trim(),
-      itemDescription: scannedCardInfo
-        ? `${scannedCardInfo.cardName} (In-Person #${scannedCardInfo.barcode})`
-        : finalItemDesc,
+      itemDescription: finalItemDesc,
       isMiscellaneous,
       amount: Math.round(parsedAmount * 100) / 100,
-      notes: scannedCardInfo ? `Scanned Barcode: ${scannedCardInfo.barcode}` : undefined,
-      onlineCardId: scannedCardInfo?.id,
-      onlineBarcode: scannedCardInfo?.barcode,
     };
 
     setBasketItems((prev) => [...prev, newItem]);
     if (!isMiscellaneous) setItemDescription('');
     setAmount('');
-    setScannedCardInfo(null);
-    setBarcodeInput('');
-    if (notes.startsWith('Scanned Barcode:')) setNotes('');
 
     setTimeout(() => {
       if (isMiscellaneous) amountInputRef.current?.focus();
@@ -404,29 +254,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     setFormError(null);
   };
 
-  const handleApplyStoreCredit = (
-    selection: { customer: StoreCreditCustomer; amountToUse: number } | null
-  ) => {
-    setStoreCreditSelection(selection);
-    setFormError(null);
-
-    if (!selection) {
-      if (paymentMode === 'traded_out') setPaymentMode('card');
-      return;
-    }
-
-    const total = checkoutTargetTotal;
-    if (total > 0 && selection.amountToUse >= total - 0.004) {
-      setPaymentMode('traded_out');
-    } else if (selection.amountToUse > 0) {
-      setPaymentMode('split');
-      setSplitAmounts((prev) => ({
-        ...prev,
-        traded_out: selection.amountToUse.toFixed(2),
-      }));
-    }
-  };
-
   const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -451,37 +278,18 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         return;
       }
 
-      if (scannedCardInfo && cloudDb.isOnlineCardAlreadySold(scannedCardInfo.barcode)) {
-        playSaleBeep(false);
-        setFormError(`Duplicate prevented: Card "${scannedCardInfo.cardName}" is already sold.`);
-        return;
-      }
-
       itemsToCheckout = [
         {
           id: 'single_' + Date.now(),
           salesmanName: selectedVendor.trim(),
-          itemDescription: scannedCardInfo
-            ? `${scannedCardInfo.cardName} (In-Person #${scannedCardInfo.barcode})`
-            : finalItemDesc,
+          itemDescription: finalItemDesc,
           isMiscellaneous,
           amount: Math.round(parsedAmount * 100) / 100,
-          onlineCardId: scannedCardInfo?.id,
-          onlineBarcode: scannedCardInfo?.barcode,
         },
       ];
     }
 
     const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
-
-    let storeCreditPayload: { customerId: string; amount: number } | undefined;
-    if (storeCreditSelection && storeCreditSelection.amountToUse > 0) {
-      const creditUsed = Math.round(Math.min(storeCreditSelection.amountToUse, totalVal) * 100) / 100;
-      storeCreditPayload = {
-        customerId: storeCreditSelection.customer.id,
-        amount: creditUsed,
-      };
-    }
 
     let payments: SplitPaymentBreakdown;
     if (paymentMode === 'split') {
@@ -498,66 +306,35 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         );
         return;
       }
-      if (storeCreditPayload && t < storeCreditPayload.amount - 0.004) {
-        playSaleBeep(false);
-        setFormError(
-          `Trade Out / Credit leg (£${t.toFixed(2)}) must be at least £${storeCreditPayload.amount.toFixed(2)} to match applied store credit.`
-        );
-        return;
-      }
       payments = { cash: c, card: d, online: o, traded_out: t };
-    } else if (storeCreditPayload && paymentMode !== 'traded_out') {
-      if (storeCreditPayload.amount >= totalVal - 0.004) {
-        payments = { traded_out: totalVal };
-      } else {
-        const rem = Math.round((totalVal - storeCreditPayload.amount) * 100) / 100;
-        payments = { traded_out: storeCreditPayload.amount, [paymentMode]: rem };
-      }
     } else {
       payments = { [paymentMode]: totalVal };
     }
 
     setIsSubmitting(true);
     try {
-      const isSinglePurePayment =
-        itemsToCheckout.length === 1 &&
-        paymentMode !== 'split' &&
-        (!storeCreditPayload || (paymentMode === 'traded_out' && storeCreditPayload.amount >= totalVal - 0.004));
+      const isSinglePurePayment = itemsToCheckout.length === 1 && paymentMode !== 'split';
 
-      // Single scanned card with single payment (no store credit) uses sellOnlineCard directly
-      if (isSinglePurePayment && itemsToCheckout[0].onlineCardId && !storeCreditPayload) {
-        await cloudDb.sellOnlineCard(itemsToCheckout[0].onlineCardId, {
-          targetDateKey: currentDateKey,
-          customPrice: itemsToCheckout[0].amount,
-          notes: notes.trim() || undefined,
-          paymentMethod: paymentMode as PaymentMethod,
-        });
-      } else if (isSinglePurePayment && !itemsToCheckout[0].onlineCardId) {
+      if (isSinglePurePayment) {
         await cloudDb.insertSale({
           salesmanName: itemsToCheckout[0].salesmanName,
           itemDescription: itemsToCheckout[0].itemDescription,
           isMiscellaneous: itemsToCheckout[0].isMiscellaneous,
           amount: itemsToCheckout[0].amount,
           paymentMethod: paymentMode as PaymentMethod,
-          notes: notes.trim() || undefined,
           dateKey: currentDateKey,
-          storeCredit: storeCreditPayload,
         });
       } else {
         await cloudDb.insertBasketCheckout({
           items: itemsToCheckout,
           payments,
           dateKey: currentDateKey,
-          notes: notes.trim() || undefined,
-          storeCredit: storeCreditPayload,
         });
       }
 
       const uniqueVendors = Array.from(new Set(itemsToCheckout.map((i) => i.salesmanName)));
       const methodLabel =
-        storeCreditPayload
-          ? `STORE CREDIT (${storeCreditSelection!.customer.name})`
-          : paymentMode === 'split'
+        paymentMode === 'split'
           ? 'SPLIT PAYMENT'
           : paymentMode === 'cash'
           ? 'CASH'
@@ -578,14 +355,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       });
 
       setBasketItems([]);
-      setStoreCreditSelection(null);
       if (!isMiscellaneous) {
         setItemDescription('');
       }
       setAmount('');
-      setNotes('');
-      setScannedCardInfo(null);
-      setBarcodeInput('');
       setSplitAmounts({ cash: '', card: '', online: '', traded_out: '' });
       if (paymentMode === 'split') setPaymentMode('card');
 
@@ -927,82 +700,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         {/* Sale Entry Terminal Card */}
         {terminalMode === 'sale' && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-7 shadow-2xl relative overflow-hidden ring-1 ring-white/5">
-          {/* Optional Barcode Quick-Scan Input (Disabled unless cards are online) */}
-          <div className="mb-5 pb-5 border-b border-zinc-800">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-violet-300">
-                Scan Barcode or Enter Card Code{' '}
-                <span className="text-zinc-400 font-normal">
-                  {hasOnlineCards ? `(${availableOnlineCardsCount} online)` : '(Disabled)'}
-                </span>
-              </label>
-              {!hasOnlineCards && (
-                <span className="text-[11px] font-bold text-amber-300 bg-amber-500/15 border border-amber-400/50 px-2.5 py-0.5 rounded-md">
-                  No cards online — scanner disabled
-                </span>
-              )}
-            </div>
-            <div className="flex items-stretch gap-2">
-              <div className="relative flex-1 min-w-0">
-                <Barcode
-                  className={`w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${
-                    hasOnlineCards ? 'text-violet-400' : 'text-zinc-600'
-                  }`}
-                />
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  id="input-pos-barcode"
-                  disabled={!hasOnlineCards}
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleBarcodeLookup();
-                    }
-                  }}
-                  placeholder={
-                    hasOnlineCards
-                      ? 'Scan barcode or type code...'
-                      : 'Barcode scanning disabled (add cards online first)'
-                  }
-                  className={`w-full pl-10 pr-3 py-2.5 text-sm font-mono font-bold tracking-wider rounded-xl border ${
-                    hasOnlineCards
-                      ? 'border-violet-500/60 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-violet-400 focus:border-violet-400'
-                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-500 placeholder-zinc-600 cursor-not-allowed opacity-60'
-                  }`}
-                />
-              </div>
-              <button
-                type="button"
-                id="btn-pos-barcode-lookup"
-                onClick={() => handleBarcodeLookup()}
-                disabled={!hasOnlineCards || !barcodeInput.trim()}
-                className="px-3.5 sm:px-4 min-h-[44px] rounded-xl bg-violet-500 hover:bg-violet-400 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs border border-violet-300 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm shadow-violet-500/20"
-              >
-                Lookup
-              </button>
-            </div>
-            {scannedCardInfo && hasOnlineCards && (
-              <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400 text-xs flex items-center justify-between text-emerald-200">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>
-                    Card loaded: <strong>{scannedCardInfo.cardName}</strong> ({scannedCardInfo.barcode})
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScannedCardInfo(null)}
-                  className="text-xs text-emerald-200 hover:text-white underline cursor-pointer"
-                >
-                  Clear card
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Form */}
           <form onSubmit={handleSubmitSale} className="space-y-5">
             {/* 1. Vendor Selection */}
@@ -1183,105 +880,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Quick Categories: Miscellaneous, Comics (Kieron), Accessories (Newtons), Packs (Any Vendor) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Quick Categories</span>
-                </span>
-                <span className="text-[11px] text-zinc-400 font-medium">
-                  1-tap item & auto-vendor
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {/* 1. Miscellaneous */}
-                <button
-                  type="button"
-                  id="btn-quick-cat-misc"
-                  onClick={() => handleSelectQuickCategory('misc')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    isMiscellaneous
-                      ? 'bg-gradient-to-br from-cyan-400 to-sky-400 border-cyan-200 ring-2 ring-cyan-400/40 text-zinc-950 shadow-lg shadow-cyan-500/30'
-                      : 'bg-cyan-500/15 border-cyan-400/60 text-cyan-100 hover:bg-cyan-500/25 hover:border-cyan-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] sm:text-xs font-black truncate">Miscellaneous</span>
-                    <Layers className={`w-3.5 h-3.5 shrink-0 ${isMiscellaneous ? 'text-zinc-950' : 'text-cyan-300'}`} />
-                  </div>
-                  <span className={`text-[10px] font-bold truncate ${isMiscellaneous ? 'text-zinc-900' : 'text-cyan-300'}`}>Any vendor</span>
-                </button>
-
-                {/* 2. Comics (Auto Kieron) */}
-                <button
-                  type="button"
-                  id="btn-quick-cat-comics"
-                  onClick={() => handleSelectQuickCategory('comics')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
-                      ? 'bg-gradient-to-br from-emerald-400 to-green-400 border-emerald-200 ring-2 ring-emerald-400/40 text-zinc-950 shadow-lg shadow-emerald-500/30'
-                      : 'bg-emerald-500/15 border-emerald-400/60 text-emerald-100 hover:bg-emerald-500/25 hover:border-emerald-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] sm:text-xs font-black truncate">Comics</span>
-                    <BookOpen className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'comics' ? 'text-zinc-950' : 'text-emerald-300'}`} />
-                  </div>
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded self-start truncate max-w-full ${
-                    !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
-                      ? 'bg-zinc-950 text-emerald-300'
-                      : 'bg-emerald-400 text-zinc-950'
-                  }`}>
-                    Auto: Kieron
-                  </span>
-                </button>
-
-                {/* 3. Accessories (Auto Newtons) */}
-                <button
-                  type="button"
-                  id="btn-quick-cat-accessories"
-                  onClick={() => handleSelectQuickCategory('accessories')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
-                      ? 'bg-gradient-to-br from-fuchsia-500 to-purple-500 border-fuchsia-300 ring-2 ring-fuchsia-400/40 text-white shadow-lg shadow-fuchsia-500/30'
-                      : 'bg-fuchsia-500/15 border-fuchsia-400/60 text-fuchsia-100 hover:bg-fuchsia-500/25 hover:border-fuchsia-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] sm:text-xs font-black truncate">Accessories</span>
-                    <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'accessories' ? 'text-white' : 'text-fuchsia-300'}`} />
-                  </div>
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded self-start truncate max-w-full ${
-                    !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
-                      ? 'bg-zinc-950 text-fuchsia-300'
-                      : 'bg-fuchsia-400 text-zinc-950'
-                  }`}>
-                    Auto: Newtons
-                  </span>
-                </button>
-
-                {/* 4. Packs (Any Vendor) */}
-                <button
-                  type="button"
-                  id="btn-quick-cat-packs"
-                  onClick={() => handleSelectQuickCategory('packs')}
-                  className={`min-w-0 min-h-[58px] p-2.5 sm:p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    !isMiscellaneous && itemDescription.toLowerCase() === 'packs'
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-500 border-blue-300 ring-2 ring-blue-400/40 text-white shadow-lg shadow-blue-500/30'
-                      : 'bg-blue-500/15 border-blue-400/60 text-blue-100 hover:bg-blue-500/25 hover:border-blue-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] sm:text-xs font-black truncate">Packs</span>
-                    <Boxes className={`w-3.5 h-3.5 shrink-0 ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-white' : 'text-blue-300'}`} />
-                  </div>
-                  <span className={`text-[10px] font-bold truncate ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-100' : 'text-blue-300'}`}>Any vendor</span>
-                </button>
-              </div>
             </div>
 
             {/* 2. Item Description & Misc Toggle */}
@@ -1622,30 +1220,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               </div>
             )}
 
-            {/* Customer Store Credit Lookup & Apply (POS Terminal) */}
-            <StoreCreditCheckoutPicker
-              theme="dark"
-              checkoutTotal={checkoutTargetTotal}
-              selectedCustomerId={storeCreditSelection?.customer.id || null}
-              appliedAmount={storeCreditSelection?.amountToUse || 0}
-              onApplyStoreCredit={handleApplyStoreCredit}
-            />
-
-            {/* 5. Optional Notes / Memo */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
-                Memo / Customer Reference <span className="text-zinc-500 font-normal">(Optional)</span>
-              </label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional memo, order number, counter notes..."
-                className="w-full px-4 py-2.5 text-xs rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 focus:outline-hidden focus:border-emerald-400"
-              />
-            </div>
-
-            {/* 6. Big Submit Button */}
+            {/* 5. Big Submit Button */}
             <button
               type="submit"
               id="btn-terminal-submit-sale"

@@ -19,6 +19,7 @@ import {
   Sparkles,
   ShoppingBag,
   Store,
+  UserCheck,
 } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { cloudDb, formatCurrency, getLocalDateKey } from '../db/cloudDatabase';
@@ -112,7 +113,7 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
       );
     }
 
-    // Filter by Description (and barcode / notes)
+    // Filter by Description (and barcode / notes / operator / discount)
     if (descriptionQuery.trim()) {
       const q = descriptionQuery.trim().toLowerCase();
       result = result.filter((s) => {
@@ -120,7 +121,9 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
         const barcodeMatch = s.onlineBarcode ? s.onlineBarcode.toLowerCase().includes(q) : false;
         const notesMatch = s.notes ? s.notes.toLowerCase().includes(q) : false;
         const vendorMatch = s.salesmanName.toLowerCase().includes(q);
-        return descMatch || barcodeMatch || notesMatch || vendorMatch;
+        const operatorMatch = s.operatorName ? s.operatorName.toLowerCase().includes(q) : false;
+        const discountMatch = s.discountLabel ? s.discountLabel.toLowerCase().includes(q) : false;
+        return descMatch || barcodeMatch || notesMatch || vendorMatch || operatorMatch || discountMatch;
       });
     }
 
@@ -675,6 +678,12 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                             />
                             <span>{sale.salesmanName}</span>
                           </div>
+                          {sale.operatorName && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-sky-700">
+                              <UserCheck className="w-3 h-3 text-sky-600" />
+                              <span>Rang by {sale.operatorName}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Description */}
@@ -687,6 +696,12 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                               <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">
                                 <span>Barcode:</span>
                                 <span className="font-bold">{sale.onlineBarcode}</span>
+                              </span>
+                            )}
+                            {sale.discountAmount && sale.discountAmount > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200">
+                                <Tag className="w-2.5 h-2.5 text-rose-600" />
+                                <span>{sale.discountLabel || `-${formatCurrency(sale.discountAmount)}`}</span>
                               </span>
                             )}
                             {sale.notes && (
@@ -719,9 +734,14 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
 
                         {/* Amount */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <span className="text-sm font-black text-zinc-950">
+                          <div className="text-sm font-black text-zinc-950">
                             {formatCurrency(sale.amount)}
-                          </span>
+                          </div>
+                          {sale.discountAmount && sale.discountAmount > 0 && sale.originalAmount && (
+                            <div className="text-[10px] text-zinc-400 line-through">
+                              {formatCurrency(sale.originalAmount)}
+                            </div>
+                          )}
                         </td>
 
                         {/* Actions */}
@@ -782,9 +802,16 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                           {sale.itemDescription || 'Miscellaneous'}
                         </h4>
                       </div>
-                      <span className="text-base font-black text-zinc-950 shrink-0">
-                        {formatCurrency(sale.amount)}
-                      </span>
+                      <div className="text-right shrink-0">
+                        <span className="text-base font-black text-zinc-950">
+                          {formatCurrency(sale.amount)}
+                        </span>
+                        {sale.discountAmount && sale.discountAmount > 0 && sale.originalAmount && (
+                          <div className="text-[11px] text-zinc-400 line-through">
+                            {formatCurrency(sale.originalAmount)}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -797,6 +824,18 @@ export const SalesSearchTab: React.FC<SalesSearchTabProps> = ({
                       {sale.onlineBarcode && (
                         <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
                           #{sale.onlineBarcode}
+                        </span>
+                      )}
+                      {sale.discountAmount && sale.discountAmount > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200">
+                          <Tag className="w-2.5 h-2.5 text-rose-600" />
+                          {sale.discountLabel || `-${formatCurrency(sale.discountAmount)}`}
+                        </span>
+                      )}
+                      {sale.operatorName && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200">
+                          <UserCheck className="w-2.5 h-2.5 text-sky-600" />
+                          Rang by {sale.operatorName}
                         </span>
                       )}
                     </div>

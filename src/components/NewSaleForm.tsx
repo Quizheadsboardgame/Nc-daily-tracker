@@ -19,12 +19,21 @@ import {
   ShoppingCart,
   Trash2,
   Split,
+  Percent,
+  Package,
 } from 'lucide-react';
 import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
 import { cloudDb, formatCurrency } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
 import { useCheckoutSound } from '../utils/sound';
 import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
+import {
+  DiscountSelection,
+  QUICK_DISCOUNT_PERCENTS,
+  QUICK_DISCOUNT_FLATS,
+  QUICK_BUNDLE_PRESETS,
+  calculateCheckoutPricing,
+} from '../utils/checkoutDiscount';
 
 interface NewSaleFormProps {
   currentDateKey: string;
@@ -35,6 +44,9 @@ interface NewSaleFormProps {
     itemDescription: string;
     isMiscellaneous?: boolean;
     amount: number;
+    originalAmount?: number;
+    discountAmount?: number;
+    discountLabel?: string;
     paymentMethod: PaymentMethod;
     notes?: string;
     storeCredit?: { customerId: string; amount: number };
@@ -43,6 +55,11 @@ interface NewSaleFormProps {
     items: BasketItemInput[];
     payments: SplitPaymentBreakdown;
     notes?: string;
+    discount?: {
+      label: string;
+      amount: number;
+      originalSubtotal: number;
+    };
     storeCredit?: { customerId: string; amount: number };
   }) => Promise<void> | void;
   onAddVendor?: (name: string) => void;
@@ -87,6 +104,9 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     customer: StoreCreditCustomer;
     amountToUse: number;
   } | null>(null);
+  const [activeDiscount, setActiveDiscount] = useState<DiscountSelection>(null);
+  const [customDealMode, setCustomDealMode] = useState<'flat' | 'bundle'>('flat');
+  const [customDealInput, setCustomDealInput] = useState('');
 
   const [showSuccessBadge, setShowSuccessBadge] = useState(false);
   const [lastRecordedInfo, setLastRecordedInfo] = useState('');
@@ -133,7 +153,12 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   );
 
   const currentFieldAmount = parseFloat(amount) || 0;
-  const checkoutTargetTotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
+  const rawCheckoutSubtotal = basketItems.length > 0 ? basketSubtotal : currentFieldAmount;
+  const pricing = useMemo(
+    () => calculateCheckoutPricing(rawCheckoutSubtotal, activeDiscount),
+    [rawCheckoutSubtotal, activeDiscount]
+  );
+  const checkoutTargetTotal = pricing.finalTotal;
 
   const splitSum = useMemo(() => {
     const c = parseFloat(splitAmounts.cash) || 0;
@@ -318,7 +343,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       ];
     }
 
-    const totalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+    const rawTotalVal = Math.round(itemsToCheckout.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+    const submitPricing = calculateCheckoutPricing(rawTotalVal, activeDiscount);
+    const totalVal = submitPricing.finalTotal;
+    const discountPayload =
+      submitPricing.discountAmount > 0 && submitPricing.discountLabel
+        ? {
+            label: submitPricing.discountLabel,
+            amount: submitPricing.discountAmount,
+            originalSubtotal: submitPricing.rawSubtotal,
+          }
+        : undefined;
 
     // Validate Store Credit if applied
     let storeCreditPayload: { customerId: string; amount: number } | undefined;
@@ -383,7 +418,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           salesmanName: single.salesmanName,
           itemDescription: single.itemDescription,
           isMiscellaneous: single.isMiscellaneous,
-          amount: single.amount,
+          amount: totalVal,
+          originalAmount: discountPayload ? discountPayload.originalSubtotal : undefined,
+          discountAmount: discountPayload ? discountPayload.amount : undefined,
+          discountLabel: discountPayload ? discountPayload.label : undefined,
           paymentMethod: paymentMode as PaymentMethod,
           notes: notes.trim() || undefined,
           storeCredit: storeCreditPayload,
@@ -393,6 +431,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           items: itemsToCheckout,
           payments,
           notes: notes.trim() || undefined,
+          discount: discountPayload,
           storeCredit: storeCreditPayload,
         });
       } else {
@@ -401,6 +440,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           payments,
           dateKey: currentDateKey,
           notes: notes.trim() || undefined,
+          discount: discountPayload,
           storeCredit: storeCreditPayload,
         });
       }
@@ -430,6 +470,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       // Reset form & basket
       setBasketItems([]);
       setStoreCreditSelection(null);
+      setActiveDiscount(null);
+      setCustomDealInput('');
       if (!isMiscellaneous) {
         setItemDescription('');
       }
@@ -990,11 +1032,14 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-indigo-950 tabular-nums bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
-                  Total: {formatCurrency(basketSubtotal)}
+                  Total: {formatCurrency(pricing.finalTotal)}
                 </span>
                 <button
                   type="button"
-                  onClick={() => setBasketItems([])}
+                  onClick={() => {
+                    setBasketItems([]);
+                    setActiveDiscount(null);
+                  }}
                   className="text-[11px] font-bold text-rose-600 hover:text-rose-800 px-2 py-1 rounded-lg hover:bg-rose-50 cursor-pointer"
                 >
                   Clear
@@ -1154,6 +1199,162 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           </div>
         )}
 
+        {/* Quick Discount & Bundle Bar */}
+        <div className="rounded-2xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-black uppercase tracking-wider text-zinc-600 flex items-center gap-1.5">
+              <Percent className="w-3.5 h-3.5 text-rose-600" />
+              <span>Quick Discounts &amp; Bundle Deals</span>
+            </span>
+
+            {pricing.discountAmount > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 border border-rose-300 tabular-nums">
+                  {pricing.discountLabel}: Was {formatCurrency(pricing.rawSubtotal)} &rarr; Now{' '}
+                  {formatCurrency(pricing.finalTotal)} (-{formatCurrency(pricing.discountAmount)})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveDiscount(null)}
+                  className="text-[11px] font-bold text-zinc-500 hover:text-rose-700 underline cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {QUICK_DISCOUNT_PERCENTS.map((pct) => {
+              const isSelected = activeDiscount?.kind === 'percent' && activeDiscount.value === pct;
+              return (
+                <button
+                  key={`pct-${pct}`}
+                  type="button"
+                  disabled={rawCheckoutSubtotal <= 0}
+                  onClick={() =>
+                    setActiveDiscount(isSelected ? null : { kind: 'percent', value: pct, label: `${pct}% Off` })
+                  }
+                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
+                    isSelected
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                      : 'bg-white hover:bg-rose-50 text-rose-800 border-rose-200'
+                  }`}
+                >
+                  -{pct}%
+                </button>
+              );
+            })}
+
+            {QUICK_DISCOUNT_FLATS.map((amt) => {
+              const isSelected = activeDiscount?.kind === 'flat' && activeDiscount.value === amt;
+              return (
+                <button
+                  key={`flat-${amt}`}
+                  type="button"
+                  disabled={rawCheckoutSubtotal <= amt}
+                  onClick={() =>
+                    setActiveDiscount(isSelected ? null : { kind: 'flat', value: amt, label: `-£${amt} Off` })
+                  }
+                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
+                    isSelected
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-white hover:bg-amber-50 text-amber-900 border-amber-200'
+                  }`}
+                >
+                  -£{amt}
+                </button>
+              );
+            })}
+
+            <span className="h-5 w-px bg-zinc-300 mx-0.5 hidden sm:inline-block" />
+
+            {QUICK_BUNDLE_PRESETS.map((bundle) => {
+              const isSelected =
+                activeDiscount?.kind === 'bundle' && activeDiscount.targetPrice === bundle.price;
+              return (
+                <button
+                  key={bundle.label}
+                  type="button"
+                  onClick={() => {
+                    if (basketItems.length === 0 && currentFieldAmount <= 0) {
+                      if (!itemDescription.trim() && !isMiscellaneous) {
+                        setItemDescription(`Bundle (${bundle.label})`);
+                      }
+                      setAmount(bundle.price.toFixed(2));
+                      setActiveDiscount(null);
+                      if (errors.item || errors.amount) {
+                        setErrors((prev) => ({ ...prev, item: '', amount: '' }));
+                      }
+                    } else {
+                      setActiveDiscount(
+                        isSelected
+                          ? null
+                          : { kind: 'bundle', targetPrice: bundle.price, label: `Bundle: ${bundle.label}` }
+                      );
+                    }
+                  }}
+                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black flex items-center gap-1 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200'
+                  }`}
+                >
+                  <Package className="w-3 h-3" />
+                  <span>{bundle.label}</span>
+                </button>
+              );
+            })}
+
+            <div className="flex items-center gap-1 ml-auto">
+              <select
+                value={customDealMode}
+                onChange={(e) => setCustomDealMode(e.target.value as 'flat' | 'bundle')}
+                className="min-h-[32px] px-2 py-1 text-[11px] font-bold rounded-lg border border-zinc-300 bg-white text-zinc-800 cursor-pointer"
+              >
+                <option value="flat">Custom -£</option>
+                <option value="bundle">Bundle £</option>
+              </select>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={customDealInput}
+                onChange={(e) => setCustomDealInput(e.target.value)}
+                placeholder="0.00"
+                className="w-16 min-h-[32px] px-2 py-1 text-[11px] font-bold tabular-nums rounded-lg border border-zinc-300 bg-white text-zinc-900"
+              />
+              <button
+                type="button"
+                disabled={!parseFloat(customDealInput) || parseFloat(customDealInput) <= 0}
+                onClick={() => {
+                  const val = parseFloat(customDealInput);
+                  if (!val || val <= 0) return;
+                  if (customDealMode === 'flat') {
+                    setActiveDiscount({ kind: 'flat', value: val, label: `-£${val.toFixed(2)} Off` });
+                  } else if (basketItems.length === 0 && currentFieldAmount <= 0) {
+                    if (!itemDescription.trim() && !isMiscellaneous) {
+                      setItemDescription(`Custom Bundle (£${val.toFixed(2)})`);
+                    }
+                    setAmount(val.toFixed(2));
+                    setActiveDiscount(null);
+                  } else {
+                    setActiveDiscount({
+                      kind: 'bundle',
+                      targetPrice: val,
+                      label: `Bundle: £${val.toFixed(2)}`,
+                    });
+                  }
+                  setCustomDealInput('');
+                }}
+                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Customer Store Credit Lookup & Apply */}
         <StoreCreditCheckoutPicker
           theme="light"
@@ -1217,10 +1418,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="truncate">
                 {basketItems.length > 0
-                  ? `Checkout Basket (${basketItems.length} • ${formatCurrency(basketSubtotal)})`
+                  ? `Checkout Basket (${basketItems.length} • ${formatCurrency(pricing.finalTotal)})`
                   : paymentMode === 'split'
-                  ? `Record Split Sale${currentFieldAmount > 0 ? ` (${formatCurrency(currentFieldAmount)})` : ''}`
-                  : `Record Sale${amount && !isNaN(parseFloat(amount)) ? ` (£${parseFloat(amount).toFixed(2)})` : ''}`}
+                  ? `Record Split Sale${pricing.finalTotal > 0 ? ` (${formatCurrency(pricing.finalTotal)})` : ''}`
+                  : `Record Sale${pricing.finalTotal > 0 ? ` (${formatCurrency(pricing.finalTotal)})` : ''}`}
               </span>
             </button>
           </div>

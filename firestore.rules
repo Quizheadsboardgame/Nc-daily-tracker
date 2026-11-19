@@ -41,6 +41,10 @@ service cloud.firestore {
     match /store_credit_transactions/{txId} {
       allow read, write: if true;
     }
+    // Customer holds, deposits & layaway records synced across terminals
+    match /holds/{holdId} {
+      allow read, write: if true;
+    }
     // Universal access rule to ensure all devices can read and write all application data
     match /{document=**} {
       allow read, write: if true;
