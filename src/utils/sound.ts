@@ -106,8 +106,8 @@ async function preRenderSoundBlobs() {
   }
 
   try {
-    // 2. Render Fanfare (2.0s duration)
-    const fanfareOffline = new OfflineCtx(1, 44100 * 2.0, 44100);
+    // 2. Render Massive Fanfare + Fireworks Audio (3.6s duration)
+    const fanfareOffline = new OfflineCtx(1, Math.floor(44100 * 3.6), 44100);
     renderFanfareToContext(fanfareOffline);
     const fanfareBuffer = await fanfareOffline.startRendering();
     const fanfareBlob = audioBufferToWavBlob(fanfareBuffer);
@@ -411,55 +411,132 @@ function renderMarioCoinToContext(ctx: BaseAudioContext) {
 }
 
 /**
- * Render Fanfare sound graph into an audio context (realtime or offline)
+ * Render Massive Celebratory Fanfare + Fireworks sound graph into an audio context (realtime or offline)
  */
 function renderFanfareToContext(ctx: BaseAudioContext) {
   const now = ctx.currentTime;
 
-  // Melody notes: G4 -> C5 -> E5 -> G5 -> E5 -> G5 -> C6 (Finale Chord)
-  const notes = [
-    { start: 0.00, dur: 0.11, freq: 392.00, gain: 0.22 }, // G4
-    { start: 0.12, dur: 0.11, freq: 523.25, gain: 0.24 }, // C5
-    { start: 0.24, dur: 0.11, freq: 659.25, gain: 0.25 }, // E5
-    { start: 0.36, dur: 0.16, freq: 783.99, gain: 0.26 }, // G5
-    { start: 0.53, dur: 0.11, freq: 659.25, gain: 0.23 }, // E5
-    { start: 0.65, dur: 0.14, freq: 783.99, gain: 0.25 }, // G5
+  // Helper: Synthesized firework burst crackle & pop
+  const scheduleFireworkPop = (startOffset: number, intensity: number) => {
+    const duration = 0.32;
+    const sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const noiseBuffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < sampleCount; i++) {
+      const env = Math.pow(1 - i / sampleCount, 2.2);
+      const crackle = Math.random() > 0.88 ? 1.5 : 0.6;
+      channel[i] = (Math.random() * 2 - 1) * env * crackle;
+    }
+
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuffer;
+
+    const bandFilter = ctx.createBiquadFilter();
+    bandFilter.type = 'bandpass';
+    bandFilter.frequency.setValueAtTime(1400 + Math.random() * 900, now + startOffset);
+    bandFilter.Q.setValueAtTime(0.8, now + startOffset);
+
+    const popGain = ctx.createGain();
+    popGain.gain.setValueAtTime(0.0001, now + startOffset);
+    popGain.gain.linearRampToValueAtTime(0.24 * intensity, now + startOffset + 0.012);
+    popGain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + duration);
+
+    noiseSrc.connect(bandFilter);
+    bandFilter.connect(popGain);
+    popGain.connect(ctx.destination);
+
+    noiseSrc.start(now + startOffset);
+    noiseSrc.stop(now + startOffset + duration);
+
+    // Sub-thump boom for big firework shell
+    const boomOsc = ctx.createOscillator();
+    const boomGain = ctx.createGain();
+    boomOsc.type = 'sine';
+    boomOsc.frequency.setValueAtTime(135, now + startOffset);
+    boomOsc.frequency.exponentialRampToValueAtTime(38, now + startOffset + 0.16);
+    boomGain.gain.setValueAtTime(0.22 * intensity, now + startOffset);
+    boomGain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + 0.18);
+    boomOsc.connect(boomGain);
+    boomGain.connect(ctx.destination);
+    boomOsc.start(now + startOffset);
+    boomOsc.stop(now + startOffset + 0.19);
+  };
+
+  // Helper: Timpani victory drum hit
+  const scheduleTimpani = (startOffset: number, freq: number, volume: number) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq * 1.15, now + startOffset);
+    osc.frequency.exponentialRampToValueAtTime(freq, now + startOffset + 0.08);
+    g.gain.setValueAtTime(0.0001, now + startOffset);
+    g.gain.linearRampToValueAtTime(volume, now + startOffset + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + 0.28);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now + startOffset);
+    osc.stop(now + startOffset + 0.3);
+  };
+
+  // 1. Opening celebratory brass fanfare melody with warm fifth/third harmonies
+  const fanfareSteps = [
+    { start: 0.00, dur: 0.12, lead: 392.00, harmony: 293.66, gain: 0.18 }, // G4 + D4
+    { start: 0.13, dur: 0.12, lead: 523.25, harmony: 392.00, gain: 0.20 }, // C5 + G4
+    { start: 0.26, dur: 0.12, lead: 659.25, harmony: 523.25, gain: 0.21 }, // E5 + C5
+    { start: 0.39, dur: 0.18, lead: 783.99, harmony: 587.33, gain: 0.22 }, // G5 + D5
+    { start: 0.58, dur: 0.11, lead: 659.25, harmony: 523.25, gain: 0.19 }, // E5 + C5
+    { start: 0.70, dur: 0.13, lead: 783.99, harmony: 659.25, gain: 0.22 }, // G5 + E5
+    { start: 0.85, dur: 0.12, lead: 880.00, harmony: 659.25, gain: 0.22 }, // A5 + E5
+    { start: 0.98, dur: 0.14, lead: 987.77, harmony: 783.99, gain: 0.24 }, // B5 + G5
   ];
 
-  notes.forEach(({ start, dur, freq, gain }) => {
-    const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
+  fanfareSteps.forEach(({ start, dur, lead, harmony, gain }) => {
+    [
+      { freq: lead, type: 'sawtooth' as OscillatorType, amp: gain },
+      { freq: harmony, type: 'triangle' as OscillatorType, amp: gain * 0.75 },
+    ].forEach(({ freq, type, amp }) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
 
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(2400, now + start);
-    filter.frequency.exponentialRampToValueAtTime(1400, now + start + dur);
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2800, now + start);
+      filter.frequency.exponentialRampToValueAtTime(1400, now + start + dur);
 
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(freq, now + start);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + start);
 
-    gainNode.gain.setValueAtTime(0.0001, now + start);
-    gainNode.gain.setValueAtTime(gain, now + start + 0.015);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+      gainNode.gain.setValueAtTime(0.0001, now + start);
+      gainNode.gain.linearRampToValueAtTime(amp, now + start + 0.015);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
 
-    osc.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(ctx.destination);
+      osc.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(ctx.destination);
 
-    osc.start(now + start);
-    osc.stop(now + start + dur);
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.01);
+    });
   });
 
-  // Grand Finale Celebratory Chord at now + 0.82s (C Major Triad with high shimmer)
-  const chordStart = 0.82;
-  const chordDur = 1.05;
+  // 2. Timpani accents on major downbeats
+  scheduleTimpani(0.00, 130.81, 0.22); // C3
+  scheduleTimpani(0.39, 196.00, 0.24); // G3
+  scheduleTimpani(1.14, 130.81, 0.28); // Grand Finale C3
+
+  // 3. Grand Finale Victory Chord at 1.14s (C Major 9 with shimmering bells)
+  const chordStart = 1.14;
+  const chordDur = 1.85;
 
   const chordFrequencies = [
-    { freq: 523.25, type: 'sawtooth' as OscillatorType, gain: 0.18 },
-    { freq: 659.25, type: 'sawtooth' as OscillatorType, gain: 0.16 },
-    { freq: 783.99, type: 'sawtooth' as OscillatorType, gain: 0.18 },
-    { freq: 1046.50, type: 'square' as OscillatorType, gain: 0.14 },
-    { freq: 2093.00, type: 'sine' as OscillatorType, gain: 0.09 },
+    { freq: 261.63, type: 'triangle' as OscillatorType, gain: 0.18 }, // C4 bass warmth
+    { freq: 523.25, type: 'sawtooth' as OscillatorType, gain: 0.15 }, // C5
+    { freq: 659.25, type: 'sawtooth' as OscillatorType, gain: 0.14 }, // E5
+    { freq: 783.99, type: 'sawtooth' as OscillatorType, gain: 0.15 }, // G5
+    { freq: 1046.50, type: 'square' as OscillatorType, gain: 0.11 },  // C6
+    { freq: 1174.66, type: 'sine' as OscillatorType, gain: 0.07 },    // D6 sparkle
+    { freq: 1567.98, type: 'sine' as OscillatorType, gain: 0.08 },    // G6
+    { freq: 2093.00, type: 'sine' as OscillatorType, gain: 0.07 },    // C7 shimmer
   ];
 
   chordFrequencies.forEach(({ freq, type, gain }) => {
@@ -468,14 +545,14 @@ function renderFanfareToContext(ctx: BaseAudioContext) {
     const filter = ctx.createBiquadFilter();
 
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(3200, now + chordStart);
+    filter.frequency.setValueAtTime(3600, now + chordStart);
     filter.frequency.exponentialRampToValueAtTime(1200, now + chordStart + chordDur);
 
     osc.type = type;
     osc.frequency.setValueAtTime(freq, now + chordStart);
 
     gainNode.gain.setValueAtTime(0.0001, now + chordStart);
-    gainNode.gain.setValueAtTime(gain, now + chordStart + 0.02);
+    gainNode.gain.linearRampToValueAtTime(gain, now + chordStart + 0.03);
     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + chordStart + chordDur);
 
     osc.connect(filter);
@@ -483,8 +560,33 @@ function renderFanfareToContext(ctx: BaseAudioContext) {
     gainNode.connect(ctx.destination);
 
     osc.start(now + chordStart);
-    osc.stop(now + chordStart + chordDur);
+    osc.stop(now + chordStart + chordDur + 0.02);
   });
+
+  // 4. Sparkling ascending celebration bell glissando
+  const glissNotes = [1046.5, 1318.51, 1567.98, 1975.53, 2093.0, 2637.02, 3135.96];
+  glissNotes.forEach((freq, idx) => {
+    const t = 1.22 + idx * 0.07;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + t);
+    g.gain.setValueAtTime(0.0001, now + t);
+    g.gain.linearRampToValueAtTime(0.09, now + t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.55);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now + t);
+    osc.stop(now + t + 0.56);
+  });
+
+  // 5. Synchronized Firework Bursts & Crackles
+  scheduleFireworkPop(0.06, 0.9);
+  scheduleFireworkPop(0.45, 0.8);
+  scheduleFireworkPop(1.16, 1.0);
+  scheduleFireworkPop(1.65, 0.85);
+  scheduleFireworkPop(2.25, 0.9);
+  scheduleFireworkPop(2.85, 0.75);
 }
 
 /**

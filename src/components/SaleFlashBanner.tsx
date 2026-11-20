@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Banknote, CreditCard, Globe, ArrowLeftRight, Sparkles, X, Volume2 } from 'lucide-react';
 import { SaleFlashEvent, subscribeToSaleFlash } from '../utils/sound';
+import { BigSaleCelebration } from './BigSaleCelebration';
 
 const FLASH_DURATION_MS = 3000;
-const FADE_OUT_MS = 250;
+const BIG_SALE_DURATION_MS = 6500;
+const FADE_OUT_MS = 300;
 
 export const SaleFlashBanner: React.FC = () => {
   const [activeFlash, setActiveFlash] = useState<SaleFlashEvent | null>(null);
@@ -35,17 +37,20 @@ export const SaleFlashBanner: React.FC = () => {
     clearTimerRef.current = setTimeout(() => {
       setActiveFlash(null);
       setIsFadingOut(false);
-    }, 180);
+    }, 220);
   };
 
   useEffect(() => {
     const unsubscribe = subscribeToSaleFlash((event) => {
       clearAllTimers();
-      setActiveFlash(event);
+      const isBigSale = Boolean(event.isOver100 || (event.amount !== undefined && event.amount > 100));
+      const duration = isBigSale ? BIG_SALE_DURATION_MS : FLASH_DURATION_MS;
+
+      setActiveFlash({ ...event, isOver100: isBigSale });
       setIsFadingOut(false);
       setProgressWidth('100%');
 
-      // Kick off smooth 3-second countdown bar transition on next paint
+      // Kick off smooth countdown bar transition on next paint
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = requestAnimationFrame(() => {
           setProgressWidth('0%');
@@ -54,12 +59,12 @@ export const SaleFlashBanner: React.FC = () => {
 
       fadeTimerRef.current = setTimeout(() => {
         setIsFadingOut(true);
-      }, FLASH_DURATION_MS - FADE_OUT_MS);
+      }, duration - FADE_OUT_MS);
 
       clearTimerRef.current = setTimeout(() => {
         setActiveFlash(null);
         setIsFadingOut(false);
-      }, FLASH_DURATION_MS);
+      }, duration);
     });
 
     return () => {
@@ -69,6 +74,18 @@ export const SaleFlashBanner: React.FC = () => {
   }, []);
 
   if (!activeFlash) return null;
+
+  if (activeFlash.isOver100) {
+    return (
+      <BigSaleCelebration
+        event={activeFlash}
+        durationMs={BIG_SALE_DURATION_MS}
+        isFadingOut={isFadingOut}
+        progressWidth={progressWidth}
+        onDismiss={dismissNow}
+      />
+    );
+  }
 
   const getPaymentDisplay = (method: SaleFlashEvent['paymentMethod']) => {
     switch (method) {
