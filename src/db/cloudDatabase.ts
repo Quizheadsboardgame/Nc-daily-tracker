@@ -52,6 +52,7 @@ import {
   markSaleSoundPlayed,
   emitSaleFlash,
   isSaleRecentlyFlashed,
+  getCelebrationTier,
 } from '../utils/sound';
 import { getDeviceOperator } from '../utils/deviceOperator';
 
@@ -640,8 +641,10 @@ class CloudSalesDatabase {
                 playCheckoutSound(false, groupKey, totalAmount);
               }
 
-              // Flash who the sale is for and how it was paid for 3 seconds
+              // Flash who the sale is for and how it was paid for 3 seconds (or escalating fanfare if > £100)
               if (!isSaleRecentlyFlashed(groupKey)) {
+                const eventDateKey = first.dateKey || getLocalDateKey(new Date(Number(first.timestamp) || Date.now()));
+                const isTopSaleOfDay = this.isNewTopSaleForDay(eventDateKey, totalAmount, groupKey);
                 emitSaleFlash({
                   id: groupKey,
                   vendorName,
@@ -650,6 +653,8 @@ class CloudSalesDatabase {
                   itemDescription,
                   amount: totalAmount,
                   isOver100: totalAmount > 100,
+                  celebrationTier: getCelebrationTier(totalAmount),
+                  isTopSaleOfDay,
                   isSplit: Boolean(splitSummary),
                   splitSummary,
                   basketItemCount,
@@ -1360,10 +1365,13 @@ class CloudSalesDatabase {
       });
     }
 
-    // Play Mario coin sound (or fanfare if > £100) immediately on this device and mark ID to avoid double-firing
+    // Determine if this >£100 transaction sets a new top single sale of the day
+    const isTopSaleOfDay = this.isNewTopSaleForDay(dateKey, record.amount, id);
+
+    // Play Mario coin sound (or escalating fanfare if > £100) immediately on this device and mark ID to avoid double-firing
     playCheckoutSound(false, id, record.amount);
 
-    // Flash who the sale is for and how it was paid for 3 seconds
+    // Flash who the sale is for and how it was paid for 3 seconds (or escalating celebration if > £100)
     emitSaleFlash({
       id,
       vendorName: record.salesmanName,
@@ -1372,6 +1380,8 @@ class CloudSalesDatabase {
       itemDescription: record.itemDescription,
       amount: record.amount,
       isOver100: record.amount > 100,
+      celebrationTier: getCelebrationTier(record.amount),
+      isTopSaleOfDay,
       isSplit: Boolean(record.splitSummary),
       splitSummary: record.splitSummary,
     });
@@ -1804,7 +1814,10 @@ class CloudSalesDatabase {
       });
     }
 
-    // Play sound ONCE for the combined checkout total (Fanfare if > £100!) & flash unified 3s banner
+    // Determine if this >£100 checkout sets a new top single sale of the day
+    const isTopSaleOfDay = this.isNewTopSaleForDay(dateKey, totalCheckoutAmount, checkoutGroupId);
+
+    // Play sound ONCE for the combined checkout total (Escalating Fanfare if > £100!) & flash unified banner
     playCheckoutSound(false, checkoutGroupId, totalCheckoutAmount);
     emitSaleFlash({
       id: checkoutGroupId,
@@ -1814,6 +1827,8 @@ class CloudSalesDatabase {
       itemDescription: checkoutItemSummary,
       amount: totalCheckoutAmount,
       isOver100: totalCheckoutAmount > 100,
+      celebrationTier: getCelebrationTier(totalCheckoutAmount),
+      isTopSaleOfDay,
       isSplit,
       splitSummary,
       basketItemCount: input.items.length,
@@ -1828,6 +1843,31 @@ class CloudSalesDatabase {
     }
 
     return createdRecords;
+  }
+
+  /**
+   * Returns true if `amount` (> £100) beats the highest single transaction / checkout recorded so far on `dateKey`,
+   * excluding the current sale ID or checkoutGroupId.
+   */
+  private isNewTopSaleForDay(dateKey: string, amount: number, excludeIdOrGroup?: string): boolean {
+    if (!(amount > 100)) return false;
+
+    const groupedTotals = new Map<string, number>();
+    for (const sale of this.salesCache.values()) {
+      if (sale.dateKey !== dateKey) continue;
+      if (excludeIdOrGroup && (sale.id === excludeIdOrGroup || sale.checkoutGroupId === excludeIdOrGroup)) {
+        continue;
+      }
+      const key = sale.checkoutGroupId || sale.id;
+      groupedTotals.set(key, (groupedTotals.get(key) || 0) + (Number(sale.amount) || 0));
+    }
+
+    let previousMax = 0;
+    for (const total of groupedTotals.values()) {
+      if (total > previousMax) previousMax = total;
+    }
+
+    return amount > previousMax;
   }
 
   public async updateSale(id: string, updates: Partial<Omit<SaleRecord, 'id'>>) {

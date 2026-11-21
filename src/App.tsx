@@ -16,6 +16,7 @@ import { LockedRegisterScreen } from './components/LockedRegisterScreen';
 import { SaleFlashBanner } from './components/SaleFlashBanner';
 import { CashDrawerTab } from './components/CashDrawerTab';
 import { StoreCreditTab } from './components/StoreCreditTab';
+import { GiftCardsTab } from './components/GiftCardsTab';
 import { HoldsTab } from './components/HoldsTab';
 import { BusiestHoursHeatmap } from './components/BusiestHoursHeatmap';
 import { DeviceOperatorModal } from './components/DeviceOperatorModal';
@@ -368,6 +369,17 @@ export default function App() {
               knownVendors={knownVendors}
               onNavigateToLedger={() => setActiveTab('ledger')}
               onNavigateToTrades={() => setActiveTab('trades')}
+            />
+          </div>
+        )}
+
+        {/* TAB: Physical Market Gift Cards (Scan to Activate & Update) */}
+        {activeTab === 'gift-cards' && (
+          <div className="animate-fade-in" id="tab-content-gift-cards">
+            <GiftCardsTab
+              knownVendors={knownVendors}
+              currentDateKey={currentDateKey}
+              onNavigateToLedger={() => setActiveTab('ledger')}
             />
           </div>
         )}

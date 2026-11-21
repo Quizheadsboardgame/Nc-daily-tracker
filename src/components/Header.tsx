@@ -3,7 +3,7 @@ import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight,
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth, useCashDrawerAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
-import { useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
+import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
 export type AppTab = 'ledger' | 'trades' | 'holds' | 'cash-drawer' | 'store-credit' | 'search' | 'leaderboard' | 'heatmap' | 'online-cards' | 'vendor-check' | 'manage-vendors';
 
@@ -381,17 +381,28 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </button>
 
-              {/* Test Sound Button */}
+              {/* Test Sound Buttons */}
               {soundEnabled && isAudioActive && (
-                <button
-                  type="button"
-                  id="btn-test-sound-header"
-                  onClick={testMarioSound}
-                  className="inline-flex items-center justify-center gap-1 px-2.5 min-h-[40px] text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 transition cursor-pointer whitespace-nowrap"
-                  title="Test Mario Coin sound effect on this device"
-                >
-                  <span>Test 🪙</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    id="btn-test-sound-header"
+                    onClick={testMarioSound}
+                    className="inline-flex items-center justify-center gap-1 px-2.5 min-h-[40px] text-xs font-bold rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 transition cursor-pointer whitespace-nowrap"
+                    title="Test Mario Coin sound effect on this device"
+                  >
+                    <span>Test 🪙</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-test-fanfare-header"
+                    onClick={testFanfareSound}
+                    className="inline-flex items-center justify-center gap-1 px-2.5 min-h-[40px] text-xs font-bold rounded-xl border border-amber-500/40 bg-amber-950/50 text-amber-300 hover:text-amber-200 hover:bg-amber-900/60 transition cursor-pointer whitespace-nowrap"
+                    title="Test escalating £100+ / £250+ / £500+ Fanfare, Fireworks & Sound"
+                  >
+                    <span>Test 🎉</span>
+                  </button>
+                </>
               )}
 
               {onOpenOperatorModal && (

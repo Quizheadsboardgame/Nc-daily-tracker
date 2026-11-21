@@ -449,6 +449,138 @@
         }
       },
       "required": ["customerName", "vendorName", "itemDescription", "totalPrice", "depositPaid", "remainingBalance", "status", "createdAt", "dateKey", "updatedAt"]
+    },
+    "GiftCard": {
+      "title": "GiftCard",
+      "description": "Physical market gift card tracked by scanned barcode/QR serial number with live balance and status",
+      "type": "object",
+      "properties": {
+        "barcode": {
+          "type": "string",
+          "description": "Scanned barcode, QR code, or serial code printed on the physical gift card"
+        },
+        "balance": {
+          "type": "number",
+          "description": "Current remaining GBP balance on the gift card"
+        },
+        "initialValue": {
+          "type": "number",
+          "description": "Initial GBP amount loaded when first activated"
+        },
+        "totalLoaded": {
+          "type": "number",
+          "description": "Cumulative GBP value loaded onto the card"
+        },
+        "totalRedeemed": {
+          "type": "number",
+          "description": "Cumulative GBP value redeemed from the card"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "empty", "void"],
+          "description": "Current lifecycle status of the gift card"
+        },
+        "recipientName": {
+          "type": "string",
+          "description": "Optional customer or recipient name"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes about the gift card"
+        },
+        "soldPaymentMethod": {
+          "type": "string",
+          "enum": ["cash", "card", "traded_out", "online"],
+          "description": "Payment method used when purchasing the gift card"
+        },
+        "soldVendorName": {
+          "type": "string",
+          "description": "Optional vendor attribution if recorded in sales ledger"
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Till operator who activated the card"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Activation timestamp in epoch milliseconds"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Activation calendar date YYYY-MM-DD"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update timestamp in epoch milliseconds"
+        },
+        "lastUsedAt": {
+          "type": "number",
+          "description": "Timestamp of last redemption or top-up in epoch milliseconds"
+        }
+      },
+      "required": ["barcode", "balance", "initialValue", "totalLoaded", "totalRedeemed", "status", "createdAt", "dateKey", "updatedAt"]
+    },
+    "GiftCardTransaction": {
+      "title": "GiftCardTransaction",
+      "description": "Audit log entry for gift card activation, redemption, top-up, adjustment, or voiding",
+      "type": "object",
+      "properties": {
+        "giftCardId": {
+          "type": "string",
+          "description": "Document ID of the associated GiftCard"
+        },
+        "barcode": {
+          "type": "string",
+          "description": "Scanned barcode string of the gift card"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["activate", "redeem", "topup", "adjust", "void"],
+          "description": "Gift card event type"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Absolute GBP amount of the event"
+        },
+        "delta": {
+          "type": "number",
+          "description": "Signed GBP delta applied to card balance"
+        },
+        "balanceAfter": {
+          "type": "number",
+          "description": "Remaining GBP balance immediately after the transaction"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["cash", "card", "traded_out", "online"],
+          "description": "Payment method used for activation or top-up"
+        },
+        "vendorName": {
+          "type": "string",
+          "description": "Optional vendor associated with the purchase or redemption"
+        },
+        "operatorName": {
+          "type": "string",
+          "description": "Till operator who processed the transaction"
+        },
+        "description": {
+          "type": "string",
+          "description": "Summary description of the gift card transaction"
+        },
+        "relatedSaleId": {
+          "type": "string",
+          "description": "Optional linked sale document ID in sales collection"
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "Calendar date YYYY-MM-DD"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Epoch milliseconds timestamp"
+        }
+      },
+      "required": ["giftCardId", "barcode", "type", "amount", "delta", "balanceAfter", "description", "dateKey", "timestamp"]
     }
   },
   "firestore": {
@@ -487,6 +619,14 @@
     "/holds/{holdId}": {
       "schema": "Hold",
       "description": "Customer holds, deposits, and layaway plans synced across terminals"
+    },
+    "/gift_cards/{cardId}": {
+      "schema": "GiftCard",
+      "description": "Scanned market gift cards with live balances and status synced across all terminals"
+    },
+    "/gift_card_transactions/{txId}": {
+      "schema": "GiftCardTransaction",
+      "description": "Audit trail of gift card activations, redemptions, top-ups, and adjustments synced across terminals"
     }
   }
 }

@@ -45,6 +45,14 @@ service cloud.firestore {
     match /holds/{holdId} {
       allow read, write: if true;
     }
+    // Market gift cards & balances synced across terminals
+    match /gift_cards/{cardId} {
+      allow read, write: if true;
+    }
+    // Gift card transaction audit log synced across terminals
+    match /gift_card_transactions/{txId} {
+      allow read, write: if true;
+    }
     // Universal access rule to ensure all devices can read and write all application data
     match /{document=**} {
       allow read, write: if true;

@@ -405,3 +405,54 @@ export interface EventVsShopComparison {
   recentEvents: EventDaySummaryItem[];
 }
 
+export type GiftCardStatus = 'active' | 'empty' | 'void';
+
+export type GiftCardTransactionType = 'activate' | 'redeem' | 'topup' | 'adjust' | 'void';
+
+export interface GiftCardRecord {
+  id: string;
+  barcode: string; // Printed barcode, QR code, or serial number on the physical gift card
+  balance: number; // Current remaining value in GBP (£)
+  initialValue: number; // Original loaded value in GBP (£)
+  totalLoaded: number; // Cumulative GBP (£) loaded (activation + top-ups)
+  totalRedeemed: number; // Cumulative GBP (£) spent/redeemed
+  status: GiftCardStatus;
+  recipientName?: string;
+  notes?: string;
+  soldPaymentMethod?: PaymentMethod;
+  soldVendorName?: string;
+  operatorName?: string;
+  createdAt: number;
+  dateKey: string;
+  updatedAt: number;
+  lastUsedAt?: number;
+}
+
+export interface GiftCardTransaction {
+  id: string;
+  giftCardId: string;
+  barcode: string;
+  type: GiftCardTransactionType;
+  amount: number; // Absolute GBP (£) amount of this event
+  delta: number; // Signed GBP (£) change to card balance
+  balanceAfter: number; // Remaining balance immediately after
+  paymentMethod?: PaymentMethod;
+  vendorName?: string;
+  operatorName?: string;
+  description: string;
+  relatedSaleId?: string;
+  dateKey: string;
+  timestamp: number;
+}
+
+export interface GiftCardsOverview {
+  activeCardsCount: number;
+  emptyCardsCount: number;
+  voidCardsCount: number;
+  totalCardsCount: number;
+  totalOutstandingBalance: number;
+  totalLifetimeLoaded: number;
+  totalLifetimeRedeemed: number;
+}
+
+

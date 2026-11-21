@@ -7,9 +7,11 @@ import {
   Trophy,
   PartyPopper,
   Sparkles,
+  Crown,
+  Flame,
   X,
 } from 'lucide-react';
-import { SaleFlashEvent } from '../utils/sound';
+import { SaleFlashEvent, getCelebrationTier } from '../utils/sound';
 
 interface BigSaleCelebrationProps {
   event: SaleFlashEvent;
@@ -74,6 +76,16 @@ const CELEBRATION_PALETTE = [
   '#ffffff', // Starlight White
 ];
 
+const LEGENDARY_PALETTE = [
+  '#fde047',
+  '#fbbf24',
+  '#f59e0b',
+  '#ffffff',
+  '#e879f9',
+  '#38bdf8',
+  '#34d399',
+];
+
 const FIREWORK_PALETTES = [
   ['#fde047', '#fbbf24', '#f59e0b', '#ffffff'],
   ['#34d399', '#22d3ee', '#a7f3d0', '#ffffff'],
@@ -104,6 +116,9 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
   onDismiss,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const tier = event.celebrationTier || getCelebrationTier(event.amount);
+  const isLegendary = tier === 'legendary';
+  const isMega = tier === 'mega';
 
   useEffect(() => {
     const prefersReducedMotion =
@@ -140,14 +155,16 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
     const confetti: ConfettiPiece[] = [];
     const scheduledTimers: ReturnType<typeof setTimeout>[] = [];
 
+    const intensityScale = isLegendary ? 1.4 : isMega ? 1.2 : 1.0;
+    const activeConfettiColors = isLegendary ? LEGENDARY_PALETTE : CELEBRATION_PALETTE;
+
     const createFireworkBurst = (bx: number, by: number, scale: number = 1) => {
       const palette = FIREWORK_PALETTES[Math.floor(Math.random() * FIREWORK_PALETTES.length)];
-      const count = Math.floor((68 + Math.random() * 28) * scale);
+      const count = Math.floor((68 + Math.random() * 28) * scale * intensityScale);
 
-      // Core flash ring sparks
       for (let i = 0; i < count; i++) {
         const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.14;
-        const speed = (2.8 + Math.random() * 6.8) * scale;
+        const speed = (2.8 + Math.random() * 7.2) * scale;
         const color = palette[Math.floor(Math.random() * palette.length)];
         sparks.push({
           x: bx,
@@ -156,29 +173,29 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
           vy: Math.sin(angle) * speed,
           color,
           alpha: 1,
-          decay: 0.011 + Math.random() * 0.012,
-          size: 2.2 + Math.random() * 2.6,
+          decay: 0.01 + Math.random() * 0.011,
+          size: 2.3 + Math.random() * 2.8,
           gravity: 0.085,
           drag: 0.968,
-          twinkle: Math.random() > 0.35,
+          twinkle: Math.random() > 0.3,
           trail: [],
         });
       }
 
-      // Inner bright glitter ring
-      const innerCount = Math.floor(24 * scale);
+      // Inner bright glitter ring (double ring for Mega & Legendary)
+      const innerCount = Math.floor((isLegendary ? 36 : 24) * scale);
       for (let i = 0; i < innerCount; i++) {
         const angle = (Math.PI * 2 * i) / innerCount;
-        const speed = (1.6 + Math.random() * 1.9) * scale;
+        const speed = (1.6 + Math.random() * 2.2) * scale;
         sparks.push({
           x: bx,
           y: by,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          color: '#ffffff',
+          color: isLegendary ? '#fde047' : '#ffffff',
           alpha: 1,
-          decay: 0.018 + Math.random() * 0.014,
-          size: 1.8 + Math.random() * 1.6,
+          decay: 0.016 + Math.random() * 0.012,
+          size: 1.9 + Math.random() * 1.8,
           gravity: 0.05,
           drag: 0.955,
           twinkle: true,
@@ -188,16 +205,16 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
     };
 
     const launchRocket = (startXRatio?: number, targetYRatio?: number) => {
-      const x = (startXRatio ?? (0.14 + Math.random() * 0.72)) * width;
-      const targetY = (targetYRatio ?? (0.12 + Math.random() * 0.34)) * height;
+      const x = (startXRatio ?? (0.12 + Math.random() * 0.76)) * width;
+      const targetY = (targetYRatio ?? (0.1 + Math.random() * 0.34)) * height;
       const palette = FIREWORK_PALETTES[Math.floor(Math.random() * FIREWORK_PALETTES.length)];
       const travelDist = Math.max(160, height - targetY);
-      const speedY = -(10.5 + (travelDist / height) * 5.5 + Math.random() * 2.2);
+      const speedY = -(10.8 + (travelDist / height) * 5.8 + Math.random() * 2.2);
 
       rockets.push({
         x,
         y: height + 10,
-        vx: (Math.random() - 0.5) * 2.2,
+        vx: (Math.random() - 0.5) * 2.4,
         vy: speedY,
         targetY,
         color: palette[0],
@@ -207,36 +224,37 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
 
     const fireConfettiCannon = (side: 'left' | 'right' | 'center', count: number) => {
       const originX = side === 'left' ? -10 : side === 'right' ? width + 10 : width * 0.5;
-      const originY = side === 'center' ? height * 0.28 : height * 0.88;
+      const originY = side === 'center' ? height * 0.24 : height * 0.88;
 
       for (let i = 0; i < count; i++) {
         let angle: number;
         let speed: number;
         if (side === 'left') {
           angle = -Math.PI * (0.18 + Math.random() * 0.28);
-          speed = 11 + Math.random() * 13;
+          speed = 11.5 + Math.random() * 13.5;
         } else if (side === 'right') {
           angle = -Math.PI * (0.54 + Math.random() * 0.28);
-          speed = 11 + Math.random() * 13;
+          speed = 11.5 + Math.random() * 13.5;
         } else {
           angle = Math.random() * Math.PI * 2;
-          speed = 4 + Math.random() * 10;
+          speed = 4.5 + Math.random() * 11;
         }
 
         const shapeRoll = Math.random();
+        const starThreshold = isLegendary ? 0.65 : isMega ? 0.8 : 0.9;
         const shape: ConfettiPiece['shape'] =
-          shapeRoll < 0.52 ? 'rect' : shapeRoll < 0.78 ? 'ribbon' : shapeRoll < 0.92 ? 'star' : 'circle';
+          shapeRoll < 0.45 ? 'rect' : shapeRoll < starThreshold ? 'ribbon' : shapeRoll < 0.96 ? 'star' : 'circle';
 
         confetti.push({
           x: originX,
           y: originY,
           vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - (side === 'center' ? 3.5 : 1.5),
-          width: shape === 'ribbon' ? 5 + Math.random() * 4 : 7 + Math.random() * 7,
+          vy: Math.sin(angle) * speed - (side === 'center' ? 3.8 : 1.6),
+          width: shape === 'ribbon' ? 5 + Math.random() * 4 : 8 + Math.random() * 7,
           height: shape === 'ribbon' ? 14 + Math.random() * 10 : 5 + Math.random() * 5,
-          color: CELEBRATION_PALETTE[Math.floor(Math.random() * CELEBRATION_PALETTE.length)],
+          color: activeConfettiColors[Math.floor(Math.random() * activeConfettiColors.length)],
           rotation: Math.random() * Math.PI * 2,
-          rotationSpeed: (Math.random() - 0.5) * 0.22,
+          rotationSpeed: (Math.random() - 0.5) * 0.24,
           tiltAngle: Math.random() * Math.PI * 2,
           tiltSpeed: 0.08 + Math.random() * 0.14,
           swayPhase: Math.random() * Math.PI * 2,
@@ -251,18 +269,18 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
       for (let i = 0; i < count; i++) {
         const shapeRoll = Math.random();
         const shape: ConfettiPiece['shape'] =
-          shapeRoll < 0.55 ? 'rect' : shapeRoll < 0.8 ? 'ribbon' : shapeRoll < 0.93 ? 'star' : 'circle';
+          shapeRoll < 0.5 ? 'rect' : shapeRoll < 0.78 ? 'ribbon' : shapeRoll < 0.94 ? 'star' : 'circle';
 
         confetti.push({
           x: Math.random() * width,
           y: -20 - Math.random() * height * 0.35,
-          vx: (Math.random() - 0.5) * 2.4,
-          vy: 2.2 + Math.random() * 3.8,
+          vx: (Math.random() - 0.5) * 2.5,
+          vy: 2.3 + Math.random() * 4.0,
           width: shape === 'ribbon' ? 5 + Math.random() * 3 : 7 + Math.random() * 6,
           height: shape === 'ribbon' ? 13 + Math.random() * 9 : 5 + Math.random() * 5,
-          color: CELEBRATION_PALETTE[Math.floor(Math.random() * CELEBRATION_PALETTE.length)],
+          color: activeConfettiColors[Math.floor(Math.random() * activeConfettiColors.length)],
           rotation: Math.random() * Math.PI * 2,
-          rotationSpeed: (Math.random() - 0.5) * 0.16,
+          rotationSpeed: (Math.random() - 0.5) * 0.18,
           tiltAngle: Math.random() * Math.PI * 2,
           tiltSpeed: 0.06 + Math.random() * 0.12,
           swayPhase: Math.random() * Math.PI * 2,
@@ -273,30 +291,48 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
       }
     };
 
-    // Wave 1 (Immediate at t=0): Dual confetti cannons + instant sky bursts + rockets
-    fireConfettiCannon('left', 90);
-    fireConfettiCannon('right', 90);
-    spawnTopConfettiRain(85);
+    // Wave 1 (Immediate at t=0)
+    const initialCannon = isLegendary ? 130 : isMega ? 110 : 90;
+    fireConfettiCannon('left', initialCannon);
+    fireConfettiCannon('right', initialCannon);
+    if (isMega || isLegendary) {
+      fireConfettiCannon('center', isLegendary ? 95 : 65);
+    }
+    spawnTopConfettiRain(isLegendary ? 120 : isMega ? 100 : 85);
     createFireworkBurst(width * 0.24, height * 0.24, 1.15);
     createFireworkBurst(width * 0.76, height * 0.22, 1.15);
     launchRocket(0.5, 0.18);
 
-    // Choreographed multi-wave fireworks & confetti over the celebration duration
+    // Choreographed multi-wave fireworks & confetti escalating by tier
     const waveSchedule: { delay: number; action: () => void }[] = [
-      { delay: 240, action: () => createFireworkBurst(width * 0.5, height * 0.18, 1.25) },
+      { delay: 240, action: () => createFireworkBurst(width * 0.5, height * 0.17, 1.25) },
       { delay: 420, action: () => { launchRocket(0.18, 0.22); launchRocket(0.82, 0.20); } },
       { delay: 820, action: () => { fireConfettiCannon('left', 55); fireConfettiCannon('right', 55); } },
-      { delay: 980, action: () => { launchRocket(0.35, 0.16); launchRocket(0.66, 0.25); } },
-      { delay: 1450, action: () => { createFireworkBurst(width * 0.2, height * 0.28, 1.05); createFireworkBurst(width * 0.8, height * 0.26, 1.05); } },
-      { delay: 1900, action: () => { launchRocket(0.48, 0.15); spawnTopConfettiRain(60); } },
+      { delay: 980, action: () => { launchRocket(0.35, 0.16); launchRocket(0.66, 0.24); } },
+      { delay: 1450, action: () => { createFireworkBurst(width * 0.2, height * 0.28, 1.1); createFireworkBurst(width * 0.8, height * 0.26, 1.1); } },
+      { delay: 1900, action: () => { launchRocket(0.48, 0.15); spawnTopConfettiRain(65); } },
       { delay: 2450, action: () => { launchRocket(0.26, 0.20); launchRocket(0.74, 0.18); } },
-      { delay: 3000, action: () => { fireConfettiCannon('left', 45); fireConfettiCannon('right', 45); createFireworkBurst(width * 0.5, height * 0.22, 1.3); } },
+      { delay: 3000, action: () => { fireConfettiCannon('left', 50); fireConfettiCannon('right', 50); createFireworkBurst(width * 0.5, height * 0.21, 1.3); } },
       { delay: 3600, action: () => { launchRocket(0.32, 0.22); launchRocket(0.68, 0.20); } },
-      { delay: 4200, action: () => { createFireworkBurst(width * 0.25, height * 0.22, 1.1); createFireworkBurst(width * 0.75, height * 0.22, 1.1); } },
+      { delay: 4200, action: () => { createFireworkBurst(width * 0.25, height * 0.22, 1.15); createFireworkBurst(width * 0.75, height * 0.22, 1.15); } },
     ];
 
+    if (isMega || isLegendary) {
+      waveSchedule.push(
+        { delay: 4750, action: () => { fireConfettiCannon('center', 75); launchRocket(0.16, 0.18); launchRocket(0.5, 0.15); launchRocket(0.84, 0.18); } },
+        { delay: 5400, action: () => { createFireworkBurst(width * 0.3, height * 0.24, 1.25); createFireworkBurst(width * 0.7, height * 0.24, 1.25); } }
+      );
+    }
+
+    if (isLegendary) {
+      waveSchedule.push(
+        { delay: 5950, action: () => { fireConfettiCannon('left', 70); fireConfettiCannon('right', 70); launchRocket(0.22, 0.16); launchRocket(0.5, 0.14); launchRocket(0.78, 0.16); } },
+        { delay: 6600, action: () => { createFireworkBurst(width * 0.2, height * 0.2, 1.35); createFireworkBurst(width * 0.5, height * 0.17, 1.45); createFireworkBurst(width * 0.8, height * 0.2, 1.35); } }
+      );
+    }
+
     waveSchedule.forEach(({ delay, action }) => {
-      if (delay < durationMs - 800) {
+      if (delay < durationMs - 850) {
         scheduledTimers.push(setTimeout(action, delay));
       }
     });
@@ -319,7 +355,6 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
         r.y += r.vy;
         r.vy += 0.16;
 
-        // Draw rocket comet tail
         if (r.trail.length > 1) {
           ctx.save();
           ctx.beginPath();
@@ -341,7 +376,7 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
         }
 
         if (r.y <= r.targetY || r.vy >= -1.2) {
-          createFireworkBurst(r.x, r.y, 1.05 + Math.random() * 0.25);
+          createFireworkBurst(r.x, r.y, 1.05 + Math.random() * 0.3);
           rockets.splice(i, 1);
         }
       }
@@ -416,7 +451,7 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
         ctx.fillStyle = c.color;
 
         if (c.shape === 'star') {
-          drawStar(ctx, 0, 0, c.width * 0.65, c.width * 0.28);
+          drawStar(ctx, 0, 0, c.width * 0.68, c.width * 0.28);
         } else if (c.shape === 'circle') {
           ctx.beginPath();
           ctx.arc(0, 0, c.width * 0.45, 0, Math.PI * 2);
@@ -439,7 +474,7 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
       scheduledTimers.forEach((t) => clearTimeout(t));
       window.removeEventListener('resize', resize);
     };
-  }, [event.id, event.timestamp, durationMs]);
+  }, [event.id, event.timestamp, durationMs, isLegendary, isMega]);
 
   const getPaymentDisplay = (method: SaleFlashEvent['paymentMethod']) => {
     switch (method) {
@@ -460,6 +495,45 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
   const isSplit = Boolean(event.isSplit && event.splitSummary);
   const itemCount = event.basketItemCount && event.basketItemCount > 1 ? event.basketItemCount : 0;
 
+  // Escalating tier visual theme
+  const tierConfig = isLegendary
+    ? {
+        headline: 'LEGENDARY SALE! £500+ JACKPOT!',
+        subline: 'NEWTONS COLLECTABLES • Grand Jackpot Celebration',
+        cardBorder: 'border-yellow-300 ring-4 ring-fuchsia-400/45 shadow-[0_24px_95px_-10px_rgba(232,121,249,0.65)]',
+        glowBg: 'bg-[radial-gradient(circle_at_top,rgba(232,121,249,0.28),rgba(251,191,36,0.16)_40%,transparent_72%)]',
+        iconBg: 'bg-gradient-to-br from-yellow-200 via-amber-400 to-fuchsia-500 text-zinc-950 shadow-fuchsia-500/50',
+        heroBox: 'from-fuchsia-500/25 via-amber-400/20 to-zinc-900/95 border-yellow-300/70',
+        amountGrad: 'from-white via-yellow-200 to-fuchsia-300',
+        barGrad: 'from-fuchsia-400 via-yellow-300 to-cyan-300',
+        Icon: Crown,
+      }
+    : isMega
+    ? {
+        headline: 'MEGA SALE! OVER £250!',
+        subline: 'NEWTONS COLLECTABLES • Mega Counter Celebration',
+        cardBorder: 'border-amber-300 ring-4 ring-cyan-400/35 shadow-[0_24px_85px_-12px_rgba(34,211,238,0.55)]',
+        glowBg: 'bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.22),rgba(251,191,36,0.18)_40%,transparent_70%)]',
+        iconBg: 'bg-gradient-to-br from-cyan-300 via-amber-300 to-orange-500 text-zinc-950 shadow-cyan-500/40',
+        heroBox: 'from-cyan-400/20 via-amber-400/15 to-zinc-900/95 border-amber-300/60',
+        amountGrad: 'from-cyan-200 via-yellow-200 to-amber-400',
+        barGrad: 'from-cyan-300 via-amber-300 to-emerald-400',
+        Icon: Flame,
+      }
+    : {
+        headline: 'Massive Sale Over £100!',
+        subline: 'NEWTONS COLLECTABLES • Counter Celebration',
+        cardBorder: 'border-amber-400 ring-4 ring-amber-400/35 shadow-[0_24px_80px_-12px_rgba(251,191,36,0.55)]',
+        glowBg: 'bg-[radial-gradient(circle_at_top,rgba(251,191,36,0.22),transparent_62%)]',
+        iconBg: 'bg-gradient-to-br from-amber-300 via-yellow-400 to-orange-500 text-zinc-950 shadow-amber-500/40',
+        heroBox: 'from-amber-400/20 via-amber-500/10 to-zinc-900/90 border-amber-400/50',
+        amountGrad: 'from-amber-200 via-yellow-300 to-amber-400',
+        barGrad: 'from-amber-300 via-yellow-400 to-emerald-400',
+        Icon: Trophy,
+      };
+
+  const TierIcon = tierConfig.Icon;
+
   return (
     <>
       {/* Full-Screen Fireworks & Confetti Canvas Overlay */}
@@ -469,10 +543,10 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
         className="fixed inset-0 z-[110] pointer-events-none"
       />
 
-      {/* Subtle Golden Ambient Glow Vignette */}
+      {/* Ambient Celebratory Vignette */}
       <div
         aria-hidden="true"
-        className={`fixed inset-0 z-[105] pointer-events-none bg-[radial-gradient(circle_at_top,rgba(251,191,36,0.22),transparent_62%)] transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[105] pointer-events-none ${tierConfig.glowBg} transition-opacity duration-300 ${
           isFadingOut ? 'opacity-0' : 'opacity-100'
         }`}
       />
@@ -488,30 +562,31 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
       >
         <div
           onClick={onDismiss}
-          className="fanfare-pop pointer-events-auto relative overflow-hidden rounded-3xl bg-zinc-950/95 backdrop-blur-xl text-white shadow-[0_24px_80px_-12px_rgba(251,191,36,0.55)] border-2 border-amber-400 ring-4 ring-amber-400/35 cursor-pointer"
+          className={`fanfare-pop pointer-events-auto relative overflow-hidden rounded-3xl bg-zinc-950/95 backdrop-blur-xl text-white border-2 cursor-pointer ${tierConfig.cardBorder}`}
           title="Click to dismiss celebration"
         >
-          {/* Animated Gold Shimmer Sweep */}
+          {/* Animated Shimmer Sweep */}
           <div
             aria-hidden="true"
-            className="fanfare-shimmer pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-amber-300/20 to-transparent -skew-x-12"
+            className="fanfare-shimmer pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-amber-200/25 to-transparent -skew-x-12"
           />
 
           <div className="relative px-5 py-5 sm:px-7 sm:py-6 space-y-4">
             {/* Top Celebration Header */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-yellow-400 to-orange-500 text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-500/40 shrink-0">
-                  <Trophy className="w-5 h-5" />
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg shrink-0 ${tierConfig.iconBg}`}>
+                  <TierIcon className="w-6 h-6" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-amber-300 text-xs sm:text-sm font-black tracking-wide">
+                  <div className="flex items-center gap-1.5 text-amber-200 text-xs sm:text-sm font-black tracking-wide">
                     <PartyPopper className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="truncate">Massive Sale Over £100!</span>
+                    <span className="truncate">{tierConfig.headline}</span>
                     <Sparkles className="w-4 h-4 text-yellow-300 shrink-0" />
                   </div>
                   <p className="text-[11px] text-amber-100/80 font-semibold truncate">
-                    {itemCount > 0 ? `Big Basket Checkout (${itemCount} items)` : 'Counter Celebration • Synced Live'}
+                    {itemCount > 0 ? `Big Basket Checkout (${itemCount} items) • ` : ''}
+                    {tierConfig.subline}
                   </p>
                 </div>
               </div>
@@ -529,9 +604,15 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
               </button>
             </div>
 
-            {/* Hero Amount Callout */}
-            <div className="text-center py-2.5 px-4 rounded-2xl bg-gradient-to-b from-amber-400/20 via-amber-500/10 to-zinc-900/90 border border-amber-400/50">
-              <div className="text-4xl sm:text-5xl font-black tracking-tight tabular-nums text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 drop-shadow-sm">
+            {/* Hero Amount Callout + New Top Sale of the Day Ribbon */}
+            <div className={`text-center py-3 px-4 rounded-2xl bg-gradient-to-b border ${tierConfig.heroBox}`}>
+              {event.isTopSaleOfDay && (
+                <div className="inline-flex items-center gap-1.5 mb-1.5 text-[11px] font-black tracking-wide text-yellow-200">
+                  <Crown className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                  <span>New Top Sale of the Day!</span>
+                </div>
+              )}
+              <div className={`text-4xl sm:text-5xl font-black tracking-tight tabular-nums text-transparent bg-clip-text bg-gradient-to-r drop-shadow-sm ${tierConfig.amountGrad}`}>
                 {event.amount !== undefined ? `£${event.amount.toFixed(2)}` : '£100+'}
               </div>
               {event.itemDescription && (
@@ -586,7 +667,7 @@ export const BigSaleCelebration: React.FC<BigSaleCelebrationProps> = ({
             <div
               key={event.id + event.timestamp}
               style={{ transitionDuration: `${durationMs}ms` }}
-              className={`h-full transition-all ease-linear bg-gradient-to-r from-amber-300 via-yellow-400 to-emerald-400 ${
+              className={`h-full transition-all ease-linear bg-gradient-to-r ${tierConfig.barGrad} ${
                 progressWidth === '0%' ? 'w-0' : 'w-full'
               }`}
             />

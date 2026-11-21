@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Banknote, CreditCard, Globe, ArrowLeftRight, Sparkles, X, Volume2 } from 'lucide-react';
-import { SaleFlashEvent, subscribeToSaleFlash } from '../utils/sound';
+import { SaleFlashEvent, subscribeToSaleFlash, getCelebrationTier } from '../utils/sound';
 import { BigSaleCelebration } from './BigSaleCelebration';
 
 const FLASH_DURATION_MS = 3000;
 const BIG_SALE_DURATION_MS = 6500;
+const MEGA_SALE_DURATION_MS = 7500;
+const LEGENDARY_SALE_DURATION_MS = 8500;
 const FADE_OUT_MS = 300;
 
 export const SaleFlashBanner: React.FC = () => {
   const [activeFlash, setActiveFlash] = useState<SaleFlashEvent | null>(null);
+  const [activeDurationMs, setActiveDurationMs] = useState<number>(FLASH_DURATION_MS);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [progressWidth, setProgressWidth] = useState<'100%' | '0%'>('100%');
 
@@ -43,10 +46,20 @@ export const SaleFlashBanner: React.FC = () => {
   useEffect(() => {
     const unsubscribe = subscribeToSaleFlash((event) => {
       clearAllTimers();
-      const isBigSale = Boolean(event.isOver100 || (event.amount !== undefined && event.amount > 100));
-      const duration = isBigSale ? BIG_SALE_DURATION_MS : FLASH_DURATION_MS;
+      const tier = event.celebrationTier || getCelebrationTier(event.amount);
+      const isBigSale = tier !== 'standard' || Boolean(event.isOver100 || (event.amount !== undefined && event.amount > 100));
+      const resolvedTier = isBigSale && tier === 'standard' ? 'big' : tier;
+      const duration =
+        resolvedTier === 'legendary'
+          ? LEGENDARY_SALE_DURATION_MS
+          : resolvedTier === 'mega'
+          ? MEGA_SALE_DURATION_MS
+          : isBigSale
+          ? BIG_SALE_DURATION_MS
+          : FLASH_DURATION_MS;
 
-      setActiveFlash({ ...event, isOver100: isBigSale });
+      setActiveDurationMs(duration);
+      setActiveFlash({ ...event, isOver100: isBigSale, celebrationTier: resolvedTier });
       setIsFadingOut(false);
       setProgressWidth('100%');
 
@@ -79,7 +92,7 @@ export const SaleFlashBanner: React.FC = () => {
     return (
       <BigSaleCelebration
         event={activeFlash}
-        durationMs={BIG_SALE_DURATION_MS}
+        durationMs={activeDurationMs}
         isFadingOut={isFadingOut}
         progressWidth={progressWidth}
         onDismiss={dismissNow}

@@ -23,6 +23,17 @@ let keepAliveTimer: any = null;
 // Pre-rendered Audio Blob URLs for dual-engine playback (HTML5 Audio + Web Audio)
 let marioWavBlobUrl: string | null = null;
 let fanfareWavBlobUrl: string | null = null;
+let megaFanfareWavBlobUrl: string | null = null;
+let legendaryFanfareWavBlobUrl: string | null = null;
+
+export type CelebrationTier = 'standard' | 'big' | 'mega' | 'legendary';
+
+export function getCelebrationTier(amount?: number): CelebrationTier {
+  if (amount === undefined || isNaN(amount) || amount <= 100) return 'standard';
+  if (amount >= 500) return 'legendary';
+  if (amount >= 250) return 'mega';
+  return 'big';
+}
 
 /**
  * Helper to convert an AudioBuffer into a standard 16-bit PCM WAV Blob
@@ -106,7 +117,7 @@ async function preRenderSoundBlobs() {
   }
 
   try {
-    // 2. Render Massive Fanfare + Fireworks Audio (3.6s duration)
+    // 2. Render Tier 1 Big Fanfare + Fireworks Audio (3.6s duration)
     const fanfareOffline = new OfflineCtx(1, Math.floor(44100 * 3.6), 44100);
     renderFanfareToContext(fanfareOffline);
     const fanfareBuffer = await fanfareOffline.startRendering();
@@ -114,6 +125,26 @@ async function preRenderSoundBlobs() {
     fanfareWavBlobUrl = URL.createObjectURL(fanfareBlob);
   } catch (e) {
     console.warn('Could not pre-render Fanfare sound blob:', e);
+  }
+
+  try {
+    // 3. Render Tier 2 Mega Fanfare Audio (£250+, 4.6s duration)
+    const megaOffline = new OfflineCtx(1, Math.floor(44100 * 4.6), 44100);
+    renderMegaFanfareToContext(megaOffline);
+    const megaBuffer = await megaOffline.startRendering();
+    megaFanfareWavBlobUrl = URL.createObjectURL(audioBufferToWavBlob(megaBuffer));
+  } catch (e) {
+    console.warn('Could not pre-render Mega Fanfare sound blob:', e);
+  }
+
+  try {
+    // 4. Render Tier 3 Legendary Fanfare Audio (£500+, 5.6s duration)
+    const legOffline = new OfflineCtx(1, Math.floor(44100 * 5.6), 44100);
+    renderLegendaryFanfareToContext(legOffline);
+    const legBuffer = await legOffline.startRendering();
+    legendaryFanfareWavBlobUrl = URL.createObjectURL(audioBufferToWavBlob(legBuffer));
+  } catch (e) {
+    console.warn('Could not pre-render Legendary Fanfare sound blob:', e);
   }
 }
 
@@ -590,6 +621,221 @@ function renderFanfareToContext(ctx: BaseAudioContext) {
 }
 
 /**
+ * Helper: Reusable firework burst + timpani schedulers for Mega & Legendary Fanfares
+ */
+function scheduleExtraFireworkPop(ctx: BaseAudioContext, startOffset: number, intensity: number) {
+  const now = ctx.currentTime;
+  const duration = 0.36;
+  const sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+  const noiseBuffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+  const channel = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < sampleCount; i++) {
+    const env = Math.pow(1 - i / sampleCount, 2.0);
+    const crackle = Math.random() > 0.85 ? 1.6 : 0.55;
+    channel[i] = (Math.random() * 2 - 1) * env * crackle;
+  }
+
+  const noiseSrc = ctx.createBufferSource();
+  noiseSrc.buffer = noiseBuffer;
+
+  const bandFilter = ctx.createBiquadFilter();
+  bandFilter.type = 'bandpass';
+  bandFilter.frequency.setValueAtTime(1250 + Math.random() * 1100, now + startOffset);
+  bandFilter.Q.setValueAtTime(0.75, now + startOffset);
+
+  const popGain = ctx.createGain();
+  popGain.gain.setValueAtTime(0.0001, now + startOffset);
+  popGain.gain.linearRampToValueAtTime(0.26 * intensity, now + startOffset + 0.012);
+  popGain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + duration);
+
+  noiseSrc.connect(bandFilter);
+  bandFilter.connect(popGain);
+  popGain.connect(ctx.destination);
+  noiseSrc.start(now + startOffset);
+  noiseSrc.stop(now + startOffset + duration);
+
+  const boomOsc = ctx.createOscillator();
+  const boomGain = ctx.createGain();
+  boomOsc.type = 'sine';
+  boomOsc.frequency.setValueAtTime(145, now + startOffset);
+  boomOsc.frequency.exponentialRampToValueAtTime(34, now + startOffset + 0.2);
+  boomGain.gain.setValueAtTime(0.25 * intensity, now + startOffset);
+  boomGain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + 0.22);
+  boomOsc.connect(boomGain);
+  boomGain.connect(ctx.destination);
+  boomOsc.start(now + startOffset);
+  boomOsc.stop(now + startOffset + 0.23);
+}
+
+/**
+ * Tier 2 (£250+): Extended Mega Fanfare — modulates upward into triumphant D Major finale with richer harmony & fireworks
+ */
+function renderMegaFanfareToContext(ctx: BaseAudioContext) {
+  // Start with core fanfare
+  renderFanfareToContext(ctx);
+  const now = ctx.currentTime;
+
+  // Ascending key-change brass flourish at 1.95s -> D Major Finale!
+  const stepUp = [
+    { start: 1.95, dur: 0.13, lead: 587.33, harm: 440.00, gain: 0.22 }, // D5 + A4
+    { start: 2.09, dur: 0.13, lead: 739.99, harm: 587.33, gain: 0.23 }, // F#5 + D5
+    { start: 2.23, dur: 0.14, lead: 880.00, harm: 659.25, gain: 0.24 }, // A5 + E5
+    { start: 2.38, dur: 0.16, lead: 1108.73, harm: 880.00, gain: 0.25 }, // C#6 + A5
+  ];
+
+  stepUp.forEach(({ start, dur, lead, harm, gain }) => {
+    [
+      { freq: lead, type: 'sawtooth' as OscillatorType, amp: gain },
+      { freq: harm, type: 'triangle' as OscillatorType, amp: gain * 0.8 },
+    ].forEach(({ freq, type, amp }) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(3200, now + start);
+      filter.frequency.exponentialRampToValueAtTime(1600, now + start + dur);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + start);
+      g.gain.setValueAtTime(0.0001, now + start);
+      g.gain.linearRampToValueAtTime(amp, now + start + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.01);
+    });
+  });
+
+  // Grand D-Major Victory Chord at 2.56s
+  const megaChordStart = 2.56;
+  const megaChordDur = 1.9;
+  [
+    { freq: 293.66, type: 'triangle' as OscillatorType, gain: 0.19 }, // D4
+    { freq: 587.33, type: 'sawtooth' as OscillatorType, gain: 0.16 }, // D5
+    { freq: 739.99, type: 'sawtooth' as OscillatorType, gain: 0.15 }, // F#5
+    { freq: 880.00, type: 'sawtooth' as OscillatorType, gain: 0.16 }, // A5
+    { freq: 1174.66, type: 'square' as OscillatorType, gain: 0.12 },  // D6
+    { freq: 1760.00, type: 'sine' as OscillatorType, gain: 0.08 },    // A6
+    { freq: 2349.32, type: 'sine' as OscillatorType, gain: 0.08 },    // D7
+  ].forEach(({ freq, type, gain }) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(3900, now + megaChordStart);
+    filter.frequency.exponentialRampToValueAtTime(1300, now + megaChordStart + megaChordDur);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now + megaChordStart);
+    g.gain.setValueAtTime(0.0001, now + megaChordStart);
+    g.gain.linearRampToValueAtTime(gain, now + megaChordStart + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + megaChordStart + megaChordDur);
+    osc.connect(filter);
+    filter.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now + megaChordStart);
+    osc.stop(now + megaChordStart + megaChordDur + 0.02);
+  });
+
+  // Extra cascading sparkle bells & firework finale
+  [1174.66, 1479.98, 1760.0, 2217.46, 2349.32, 2959.96, 3520.0].forEach((freq, idx) => {
+    const t = 2.65 + idx * 0.065;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + t);
+    g.gain.setValueAtTime(0.0001, now + t);
+    g.gain.linearRampToValueAtTime(0.095, now + t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.6);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now + t);
+    osc.stop(now + t + 0.62);
+  });
+
+  scheduleExtraFireworkPop(ctx, 2.58, 1.05);
+  scheduleExtraFireworkPop(ctx, 3.15, 0.95);
+  scheduleExtraFireworkPop(ctx, 3.72, 1.0);
+  scheduleExtraFireworkPop(ctx, 4.15, 0.85);
+}
+
+/**
+ * Tier 3 (£500+): Legendary Jackpot Fanfare — soaring double-modulation stadium finale + epic firework barrage
+ */
+function renderLegendaryFanfareToContext(ctx: BaseAudioContext) {
+  renderMegaFanfareToContext(ctx);
+  const now = ctx.currentTime;
+
+  // Third heroic key lift at 3.45s -> E Major Royal Jackpot Finale!
+  const royalStep = [
+    { start: 3.45, dur: 0.13, lead: 659.25, harm: 493.88, gain: 0.23 }, // E5 + B4
+    { start: 3.59, dur: 0.13, lead: 830.61, harm: 659.25, gain: 0.24 }, // G#5 + E5
+    { start: 3.73, dur: 0.15, lead: 987.77, harm: 739.99, gain: 0.25 }, // B5 + F#5
+    { start: 3.89, dur: 0.16, lead: 1244.51, harm: 987.77, gain: 0.25 }, // D#6 + B5
+  ];
+
+  royalStep.forEach(({ start, dur, lead, harm, gain }) => {
+    [
+      { freq: lead, type: 'sawtooth' as OscillatorType, amp: gain },
+      { freq: harm, type: 'triangle' as OscillatorType, amp: gain * 0.8 },
+    ].forEach(({ freq, type, amp }) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(3600, now + start);
+      filter.frequency.exponentialRampToValueAtTime(1800, now + start + dur);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + start);
+      g.gain.setValueAtTime(0.0001, now + start);
+      g.gain.linearRampToValueAtTime(amp, now + start + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.01);
+    });
+  });
+
+  // Epic E-Major Stadium Finale Chord at 4.08s
+  const epicStart = 4.08;
+  const epicDur = 1.45;
+  [
+    { freq: 329.63, type: 'triangle' as OscillatorType, gain: 0.20 }, // E4
+    { freq: 659.25, type: 'sawtooth' as OscillatorType, gain: 0.16 }, // E5
+    { freq: 830.61, type: 'sawtooth' as OscillatorType, gain: 0.15 }, // G#5
+    { freq: 987.77, type: 'sawtooth' as OscillatorType, gain: 0.16 }, // B5
+    { freq: 1318.51, type: 'square' as OscillatorType, gain: 0.12 },  // E6
+    { freq: 1975.53, type: 'sine' as OscillatorType, gain: 0.09 },    // B6
+    { freq: 2637.02, type: 'sine' as OscillatorType, gain: 0.09 },    // E7
+  ].forEach(({ freq, type, gain }) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(4200, now + epicStart);
+    filter.frequency.exponentialRampToValueAtTime(1400, now + epicStart + epicDur);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now + epicStart);
+    g.gain.setValueAtTime(0.0001, now + epicStart);
+    g.gain.linearRampToValueAtTime(gain, now + epicStart + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + epicStart + epicDur);
+    osc.connect(filter);
+    filter.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now + epicStart);
+    osc.stop(now + epicStart + epicDur + 0.02);
+  });
+
+  // Rapid finale firework barrage
+  scheduleExtraFireworkPop(ctx, 4.10, 1.15);
+  scheduleExtraFireworkPop(ctx, 4.42, 1.05);
+  scheduleExtraFireworkPop(ctx, 4.78, 1.15);
+  scheduleExtraFireworkPop(ctx, 5.12, 1.0);
+}
+
+/**
  * Public methods to play sound effects directly
  */
 export function playMarioCoinSound(ctx?: AudioContext) {
@@ -602,20 +848,32 @@ export function playMarioCoinSound(ctx?: AudioContext) {
   }
 }
 
-export function playFanfareSound(ctx?: AudioContext) {
+export function playFanfareSound(ctx?: AudioContext, tier: CelebrationTier = 'big') {
   const targetCtx = ctx || getSharedAudioContext();
   if (targetCtx && targetCtx.state === 'running') {
-    renderFanfareToContext(targetCtx);
-  } else if (fanfareWavBlobUrl) {
-    const audio = new Audio(fanfareWavBlobUrl);
-    audio.play().catch(() => {});
+    if (tier === 'legendary') renderLegendaryFanfareToContext(targetCtx);
+    else if (tier === 'mega') renderMegaFanfareToContext(targetCtx);
+    else renderFanfareToContext(targetCtx);
+  } else {
+    const blobUrl =
+      tier === 'legendary'
+        ? legendaryFanfareWavBlobUrl || megaFanfareWavBlobUrl || fanfareWavBlobUrl
+        : tier === 'mega'
+        ? megaFanfareWavBlobUrl || fanfareWavBlobUrl
+        : fanfareWavBlobUrl;
+    if (blobUrl) {
+      const audio = new Audio(blobUrl);
+      audio.play().catch(() => {});
+    }
   }
 }
 
 /**
  * Plays sound across all connected devices whenever any sale is made!
- * - Mario getting coin from box sound for standard transactions
- * - Triumphant Fanfare sound for transactions over £100
+ * - Mario getting coin from box sound for standard transactions (<= £100)
+ * - Tier 1 Big Fanfare for > £100
+ * - Tier 2 Mega Fanfare for >= £250
+ * - Tier 3 Legendary Fanfare for >= £500
  *
  * Uses dual-engine playback (Web Audio + HTML5 Audio fallback) so sound is
  * 100% reliably heard across all phones, tablets, and computers.
@@ -640,9 +898,8 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
   }
   lastPlaybackTimestamp = nowMs;
 
-  const isOver100 = amount !== undefined && amount > 100;
+  const tier = getCelebrationTier(amount);
 
-  // Try HTML5 Audio fallback first if Web Audio is suspended
   const ctx = getSharedAudioContext();
 
   if (ctx && ctx.state === 'suspended') {
@@ -650,19 +907,29 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
   }
 
   if (ctx && ctx.state === 'running') {
-    if (isOver100) {
+    if (tier === 'legendary') {
+      renderLegendaryFanfareToContext(ctx);
+    } else if (tier === 'mega') {
+      renderMegaFanfareToContext(ctx);
+    } else if (tier === 'big') {
       renderFanfareToContext(ctx);
     } else {
       renderMarioCoinToContext(ctx);
     }
   } else {
     // If Web Audio is not running, play pre-rendered audio element
-    const targetUrl = isOver100 ? fanfareWavBlobUrl : marioWavBlobUrl;
+    const targetUrl =
+      tier === 'legendary'
+        ? legendaryFanfareWavBlobUrl || fanfareWavBlobUrl
+        : tier === 'mega'
+        ? megaFanfareWavBlobUrl || fanfareWavBlobUrl
+        : tier === 'big'
+        ? fanfareWavBlobUrl
+        : marioWavBlobUrl;
     if (targetUrl) {
       try {
         const audio = new Audio(targetUrl);
         audio.play().catch(() => {
-          // If browser blocked it, attempt to resume ctx
           if (ctx) ctx.resume().catch(() => {});
         });
       } catch {
@@ -680,9 +947,30 @@ export function testMarioSound() {
   playCheckoutSound(true, undefined, 50);
 }
 
+let testFanfareCycleIdx = 0;
+
 export function testFanfareSound() {
   unlockAudioContext();
-  playCheckoutSound(true, undefined, 150);
+  const demoTiers: { amount: number; label: string; isTop: boolean }[] = [
+    { amount: 125, label: 'Charizard ex SIR (Demo £100+ Tier)', isTop: false },
+    { amount: 275, label: 'PSA 10 Umbreon VMAX (Demo £250+ Mega Tier)', isTop: true },
+    { amount: 550, label: '1st Edition Booster Box (Demo £500+ Legendary Tier)', isTop: true },
+  ];
+  const sample = demoTiers[testFanfareCycleIdx % demoTiers.length];
+  testFanfareCycleIdx += 1;
+
+  playCheckoutSound(true, undefined, sample.amount);
+  emitSaleFlash({
+    id: `demo_fanfare_${Date.now()}`,
+    vendorName: 'Newtons',
+    vendorColor: '#7c3aed',
+    paymentMethod: 'card',
+    itemDescription: sample.label,
+    amount: sample.amount,
+    isOver100: true,
+    celebrationTier: getCelebrationTier(sample.amount),
+    isTopSaleOfDay: sample.isTop,
+  });
 }
 
 /**
@@ -735,6 +1023,8 @@ export interface SaleFlashEvent {
   itemDescription?: string;
   amount?: number;
   isOver100?: boolean;
+  celebrationTier?: CelebrationTier;
+  isTopSaleOfDay?: boolean;
   isSplit?: boolean;
   splitSummary?: string;
   basketItemCount?: number;
