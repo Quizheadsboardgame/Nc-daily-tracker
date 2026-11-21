@@ -45,6 +45,11 @@ import {
   DayEventInfo,
   EventVsShopComparison,
   EventDaySummaryItem,
+  GiftCardRecord,
+  GiftCardStatus,
+  GiftCardTransaction,
+  GiftCardTransactionType,
+  GiftCardsOverview,
 } from '../types';
 import {
   playCheckoutSound,
@@ -95,6 +100,8 @@ const STORAGE_STORE_CREDIT_TX_KEY = 'daily_sales_tracker_store_credit_tx_v6';
 const STORAGE_HOLDS_KEY = 'daily_sales_tracker_holds_v6';
 const STORAGE_DAY_EVENTS_KEY = 'daily_sales_tracker_day_events_v6';
 const STORAGE_COUNTER_PRESETS_KEY = 'daily_sales_tracker_counter_presets_v6';
+const STORAGE_GIFT_CARDS_KEY = 'daily_sales_tracker_gift_cards_v6';
+const STORAGE_GIFT_CARD_TX_KEY = 'daily_sales_tracker_gift_card_tx_v6';
 
 const DEFAULT_COUNTER_PRESETS: CounterPreset[] = [
   { id: 'preset_booster', label: 'Booster Pack', itemDescription: 'Booster Pack', price: 4.5, categoryColor: 'blue', sortOrder: 1 },
@@ -124,6 +131,14 @@ export function formatCurrency(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+export function isConnorVendor(vendorName?: string | null): boolean {
+  return (vendorName || '').trim().toLowerCase() === 'connor';
+}
+
+export function isValidFourDigitItemNumber(value?: string | null): boolean {
+  return /^\d{4}$/.test((value || '').trim());
 }
 
 export function formatDisplayDate(dateKey: string): string {
@@ -255,9 +270,12 @@ class CloudSalesDatabase {
   private holdsCache: Map<string, HoldRecord> = new Map();
   private dayEventsCache: Map<string, DayEventInfo> = new Map();
   private counterPresetsCache: Map<string, CounterPreset> = new Map();
+  private giftCardsCache: Map<string, GiftCardRecord> = new Map();
+  private giftCardTxCache: Map<string, GiftCardTransaction> = new Map();
   private salesmenList: string[] = [...DEFAULT_PRELOADED_SALESMEN];
   private vendorColors: Map<string, string> = new Map(Object.entries(DEFAULT_VENDOR_COLORS));
   private removedVendors: Set<string> = new Set(['kerion']);
+  private hasEnsuredPreloadedConnor: boolean = false;
   private listeners: Set<() => void> = new Set();
   public isCloudConnected: boolean = false;
   public lastSyncTimestamp: number = Date.now();
@@ -308,6 +326,13 @@ class CloudSalesDatabase {
         }
       }
       this.salesmenList = this.salesmenList.filter((n) => !this.removedVendors.has(n.trim().toLowerCase()));
+      if (
+        !this.removedVendors.has('connor') &&
+        !this.salesmenList.some((n) => n.trim().toLowerCase() === 'connor')
+      ) {
+        this.salesmenList.push('Connor');
+        this.salesmenList.sort();
+      }
 
       const storedColors = localStorage.getItem(STORAGE_VENDOR_COLORS_KEY);
       if (storedColors) {
@@ -437,6 +462,30 @@ class CloudSalesDatabase {
       } else {
         DEFAULT_COUNTER_PRESETS.forEach((p) => this.counterPresetsCache.set(p.id, { ...p }));
       }
+
+      const storedGiftCards = localStorage.getItem(STORAGE_GIFT_CARDS_KEY);
+      if (storedGiftCards) {
+        const parsedGiftCards = JSON.parse(storedGiftCards);
+        if (Array.isArray(parsedGiftCards)) {
+          for (const gc of parsedGiftCards) {
+            if (gc && gc.id) {
+              this.giftCardsCache.set(gc.id, gc);
+            }
+          }
+        }
+      }
+
+      const storedGiftCardTx = localStorage.getItem(STORAGE_GIFT_CARD_TX_KEY);
+      if (storedGiftCardTx) {
+        const parsedGiftCardTx = JSON.parse(storedGiftCardTx);
+        if (Array.isArray(parsedGiftCardTx)) {
+          for (const tx of parsedGiftCardTx) {
+            if (tx && tx.id) {
+              this.giftCardTxCache.set(tx.id, tx);
+            }
+          }
+        }
+      }
     } catch (e) {
       console.warn('Could not read localStorage cache:', e);
     }
@@ -474,6 +523,14 @@ class CloudSalesDatabase {
       localStorage.setItem(
         STORAGE_COUNTER_PRESETS_KEY,
         JSON.stringify(Array.from(this.counterPresetsCache.values()))
+      );
+      localStorage.setItem(
+        STORAGE_GIFT_CARDS_KEY,
+        JSON.stringify(Array.from(this.giftCardsCache.values()))
+      );
+      localStorage.setItem(
+        STORAGE_GIFT_CARD_TX_KEY,
+        JSON.stringify(Array.from(this.giftCardTxCache.values()))
       );
     } catch (e) {
       console.warn('Could not persist to localStorage:', e);
@@ -555,6 +612,29 @@ class CloudSalesDatabase {
               }
             }
           });
+
+          // Ensure preloaded vendor Connor exists in Firestore roster if not explicitly removed
+          if (
+            !this.removedVendors.has('connor') &&
+            !remoteNames.some((n) => n.trim().toLowerCase() === 'connor')
+          ) {
+            remoteNames.push('Connor');
+            if (!this.vendorColors.has('Connor')) {
+              this.vendorColors.set('Connor', DEFAULT_VENDOR_COLORS.Connor || '#dc2626');
+            }
+            if (!this.hasEnsuredPreloadedConnor) {
+              this.hasEnsuredPreloadedConnor = true;
+              setDoc(
+                doc(db, 'salesmen', 'connor'),
+                {
+                  name: 'Connor',
+                  color: this.vendorColors.get('Connor') || DEFAULT_VENDOR_COLORS.Connor || '#dc2626',
+                  createdAt: Date.now(),
+                },
+                { merge: true }
+              ).catch((e) => console.warn('Could not seed Connor into Firestore salesmen:', e));
+            }
+          }
 
           // Use remote documents from Firestore as authoritative active roster
           this.salesmenList = Array.from(new Set(remoteNames))
@@ -1011,6 +1091,99 @@ class CloudSalesDatabase {
         },
         (error) => {
           console.warn('Holds Firestore listener error:', error);
+        }
+      );
+
+      // 9. Real-time listener for Physical Gift Cards
+      const giftCardsCol = collection(db, 'gift_cards');
+      onSnapshot(
+        giftCardsCol,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
+          const remoteIds = new Set<string>();
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            remoteIds.add(docSnap.id);
+            const rawStatus = (data.status || 'active').toString().toLowerCase();
+            const status: GiftCardStatus =
+              rawStatus === 'void' ? 'void' : rawStatus === 'empty' ? 'empty' : 'active';
+            this.giftCardsCache.set(docSnap.id, {
+              id: docSnap.id,
+              barcode: String(data.barcode || docSnap.id),
+              balance: Math.round((Number(data.balance) || 0) * 100) / 100,
+              initialValue: Math.round((Number(data.initialValue) || 0) * 100) / 100,
+              totalLoaded: Math.round((Number(data.totalLoaded) || 0) * 100) / 100,
+              totalRedeemed: Math.round((Number(data.totalRedeemed) || 0) * 100) / 100,
+              status,
+              recipientName: data.recipientName || undefined,
+              notes: data.notes || undefined,
+              soldPaymentMethod: data.soldPaymentMethod || undefined,
+              soldVendorName: data.soldVendorName || undefined,
+              operatorName: data.operatorName || undefined,
+              createdAt: Number(data.createdAt) || Date.now(),
+              dateKey: data.dateKey || getLocalDateKey(new Date(Number(data.createdAt) || Date.now())),
+              updatedAt: Number(data.updatedAt) || Number(data.createdAt) || Date.now(),
+              lastUsedAt: data.lastUsedAt ? Number(data.lastUsedAt) : undefined,
+            });
+          });
+          for (const localId of Array.from(this.giftCardsCache.keys())) {
+            if (!remoteIds.has(localId)) {
+              this.giftCardsCache.delete(localId);
+            }
+          }
+          this.notify();
+        },
+        (error) => {
+          console.warn('Gift cards Firestore listener error:', error);
+        }
+      );
+
+      // 10. Real-time listener for Gift Card Transactions
+      const giftCardTxCol = collection(db, 'gift_card_transactions');
+      onSnapshot(
+        giftCardTxCol,
+        (snapshot) => {
+          this.isCloudConnected = true;
+          this.lastSyncTimestamp = Date.now();
+          const remoteTxIds = new Set<string>();
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            remoteTxIds.add(docSnap.id);
+            const rawType = (data.type || 'adjust').toString().toLowerCase();
+            const type: GiftCardTransactionType =
+              rawType === 'activate' ||
+              rawType === 'redeem' ||
+              rawType === 'topup' ||
+              rawType === 'void'
+                ? rawType
+                : 'adjust';
+            this.giftCardTxCache.set(docSnap.id, {
+              id: docSnap.id,
+              giftCardId: String(data.giftCardId || ''),
+              barcode: String(data.barcode || ''),
+              type,
+              amount: Math.round((Number(data.amount) || 0) * 100) / 100,
+              delta: Math.round((Number(data.delta) || 0) * 100) / 100,
+              balanceAfter: Math.round((Number(data.balanceAfter) || 0) * 100) / 100,
+              paymentMethod: data.paymentMethod || undefined,
+              vendorName: data.vendorName || undefined,
+              operatorName: data.operatorName || undefined,
+              description: data.description || '',
+              relatedSaleId: data.relatedSaleId || undefined,
+              dateKey: data.dateKey || getLocalDateKey(new Date(Number(data.timestamp) || Date.now())),
+              timestamp: Number(data.timestamp) || Date.now(),
+            });
+          });
+          for (const localId of Array.from(this.giftCardTxCache.keys())) {
+            if (!remoteTxIds.has(localId)) {
+              this.giftCardTxCache.delete(localId);
+            }
+          }
+          this.notify();
+        },
+        (error) => {
+          console.warn('Gift card transactions Firestore listener error:', error);
         }
       );
     } catch (e) {
@@ -4902,6 +5075,432 @@ class CloudSalesDatabase {
       ...rows.map((r) => r.join(',')),
       ...reconLines,
     ].join('\n');
+  }
+
+  // ==================== GIFT CARDS ====================
+
+  public getGiftCards(): GiftCardRecord[] {
+    return Array.from(this.giftCardsCache.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  public getGiftCardByBarcode(barcode: string): GiftCardRecord | undefined {
+    const clean = (barcode || '').trim().toLowerCase();
+    if (!clean) return undefined;
+    for (const card of this.giftCardsCache.values()) {
+      if (card.barcode.trim().toLowerCase() === clean) {
+        return card;
+      }
+    }
+    return undefined;
+  }
+
+  public getGiftCardTransactions(giftCardId?: string): GiftCardTransaction[] {
+    const all = Array.from(this.giftCardTxCache.values());
+    const filtered = giftCardId ? all.filter((tx) => tx.giftCardId === giftCardId) : all;
+    return filtered.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  public getGiftCardsOverview(): GiftCardsOverview {
+    let activeCardsCount = 0;
+    let emptyCardsCount = 0;
+    let voidCardsCount = 0;
+    let totalOutstandingBalance = 0;
+    let totalLifetimeLoaded = 0;
+    let totalLifetimeRedeemed = 0;
+
+    for (const card of this.giftCardsCache.values()) {
+      if (card.status === 'void') {
+        voidCardsCount += 1;
+      } else if (card.status === 'empty' || card.balance <= 0.004) {
+        emptyCardsCount += 1;
+      } else {
+        activeCardsCount += 1;
+        totalOutstandingBalance += card.balance;
+      }
+      totalLifetimeLoaded += card.totalLoaded || 0;
+      totalLifetimeRedeemed += card.totalRedeemed || 0;
+    }
+
+    return {
+      activeCardsCount,
+      emptyCardsCount,
+      voidCardsCount,
+      totalCardsCount: this.giftCardsCache.size,
+      totalOutstandingBalance: Math.round(totalOutstandingBalance * 100) / 100,
+      totalLifetimeLoaded: Math.round(totalLifetimeLoaded * 100) / 100,
+      totalLifetimeRedeemed: Math.round(totalLifetimeRedeemed * 100) / 100,
+    };
+  }
+
+  private async persistGiftCardAndTx(card: GiftCardRecord, tx?: GiftCardTransaction) {
+    this.giftCardsCache.set(card.id, card);
+    if (tx) {
+      this.giftCardTxCache.set(tx.id, tx);
+    }
+    this.notify();
+
+    try {
+      await setDoc(doc(db, 'gift_cards', card.id), {
+        barcode: card.barcode,
+        balance: card.balance,
+        initialValue: card.initialValue,
+        totalLoaded: card.totalLoaded,
+        totalRedeemed: card.totalRedeemed,
+        status: card.status,
+        recipientName: card.recipientName || null,
+        notes: card.notes || null,
+        soldPaymentMethod: card.soldPaymentMethod || null,
+        soldVendorName: card.soldVendorName || null,
+        operatorName: card.operatorName || null,
+        createdAt: card.createdAt,
+        dateKey: card.dateKey,
+        updatedAt: card.updatedAt,
+        lastUsedAt: card.lastUsedAt || null,
+      });
+
+      if (tx) {
+        await setDoc(doc(db, 'gift_card_transactions', tx.id), {
+          giftCardId: tx.giftCardId,
+          barcode: tx.barcode,
+          type: tx.type,
+          amount: tx.amount,
+          delta: tx.delta,
+          balanceAfter: tx.balanceAfter,
+          paymentMethod: tx.paymentMethod || null,
+          vendorName: tx.vendorName || null,
+          operatorName: tx.operatorName || null,
+          description: tx.description,
+          relatedSaleId: tx.relatedSaleId || null,
+          dateKey: tx.dateKey,
+          timestamp: tx.timestamp,
+        });
+      }
+    } catch (e) {
+      console.warn('Gift card saved locally; Firestore sync pending:', e);
+    }
+  }
+
+  public async activateGiftCard(input: {
+    barcode: string;
+    initialValue: number;
+    paymentMethod?: PaymentMethod;
+    recipientName?: string;
+    notes?: string;
+    recordAsSale?: boolean;
+    vendorName?: string;
+    dateKey?: string;
+  }): Promise<{ card: GiftCardRecord; transaction: GiftCardTransaction }> {
+    const cleanBarcode = input.barcode.trim();
+    if (!cleanBarcode) throw new Error('Barcode is required.');
+    const existing = this.getGiftCardByBarcode(cleanBarcode);
+    if (existing) {
+      throw new Error(`Gift card #${cleanBarcode} is already registered.`);
+    }
+
+    const val = Math.round(Number(input.initialValue) * 100) / 100;
+    if (isNaN(val) || val <= 0) throw new Error('Initial value must be greater than £0.00.');
+
+    const now = Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
+    const operatorName = getDeviceOperator() || undefined;
+    const cardId = `gc_${now}_${Math.random().toString(36).slice(2, 7)}`;
+
+    let relatedSaleId: string | undefined;
+    if (input.recordAsSale && input.vendorName?.trim()) {
+      const saleRec = await this.insertSale({
+        salesmanName: input.vendorName.trim(),
+        itemDescription: `Gift Card #${cleanBarcode}${input.recipientName?.trim() ? ` (${input.recipientName.trim()})` : ''}`,
+        amount: val,
+        paymentMethod: input.paymentMethod || 'card',
+        notes: input.notes?.trim() || 'Gift card activation',
+        operatorName,
+        dateKey,
+      });
+      relatedSaleId = saleRec.id;
+    }
+
+    const card: GiftCardRecord = {
+      id: cardId,
+      barcode: cleanBarcode,
+      balance: val,
+      initialValue: val,
+      totalLoaded: val,
+      totalRedeemed: 0,
+      status: 'active',
+      recipientName: input.recipientName?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      soldPaymentMethod: input.paymentMethod || 'card',
+      soldVendorName: input.vendorName?.trim() || undefined,
+      operatorName,
+      createdAt: now,
+      dateKey,
+      updatedAt: now,
+    };
+
+    const tx: GiftCardTransaction = {
+      id: `gctx_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      giftCardId: cardId,
+      barcode: cleanBarcode,
+      type: 'activate',
+      amount: val,
+      delta: val,
+      balanceAfter: val,
+      paymentMethod: input.paymentMethod || 'card',
+      vendorName: input.vendorName?.trim() || undefined,
+      operatorName,
+      description: `Activated gift card #${cleanBarcode}${input.recipientName?.trim() ? ` for ${input.recipientName.trim()}` : ''}`,
+      relatedSaleId,
+      dateKey,
+      timestamp: now,
+    };
+
+    await this.persistGiftCardAndTx(card, tx);
+    return { card, transaction: tx };
+  }
+
+  public async redeemGiftCard(
+    cardId: string,
+    input: {
+      amount: number;
+      description?: string;
+      vendorName?: string;
+      recordVendorRedemptionSale?: boolean;
+      dateKey?: string;
+    }
+  ): Promise<{ card: GiftCardRecord; transaction: GiftCardTransaction }> {
+    const existing = this.giftCardsCache.get(cardId);
+    if (!existing) throw new Error('Gift card not found.');
+    if (existing.status === 'void') throw new Error('This gift card is voided and cannot be redeemed.');
+
+    const val = Math.round(Number(input.amount) * 100) / 100;
+    if (isNaN(val) || val <= 0) throw new Error('Redemption amount must be greater than £0.00.');
+    if (val > existing.balance + 0.004) {
+      throw new Error(`Insufficient balance (${formatCurrency(existing.balance)} remaining).`);
+    }
+
+    const now = Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
+    const operatorName = getDeviceOperator() || undefined;
+    const newBalance = Math.max(0, Math.round((existing.balance - val) * 100) / 100);
+
+    let relatedSaleId: string | undefined;
+    if (input.recordVendorRedemptionSale && input.vendorName?.trim()) {
+      const saleRec = await this.insertSale({
+        salesmanName: input.vendorName.trim(),
+        itemDescription: input.description?.trim()
+          ? `${input.description.trim()} (Gift Card #${existing.barcode})`
+          : `Gift Card Redemption (#${existing.barcode})`,
+        amount: val,
+        paymentMethod: 'traded_out',
+        notes: `Paid by Gift Card #${existing.barcode}`,
+        operatorName,
+        dateKey,
+      });
+      relatedSaleId = saleRec.id;
+    }
+
+    const updated: GiftCardRecord = {
+      ...existing,
+      balance: newBalance,
+      totalRedeemed: Math.round(((existing.totalRedeemed || 0) + val) * 100) / 100,
+      status: newBalance <= 0.004 ? 'empty' : 'active',
+      updatedAt: now,
+      lastUsedAt: now,
+    };
+
+    const tx: GiftCardTransaction = {
+      id: `gctx_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      giftCardId: existing.id,
+      barcode: existing.barcode,
+      type: 'redeem',
+      amount: val,
+      delta: -val,
+      balanceAfter: newBalance,
+      vendorName: input.vendorName?.trim() || undefined,
+      operatorName,
+      description: input.description?.trim() || `Redeemed ${formatCurrency(val)}`,
+      relatedSaleId,
+      dateKey,
+      timestamp: now,
+    };
+
+    await this.persistGiftCardAndTx(updated, tx);
+    return { card: updated, transaction: tx };
+  }
+
+  public async topUpGiftCard(
+    cardId: string,
+    input: {
+      amount: number;
+      paymentMethod?: PaymentMethod;
+      description?: string;
+      recordAsSale?: boolean;
+      vendorName?: string;
+      dateKey?: string;
+    }
+  ): Promise<{ card: GiftCardRecord; transaction: GiftCardTransaction }> {
+    const existing = this.giftCardsCache.get(cardId);
+    if (!existing) throw new Error('Gift card not found.');
+    if (existing.status === 'void') throw new Error('Cannot top up a voided gift card.');
+
+    const val = Math.round(Number(input.amount) * 100) / 100;
+    if (isNaN(val) || val <= 0) throw new Error('Top-up amount must be greater than £0.00.');
+
+    const now = Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
+    const operatorName = getDeviceOperator() || undefined;
+    const newBalance = Math.round((existing.balance + val) * 100) / 100;
+
+    let relatedSaleId: string | undefined;
+    if (input.recordAsSale && input.vendorName?.trim()) {
+      const saleRec = await this.insertSale({
+        salesmanName: input.vendorName.trim(),
+        itemDescription: `Gift Card Top-Up #${existing.barcode}`,
+        amount: val,
+        paymentMethod: input.paymentMethod || 'card',
+        notes: input.description?.trim() || 'Gift card reload',
+        operatorName,
+        dateKey,
+      });
+      relatedSaleId = saleRec.id;
+    }
+
+    const updated: GiftCardRecord = {
+      ...existing,
+      balance: newBalance,
+      totalLoaded: Math.round(((existing.totalLoaded || 0) + val) * 100) / 100,
+      status: 'active',
+      updatedAt: now,
+      lastUsedAt: now,
+    };
+
+    const tx: GiftCardTransaction = {
+      id: `gctx_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      giftCardId: existing.id,
+      barcode: existing.barcode,
+      type: 'topup',
+      amount: val,
+      delta: val,
+      balanceAfter: newBalance,
+      paymentMethod: input.paymentMethod || 'card',
+      vendorName: input.vendorName?.trim() || undefined,
+      operatorName,
+      description: input.description?.trim() || `Reloaded +${formatCurrency(val)}`,
+      relatedSaleId,
+      dateKey,
+      timestamp: now,
+    };
+
+    await this.persistGiftCardAndTx(updated, tx);
+    return { card: updated, transaction: tx };
+  }
+
+  public async adjustGiftCardBalance(
+    cardId: string,
+    input: {
+      newBalance: number;
+      reason?: string;
+      recipientName?: string;
+      notes?: string;
+      dateKey?: string;
+    }
+  ): Promise<{ card: GiftCardRecord; transaction: GiftCardTransaction }> {
+    const existing = this.giftCardsCache.get(cardId);
+    if (!existing) throw new Error('Gift card not found.');
+
+    const target = Math.max(0, Math.round(Number(input.newBalance) * 100) / 100);
+    const delta = Math.round((target - existing.balance) * 100) / 100;
+    const now = Date.now();
+    const dateKey = input.dateKey || getLocalDateKey(new Date(now));
+    const operatorName = getDeviceOperator() || undefined;
+
+    const updated: GiftCardRecord = {
+      ...existing,
+      balance: target,
+      status: existing.status === 'void' ? 'void' : target <= 0.004 ? 'empty' : 'active',
+      recipientName: input.recipientName !== undefined ? input.recipientName.trim() || undefined : existing.recipientName,
+      notes: input.notes !== undefined ? input.notes.trim() || undefined : existing.notes,
+      updatedAt: now,
+    };
+
+    const tx: GiftCardTransaction = {
+      id: `gctx_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      giftCardId: existing.id,
+      barcode: existing.barcode,
+      type: 'adjust',
+      amount: Math.abs(delta),
+      delta,
+      balanceAfter: target,
+      operatorName,
+      description: input.reason?.trim() || `Manual balance adjustment to ${formatCurrency(target)}`,
+      dateKey,
+      timestamp: now,
+    };
+
+    await this.persistGiftCardAndTx(updated, tx);
+    return { card: updated, transaction: tx };
+  }
+
+  public async toggleVoidGiftCard(
+    cardId: string,
+    shouldVoid: boolean,
+    reason?: string
+  ): Promise<GiftCardRecord | undefined> {
+    const existing = this.giftCardsCache.get(cardId);
+    if (!existing) return undefined;
+
+    const now = Date.now();
+    const dateKey = getLocalDateKey(new Date(now));
+    const operatorName = getDeviceOperator() || undefined;
+    const nextStatus: GiftCardStatus = shouldVoid
+      ? 'void'
+      : existing.balance <= 0.004
+      ? 'empty'
+      : 'active';
+
+    const updated: GiftCardRecord = {
+      ...existing,
+      status: nextStatus,
+      updatedAt: now,
+    };
+
+    const tx: GiftCardTransaction = {
+      id: `gctx_${now}_${Math.random().toString(36).slice(2, 7)}`,
+      giftCardId: existing.id,
+      barcode: existing.barcode,
+      type: 'void',
+      amount: 0,
+      delta: 0,
+      balanceAfter: existing.balance,
+      operatorName,
+      description: shouldVoid
+        ? `Voided card${reason?.trim() ? `: ${reason.trim()}` : ''}`
+        : `Reactivated card${reason?.trim() ? `: ${reason.trim()}` : ''}`,
+      dateKey,
+      timestamp: now,
+    };
+
+    await this.persistGiftCardAndTx(updated, tx);
+    return updated;
+  }
+
+  public async deleteGiftCard(cardId: string): Promise<void> {
+    this.giftCardsCache.delete(cardId);
+    const txToDelete: string[] = [];
+    for (const [txId, tx] of this.giftCardTxCache.entries()) {
+      if (tx.giftCardId === cardId) {
+        this.giftCardTxCache.delete(txId);
+        txToDelete.push(txId);
+      }
+    }
+    this.notify();
+
+    try {
+      await deleteDoc(doc(db, 'gift_cards', cardId));
+      await Promise.all(txToDelete.map((txId) => deleteDoc(doc(db, 'gift_card_transactions', txId))));
+    } catch (e) {
+      console.warn('Gift card deleted locally; Firestore sync pending:', e);
+    }
   }
 }
 

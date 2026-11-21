@@ -7,7 +7,6 @@ import {
   Tag,
   Banknote,
   CreditCard,
-  Globe,
   ArrowLeftRight,
   CheckCircle2,
   AlertCircle,
@@ -25,7 +24,14 @@ import {
   Split,
 } from 'lucide-react';
 import { PaymentMethod, TradeType, BasketItemInput, SplitPaymentBreakdown } from '../types';
-import { cloudDb, formatCurrency, getLocalDateKey, formatDisplayDate } from '../db/cloudDatabase';
+import {
+  cloudDb,
+  formatCurrency,
+  getLocalDateKey,
+  formatDisplayDate,
+  isConnorVendor,
+  isValidFourDigitItemNumber,
+} from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
 import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
@@ -48,8 +54,8 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
   // Sale form states
   const [selectedVendor, setSelectedVendor] = useState<string>('');
-  const [itemDescription, setItemDescription] = useState<string>('');
-  const [isMiscellaneous, setIsMiscellaneous] = useState<boolean>(false);
+  const [itemDescription, setItemDescription] = useState<string>('Miscellaneous');
+  const [isMiscellaneous, setIsMiscellaneous] = useState<boolean>(true);
   const [amount, setAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<PaymentMethod | 'split'>('card');
   const [splitAmounts, setSplitAmounts] = useState<{
@@ -112,34 +118,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     v.toLowerCase().includes(tradeVendorSearch.toLowerCase().trim())
   );
 
-  // Reactive online cards availability (disables Online sale & Barcode scanning unless cards are online)
-  const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
-    () => cloudDb.getOnlineCardsSummary().availableCount
-  );
   const [frequentVendors, setFrequentVendors] = useState<string[]>(
     () => cloudDb.getFrequentVendors(3)
   );
-  const hasOnlineCards = availableOnlineCardsCount > 0;
 
   useEffect(() => {
     const syncDbState = () => {
-      setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
       setFrequentVendors(cloudDb.getFrequentVendors(3));
     };
     syncDbState();
     return cloudDb.subscribe(syncDbState);
   }, [knownVendors]);
-
-  useEffect(() => {
-    if (!hasOnlineCards) {
-      if (paymentMode === 'online') {
-        setPaymentMode('card');
-      }
-      if (splitAmounts.online) {
-        setSplitAmounts((prev) => ({ ...prev, online: '' }));
-      }
-    }
-  }, [hasOnlineCards, paymentMode, splitAmounts.online]);
 
   // Close vendor dropdown on outside click
   useEffect(() => {
@@ -156,6 +145,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   }, []);
 
   const handleToggleMisc = (checked: boolean) => {
+    if (isConnorVendor(selectedVendor)) {
+      setIsMiscellaneous(false);
+      return;
+    }
     setIsMiscellaneous(checked);
     if (checked) {
       setItemDescription('Miscellaneous');
@@ -174,11 +167,9 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
     if (!clean) return;
 
     await cloudDb.addVendor(clean);
-    setSelectedVendor(clean);
     setNewVendorName('');
     setIsAddingVendor(false);
-    setIsVendorDropdownOpen(false);
-    itemInputRef.current?.focus();
+    handleSelectVendor(clean);
   };
 
   const basketSubtotal = Math.round(basketItems.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
@@ -196,6 +187,33 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const splitRemaining = Math.round((checkoutTargetTotal - splitSum) * 100) / 100;
   const isSplitBalanced = Math.abs(splitRemaining) < 0.005 && checkoutTargetTotal > 0;
 
+  const isConnorSelected = isConnorVendor(selectedVendor);
+  const isConnorCodeValid = isValidFourDigitItemNumber(itemDescription);
+
+  const handleSelectVendor = (vendor: string) => {
+    setSelectedVendor(vendor);
+    setIsVendorDropdownOpen(false);
+    setVendorSearch('');
+    setFormError(null);
+
+    if (isConnorVendor(vendor)) {
+      setIsMiscellaneous(false);
+      if (!isValidFourDigitItemNumber(itemDescription)) {
+        setItemDescription('');
+      }
+      setTimeout(() => itemInputRef.current?.focus(), 50);
+      return;
+    }
+
+    setTimeout(() => {
+      if (isMiscellaneous || itemDescription.trim()) {
+        amountInputRef.current?.focus();
+      } else {
+        itemInputRef.current?.focus();
+      }
+    }, 50);
+  };
+
   const handleAddToBasket = () => {
     setFormError(null);
 
@@ -204,7 +222,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       return;
     }
 
-    const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+    if (isConnorVendor(selectedVendor)) {
+      if (isMiscellaneous || !isValidFourDigitItemNumber(itemDescription)) {
+        playSaleBeep(false);
+        setFormError('For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).');
+        return;
+      }
+    }
+
+    const finalItemDesc = !isConnorVendor(selectedVendor) && isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
     if (!finalItemDesc) {
       setFormError('Please enter an item description or tick Miscellaneous.');
       return;
@@ -220,16 +246,16 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       id: 'bkt_' + Math.random().toString(36).substring(2, 9),
       salesmanName: selectedVendor.trim(),
       itemDescription: finalItemDesc,
-      isMiscellaneous,
+      isMiscellaneous: !isConnorVendor(selectedVendor) && isMiscellaneous,
       amount: Math.round(parsedAmount * 100) / 100,
     };
 
     setBasketItems((prev) => [...prev, newItem]);
-    if (!isMiscellaneous) setItemDescription('');
+    if (!isMiscellaneous || isConnorVendor(selectedVendor)) setItemDescription('');
     setAmount('');
 
     setTimeout(() => {
-      if (isMiscellaneous) amountInputRef.current?.focus();
+      if (!isConnorVendor(selectedVendor) && isMiscellaneous) amountInputRef.current?.focus();
       else itemInputRef.current?.focus();
     }, 50);
   };
@@ -265,7 +291,15 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
         return;
       }
 
-      const finalItemDesc = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+      if (isConnorVendor(selectedVendor)) {
+        if (isMiscellaneous || !isValidFourDigitItemNumber(itemDescription)) {
+          playSaleBeep(false);
+          setFormError('For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).');
+          return;
+        }
+      }
+
+      const finalItemDesc = !isConnorVendor(selectedVendor) && isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
       if (!finalItemDesc) {
         setFormError('Please enter an item description or tick Miscellaneous.');
         return;
@@ -282,7 +316,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
           id: 'single_' + Date.now(),
           salesmanName: selectedVendor.trim(),
           itemDescription: finalItemDesc,
-          isMiscellaneous,
+          isMiscellaneous: !isConnorVendor(selectedVendor) && isMiscellaneous,
           amount: Math.round(parsedAmount * 100) / 100,
         },
       ];
@@ -354,8 +388,12 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       });
 
       setBasketItems([]);
-      if (!isMiscellaneous) {
+      if (isConnorVendor(selectedVendor)) {
+        setIsMiscellaneous(false);
         setItemDescription('');
+      } else {
+        setIsMiscellaneous(true);
+        setItemDescription('Miscellaneous');
       }
       setAmount('');
       setSplitAmounts({ cash: '', card: '', online: '', traded_out: '' });
@@ -368,10 +406,10 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       }, 5000);
 
       setTimeout(() => {
-        if (isMiscellaneous) {
-          amountInputRef.current?.focus();
-        } else {
+        if (isConnorVendor(selectedVendor)) {
           itemInputRef.current?.focus();
+        } else {
+          amountInputRef.current?.focus();
         }
       }, 100);
     } catch (err: any) {
@@ -715,16 +753,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                         key={vendor}
                         type="button"
                         id={`btn-pos-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                        onClick={() => {
-                          setSelectedVendor(vendor);
-                          setIsVendorDropdownOpen(false);
-                          setFormError(null);
-                          if (isMiscellaneous || itemDescription.trim()) {
-                            amountInputRef.current?.focus();
-                          } else {
-                            itemInputRef.current?.focus();
-                          }
-                        }}
+                        onClick={() => handleSelectVendor(vendor)}
                         className={`min-w-0 min-h-[40px] px-2.5 py-1.5 rounded-xl border-2 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-white text-zinc-950 border-emerald-400 ring-2 ring-emerald-400/50 shadow-md'
@@ -795,12 +824,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                         <button
                           key={vendor}
                           type="button"
-                          onClick={() => {
-                            setSelectedVendor(vendor);
-                            setIsVendorDropdownOpen(false);
-                            setVendorSearch('');
-                            itemInputRef.current?.focus();
-                          }}
+                          onClick={() => handleSelectVendor(vendor)}
                           className={`w-full px-3 py-2 rounded-xl text-left text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
                             selectedVendor === vendor
                               ? 'bg-emerald-500/20 text-emerald-300'
@@ -861,16 +885,37 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
             {/* 2. Item Description & Misc Toggle */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
-                  Item Description <span className="text-emerald-400">*</span>
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-300">
+                  <span>{isConnorSelected ? '4-Digit Item Number' : 'Item Description'}</span>
+                  <span className="text-emerald-400">*</span>
+                  {isConnorSelected && (
+                    <span className="text-[10px] font-black normal-case tracking-normal px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-200 border border-rose-400/60">
+                      Connor: 4 digits required
+                    </span>
+                  )}
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold cursor-pointer select-none">
+                <label
+                  title={
+                    isConnorSelected
+                      ? 'Miscellaneous cannot be used when Connor is selected — enter a 4-digit number'
+                      : 'Tick to record as Miscellaneous'
+                  }
+                  className={`flex items-center gap-1.5 text-xs font-semibold select-none ${
+                    isConnorSelected
+                      ? 'text-zinc-500 cursor-not-allowed line-through opacity-70'
+                      : 'text-zinc-300 cursor-pointer'
+                  }`}
+                >
                   <input
                     type="checkbox"
-                    checked={isMiscellaneous}
-                    onChange={(e) => handleToggleMisc(e.target.checked)}
-                    className="w-4 h-4 rounded-md border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                    checked={isConnorSelected ? false : isMiscellaneous}
+                    disabled={isConnorSelected}
+                    onChange={(e) => {
+                      if (isConnorSelected) return;
+                      handleToggleMisc(e.target.checked);
+                    }}
+                    className="w-4 h-4 rounded-md border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 cursor-pointer disabled:cursor-not-allowed"
                   />
                   <span>Miscellaneous Sale</span>
                 </label>
@@ -881,16 +926,44 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                 <input
                   ref={itemInputRef}
                   type="text"
-                  disabled={isMiscellaneous}
+                  inputMode={isConnorSelected ? 'numeric' : undefined}
+                  maxLength={isConnorSelected ? 4 : undefined}
+                  pattern={isConnorSelected ? '[0-9]{4}' : undefined}
+                  disabled={!isConnorSelected && isMiscellaneous}
                   value={itemDescription}
-                  onChange={(e) => setItemDescription(e.target.value)}
-                  placeholder={isMiscellaneous ? 'Miscellaneous' : 'e.g. Charizard Base Set, Boosters, Slab...'}
-                  className={`w-full pl-10 pr-4 py-3 text-sm font-bold rounded-2xl border transition-all ${
-                    isMiscellaneous
+                  onChange={(e) => {
+                    const nextVal = isConnorSelected
+                      ? e.target.value.replace(/\D/g, '').slice(0, 4)
+                      : e.target.value;
+                    setItemDescription(nextVal);
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder={
+                    isConnorSelected
+                      ? 'Enter 4-digit number (e.g. 1234)'
+                      : isMiscellaneous
+                      ? 'Miscellaneous'
+                      : 'e.g. Charizard Base Set, Boosters, Slab...'
+                  }
+                  className={`w-full pl-10 ${isConnorSelected ? 'pr-20 font-mono tracking-widest' : 'pr-4'} py-3 text-sm font-bold rounded-2xl border transition-all ${
+                    !isConnorSelected && isMiscellaneous
                       ? 'bg-zinc-800 text-zinc-400 border-zinc-700 cursor-not-allowed'
+                      : isConnorSelected && isConnorCodeValid
+                      ? 'bg-zinc-950 border-emerald-400 text-white placeholder-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500'
                       : 'bg-zinc-950 border-zinc-700 text-white placeholder-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500'
                   }`}
                 />
+                {isConnorSelected && (
+                  <span
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-black px-2 py-0.5 rounded-lg tabular-nums border ${
+                      isConnorCodeValid
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60'
+                        : 'bg-amber-500/20 text-amber-200 border-amber-400/60'
+                    }`}
+                  >
+                    {itemDescription.trim().length}/4{isConnorCodeValid ? ' ✓' : ''}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -993,7 +1066,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-200 mb-2">
                 Payment Method <span className="text-emerald-400">*</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <button
                   type="button"
                   id="btn-pos-method-cash"
@@ -1030,49 +1103,6 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
 
                 <button
                   type="button"
-                  id="btn-pos-method-online"
-                  disabled={!hasOnlineCards}
-                  onClick={() => hasOnlineCards && setPaymentMode('online')}
-                  title={
-                    hasOnlineCards
-                      ? 'Sold online via website, socials, or marketplace'
-                      : 'Disabled: add cards in Online Cards first to record online sales'
-                  }
-                  className={`p-3 rounded-2xl border-2 text-left transition-all flex flex-col justify-between gap-1.5 ${
-                    !hasOnlineCards
-                      ? 'bg-zinc-950 border-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed'
-                      : paymentMode === 'online'
-                      ? 'bg-gradient-to-br from-violet-400 to-purple-500 border-violet-200 ring-2 ring-violet-400/40 text-zinc-950 shadow-lg shadow-violet-500/35 cursor-pointer'
-                      : 'bg-violet-500/15 border-violet-400/60 text-violet-100 hover:bg-violet-500/25 hover:border-violet-300 cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-wider">Online</span>
-                    <Globe
-                      className={`w-4 h-4 ${
-                        !hasOnlineCards
-                          ? 'text-zinc-600'
-                          : paymentMode === 'online'
-                          ? 'text-zinc-950'
-                          : 'text-violet-300'
-                      }`}
-                    />
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold ${
-                      !hasOnlineCards
-                        ? 'text-zinc-500'
-                        : paymentMode === 'online'
-                        ? 'text-zinc-900'
-                        : 'text-violet-300'
-                    }`}
-                  >
-                    {hasOnlineCards ? 'Web order' : 'No cards online'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
                   id="btn-pos-method-traded-out"
                   onClick={() => setPaymentMode('traded_out')}
                   className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
@@ -1092,7 +1122,7 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   type="button"
                   id="btn-pos-method-split"
                   onClick={() => setPaymentMode('split')}
-                  className={`col-span-2 sm:col-span-1 p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                     paymentMode === 'split'
                       ? 'bg-gradient-to-br from-cyan-400 to-teal-400 border-cyan-200 ring-2 ring-cyan-400/40 text-zinc-950 shadow-lg shadow-cyan-500/35'
                       : 'bg-cyan-500/15 border-cyan-400/60 text-cyan-100 hover:bg-cyan-500/25 hover:border-cyan-300'
@@ -1142,57 +1172,46 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {(
                     [
                       { key: 'cash', label: 'Cash (£)' },
                       { key: 'card', label: 'Card (£)' },
-                      { key: 'online', label: 'Online (£)' },
                       { key: 'traded_out', label: 'Trade Out (£)' },
                     ] as const
-                  ).map(({ key, label }) => {
-                    const isOnlineDisabled = key === 'online' && !hasOnlineCards;
-                    return (
-                      <div
-                        key={key}
-                        className={`bg-zinc-950 rounded-xl border p-2.5 space-y-1.5 ${
-                          isOnlineDisabled ? 'border-zinc-800 opacity-50' : 'border-cyan-500/40'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <label className="text-[11px] font-bold text-zinc-200">
-                            {isOnlineDisabled ? 'Online (Off)' : label}
-                          </label>
-                          {checkoutTargetTotal > 0 && !isOnlineDisabled && (
-                            <button
-                              type="button"
-                              onClick={() => handleFillRemainder(key)}
-                              className="text-[10px] font-extrabold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 px-1.5 py-0.5 rounded cursor-pointer"
-                            >
-                              Rem
-                            </button>
-                          )}
-                        </div>
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            disabled={isOnlineDisabled}
-                            value={isOnlineDisabled ? '' : splitAmounts[key]}
-                            onChange={(e) => setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
-                            placeholder={isOnlineDisabled ? '0 cards' : '0.00'}
-                            className={`w-full pl-6 pr-2 py-1.5 text-sm font-black tabular-nums rounded-lg border bg-zinc-900 text-white focus:outline-hidden ${
-                              isOnlineDisabled
-                                ? 'border-zinc-800 text-zinc-500 cursor-not-allowed'
-                                : 'border-zinc-700 focus:border-cyan-400'
-                            }`}
-                          />
-                        </div>
+                  ).map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className="bg-zinc-950 rounded-xl border border-cyan-500/40 p-2.5 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <label className="text-[11px] font-bold text-zinc-200">
+                          {label}
+                        </label>
+                        {checkoutTargetTotal > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleFillRemainder(key)}
+                            className="text-[10px] font-extrabold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 px-1.5 py-0.5 rounded cursor-pointer"
+                          >
+                            Rem
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-2 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={splitAmounts[key]}
+                          onChange={(e) => setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
+                          placeholder="0.00"
+                          className="w-full pl-6 pr-2 py-1.5 text-sm font-black tabular-nums rounded-lg border border-zinc-700 focus:border-cyan-400 bg-zinc-900 text-white focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

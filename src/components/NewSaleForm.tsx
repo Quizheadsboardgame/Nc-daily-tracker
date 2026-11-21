@@ -8,22 +8,17 @@ import {
   Plus,
   Users,
   X,
-  Globe,
-  BookOpen,
-  ShoppingBag,
-  Boxes,
   Sparkles,
-  Layers,
   Volume2,
   VolumeX,
   ShoppingCart,
   Trash2,
   Split,
   Percent,
-  Package,
+  ChevronDown,
 } from 'lucide-react';
 import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
-import { cloudDb, formatCurrency } from '../db/cloudDatabase';
+import { cloudDb, formatCurrency, isConnorVendor, isValidFourDigitItemNumber } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
 import { useCheckoutSound } from '../utils/sound';
 import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
@@ -87,8 +82,8 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const { soundEnabled, toggle: toggleSound } = useCheckoutSound();
 
   const [vendorName, setVendorName] = useState('');
-  const [itemDescription, setItemDescription] = useState('');
-  const [isMiscellaneous, setIsMiscellaneous] = useState(false);
+  const [itemDescription, setItemDescription] = useState('Miscellaneous');
+  const [isMiscellaneous, setIsMiscellaneous] = useState(true);
   const [amount, setAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMethod | 'split'>('card');
   const [splitAmounts, setSplitAmounts] = useState<{
@@ -105,7 +100,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     amountToUse: number;
   } | null>(null);
   const [activeDiscount, setActiveDiscount] = useState<DiscountSelection>(null);
-  const [customDealMode, setCustomDealMode] = useState<'flat' | 'bundle'>('flat');
+  const [customDealMode, setCustomDealMode] = useState<'none' | 'flat' | 'bundle'>('none');
   const [customDealInput, setCustomDealInput] = useState('');
 
   const [showSuccessBadge, setShowSuccessBadge] = useState(false);
@@ -119,33 +114,17 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const itemInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
-  const [availableOnlineCardsCount, setAvailableOnlineCardsCount] = useState<number>(
-    () => cloudDb.getOnlineCardsSummary().availableCount
-  );
   const [frequentVendors, setFrequentVendors] = useState<string[]>(
     () => cloudDb.getFrequentVendors(3)
   );
-  const hasOnlineCards = availableOnlineCardsCount > 0;
 
   useEffect(() => {
     const syncDbState = () => {
-      setAvailableOnlineCardsCount(cloudDb.getOnlineCardsSummary().availableCount);
       setFrequentVendors(cloudDb.getFrequentVendors(3));
     };
     syncDbState();
     return cloudDb.subscribe(syncDbState);
   }, [knownVendors]);
-
-  useEffect(() => {
-    if (!hasOnlineCards) {
-      if (paymentMode === 'online') {
-        setPaymentMode('card');
-      }
-      if (splitAmounts.online) {
-        setSplitAmounts((prev) => ({ ...prev, online: '' }));
-      }
-    }
-  }, [hasOnlineCards, paymentMode, splitAmounts.online]);
 
   const basketSubtotal = useMemo(
     () => Math.round(basketItems.reduce((sum, item) => sum + item.amount, 0) * 100) / 100,
@@ -171,7 +150,45 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const splitRemaining = Math.round((checkoutTargetTotal - splitSum) * 100) / 100;
   const isSplitBalanced = Math.abs(splitRemaining) < 0.005 && checkoutTargetTotal > 0;
 
+  const isConnorSelected = isConnorVendor(vendorName);
+  const isConnorCodeValid = isValidFourDigitItemNumber(itemDescription);
+
+  const handleSelectVendor = (val: string, focusAfter = false) => {
+    setVendorName(val);
+    if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
+
+    if (isConnorVendor(val)) {
+      setIsMiscellaneous(false);
+      if (!isValidFourDigitItemNumber(itemDescription)) {
+        setItemDescription('');
+      }
+      if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
+      setTimeout(() => {
+        itemInputRef.current?.focus();
+      }, 50);
+      return;
+    }
+
+    if (focusAfter) {
+      if (isMiscellaneous || itemDescription.trim()) {
+        amountInputRef.current?.focus();
+      } else {
+        itemInputRef.current?.focus();
+      }
+    }
+  };
+
   const handleToggleMisc = (checked: boolean) => {
+    if (isConnorSelected && checked) {
+      setIsMiscellaneous(false);
+      setErrors((prev) => ({
+        ...prev,
+        item: 'For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).',
+      }));
+      setTimeout(() => itemInputRef.current?.focus(), 50);
+      return;
+    }
+
     setIsMiscellaneous(checked);
     if (checked) {
       setItemDescription('Miscellaneous');
@@ -201,12 +218,43 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     return '';
   };
 
-  const handleSelectQuickCategory = (category: 'misc' | 'comics' | 'accessories' | 'packs') => {
+  const handleSelectQuickCategory = (category: 'misc' | 'comics' | 'accessories' | 'packs' | 'custom') => {
     if (category === 'misc') {
+      if (isConnorSelected) {
+        setErrors((prev) => ({
+          ...prev,
+          item: 'For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).',
+        }));
+        setTimeout(() => itemInputRef.current?.focus(), 50);
+        return;
+      }
       setIsMiscellaneous(true);
       setItemDescription('Miscellaneous');
       if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
       setTimeout(() => amountInputRef.current?.focus(), 50);
+      return;
+    }
+
+    if (category === 'packs' && isConnorSelected) {
+      setErrors((prev) => ({
+        ...prev,
+        item: 'For Connor, enter a 4-digit item number (e.g. 1234).',
+      }));
+      setTimeout(() => itemInputRef.current?.focus(), 50);
+      return;
+    }
+
+    if (category === 'custom') {
+      setIsMiscellaneous(false);
+      if (
+        itemDescription === 'Miscellaneous' ||
+        itemDescription === 'Comics' ||
+        itemDescription === 'Accessories' ||
+        itemDescription === 'Packs'
+      ) {
+        setItemDescription('');
+      }
+      setTimeout(() => itemInputRef.current?.focus(), 50);
       return;
     }
 
@@ -233,6 +281,93 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     }
   };
 
+  const selectedQuickCategoryValue: 'misc' | 'comics' | 'accessories' | 'packs' | 'custom' = isMiscellaneous
+    ? 'misc'
+    : itemDescription.toLowerCase() === 'comics'
+    ? 'comics'
+    : itemDescription.toLowerCase() === 'accessories'
+    ? 'accessories'
+    : itemDescription.toLowerCase() === 'packs'
+    ? 'packs'
+    : 'custom';
+
+  const selectedDiscountDropdownValue = (() => {
+    if (customDealMode === 'flat') return 'custom-flat';
+    if (customDealMode === 'bundle') return 'custom-bundle';
+    if (!activeDiscount) return 'none';
+    if (activeDiscount.kind === 'percent') return `pct-${activeDiscount.value}`;
+    if (activeDiscount.kind === 'flat') {
+      const isPreset = (QUICK_DISCOUNT_FLATS as readonly number[]).includes(activeDiscount.value);
+      return isPreset ? `flat-${activeDiscount.value}` : 'custom-flat';
+    }
+    if (activeDiscount.kind === 'bundle') {
+      const match = QUICK_BUNDLE_PRESETS.find((b) => b.price === activeDiscount.targetPrice);
+      return match ? `bundle-${match.price}` : 'custom-bundle';
+    }
+    return 'none';
+  })();
+
+  const handleSelectQuickDiscount = (value: string) => {
+    if (value === 'none') {
+      setActiveDiscount(null);
+      setCustomDealMode('none');
+      setCustomDealInput('');
+      return;
+    }
+
+    if (value === 'custom-flat') {
+      setCustomDealMode('flat');
+      return;
+    }
+
+    if (value === 'custom-bundle') {
+      setCustomDealMode('bundle');
+      return;
+    }
+
+    setCustomDealMode('none');
+    setCustomDealInput('');
+
+    if (value.startsWith('pct-')) {
+      const pct = Number(value.replace('pct-', ''));
+      if (pct > 0) {
+        setActiveDiscount({ kind: 'percent', value: pct, label: `${pct}% Off` });
+      }
+      return;
+    }
+
+    if (value.startsWith('flat-')) {
+      const amt = Number(value.replace('flat-', ''));
+      if (amt > 0) {
+        setActiveDiscount({ kind: 'flat', value: amt, label: `-£${amt} Off` });
+      }
+      return;
+    }
+
+    if (value.startsWith('bundle-')) {
+      const targetPrice = Number(value.replace('bundle-', ''));
+      const bundle = QUICK_BUNDLE_PRESETS.find((b) => b.price === targetPrice);
+      if (!bundle) return;
+
+      if (basketItems.length === 0 && currentFieldAmount <= 0) {
+        if (!itemDescription.trim() && !isMiscellaneous) {
+          setItemDescription(`Bundle (${bundle.label})`);
+        }
+        setAmount(bundle.price.toFixed(2));
+        setActiveDiscount(null);
+        if (errors.item || errors.amount) {
+          setErrors((prev) => ({ ...prev, item: '', amount: '' }));
+        }
+      } else {
+        setActiveDiscount({
+          kind: 'bundle',
+          targetPrice: bundle.price,
+          label: `Bundle: ${bundle.label}`,
+        });
+      }
+    }
+  };
+
   const validateCurrentItemFields = (): boolean => {
     const errs: { [key: string]: string } = {};
 
@@ -240,7 +375,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       errs.vendor = 'Please select a vendor from the dropdown';
     }
 
-    if (!isMiscellaneous && !itemDescription.trim()) {
+    if (isConnorVendor(vendorName)) {
+      if (isMiscellaneous || !isValidFourDigitItemNumber(itemDescription)) {
+        errs.item = 'For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).';
+      }
+    } else if (!isMiscellaneous && !itemDescription.trim()) {
       errs.item = 'Item description is required (or tick Miscellaneous)';
     }
 
@@ -467,13 +606,18 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         setShowSuccessBadge(false);
       }, 3500);
 
-      // Reset form & basket
+      // Reset form & basket (keep 4-digit prompt if Connor remains selected; otherwise default back to Miscellaneous)
       setBasketItems([]);
       setStoreCreditSelection(null);
       setActiveDiscount(null);
+      setCustomDealMode('none');
       setCustomDealInput('');
-      if (!isMiscellaneous) {
+      if (isConnorVendor(vendorName)) {
+        setIsMiscellaneous(false);
         setItemDescription('');
+      } else {
+        setIsMiscellaneous(true);
+        setItemDescription('Miscellaneous');
       }
       setAmount('');
       setNotes('');
@@ -482,10 +626,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       setErrors({});
 
       setTimeout(() => {
-        if (isMiscellaneous) {
-          amountInputRef.current?.focus();
-        } else {
+        if (isConnorVendor(vendorName)) {
           itemInputRef.current?.focus();
+        } else {
+          amountInputRef.current?.focus();
         }
       }, 50);
     } catch (err: any) {
@@ -512,12 +656,9 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     } else {
       cloudDb.addVendor(clean);
     }
-    setVendorName(clean);
+    handleSelectVendor(clean, false);
     setInlineVendorName('');
     setIsAddingInline(false);
-    if (errors.vendor) {
-      setErrors((prev) => ({ ...prev, vendor: '' }));
-    }
   };
 
   const hasUnsavedItemInput =
@@ -581,90 +722,42 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       </div>
 
       <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 space-y-4">
-        {/* Quick Category Buttons */}
-        <div className="space-y-1.5 pb-2 border-b border-zinc-100">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+        {/* Quick Category Dropdown */}
+        <div className="pb-2.5 border-b border-zinc-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <label
+              htmlFor="select-quick-category"
+              className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 shrink-0"
+            >
               <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span>Quick Categories</span>
-            </span>
-            <span className="text-[10px] text-zinc-400 font-medium hidden xs:inline">
-              1-tap item & auto-vendor
-            </span>
-          </div>
+            </label>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              type="button"
-              id="btn-form-quick-misc"
-              onClick={() => handleSelectQuickCategory('misc')}
-              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                isMiscellaneous
-                  ? 'bg-zinc-900 border-zinc-900 text-white shadow-xs ring-2 ring-zinc-900/20'
-                  : 'bg-zinc-50 border-zinc-200 hover:border-zinc-300 text-zinc-800'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] sm:text-xs font-black truncate">Miscellaneous</span>
-                <Layers className={`w-3.5 h-3.5 shrink-0 ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`} />
-              </div>
-              <span className={`text-[10px] font-semibold truncate ${isMiscellaneous ? 'text-zinc-300' : 'text-zinc-500'}`}>Any vendor</span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-form-quick-comics"
-              onClick={() => handleSelectQuickCategory('comics')}
-              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                !isMiscellaneous && itemDescription.toLowerCase() === 'comics'
-                  ? 'bg-emerald-950 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-500/20'
-                  : 'bg-emerald-50/50 border-emerald-200 hover:border-emerald-300 text-zinc-800'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] sm:text-xs font-black truncate">Comics</span>
-                <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              </div>
-              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 self-start truncate max-w-full">
-                Auto: Kieron
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-form-quick-accessories"
-              onClick={() => handleSelectQuickCategory('accessories')}
-              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                !isMiscellaneous && itemDescription.toLowerCase() === 'accessories'
-                  ? 'bg-purple-950 text-white border-purple-600 shadow-xs ring-2 ring-purple-500/20'
-                  : 'bg-purple-50/50 border-purple-200 hover:border-purple-300 text-zinc-800'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] sm:text-xs font-black truncate">Accessories</span>
-                <ShoppingBag className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              </div>
-              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-300 self-start truncate max-w-full">
-                Auto: Newtons
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-form-quick-packs"
-              onClick={() => handleSelectQuickCategory('packs')}
-              className={`min-w-0 min-h-[56px] p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
-                !isMiscellaneous && itemDescription.toLowerCase() === 'packs'
-                  ? 'bg-blue-950 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/20'
-                  : 'bg-blue-50/50 border-blue-200 hover:border-blue-300 text-zinc-800'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] sm:text-xs font-black truncate">Packs</span>
-                <Boxes className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              </div>
-              <span className={`text-[10px] font-semibold truncate ${!isMiscellaneous && itemDescription.toLowerCase() === 'packs' ? 'text-blue-300' : 'text-zinc-500'}`}>Any vendor</span>
-            </button>
+            <div className="relative w-full sm:w-80">
+              <select
+                id="select-quick-category"
+                value={selectedQuickCategoryValue}
+                onChange={(e) =>
+                  handleSelectQuickCategory(
+                    e.target.value as 'misc' | 'comics' | 'accessories' | 'packs' | 'custom'
+                  )
+                }
+                className="w-full appearance-none min-h-[38px] pl-3 pr-9 py-1.5 text-xs font-bold rounded-xl border border-zinc-300 bg-zinc-50 hover:bg-white hover:border-zinc-400 focus:bg-white focus:border-zinc-900 focus:outline-hidden text-zinc-900 cursor-pointer transition-all"
+              >
+                <option value="misc" disabled={isConnorSelected}>
+                  {isConnorSelected ? 'Miscellaneous (Disabled for Connor)' : 'Miscellaneous (Any vendor)'}
+                </option>
+                <option value="comics">Comics (Auto: Kieron)</option>
+                <option value="accessories">Accessories (Auto: Newtons)</option>
+                <option value="packs" disabled={isConnorSelected}>
+                  {isConnorSelected ? 'Packs (Disabled for Connor)' : 'Packs (Any vendor)'}
+                </option>
+                <option value="custom">
+                  {isConnorSelected ? '4-Digit Item Number (Connor)' : 'Custom Item Description...'}
+                </option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-zinc-500 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+            </div>
           </div>
         </div>
 
@@ -728,10 +821,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               <VendorDropdown
                 id="select-vendor-name"
                 value={vendorName}
-                onChange={(val) => {
-                  setVendorName(val);
-                  if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
-                }}
+                onChange={(val) => handleSelectVendor(val, false)}
                 vendors={knownVendors}
                 placeholder="-- Choose Vendor --"
                 hasError={Boolean(errors.vendor)}
@@ -760,15 +850,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                       key={vendor}
                       type="button"
                       id={`btn-form-vendor-quick-${vendor.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                      onClick={() => {
-                        setVendorName(vendor);
-                        if (errors.vendor) setErrors((prev) => ({ ...prev, vendor: '' }));
-                        if (isMiscellaneous || itemDescription.trim()) {
-                          amountInputRef.current?.focus();
-                        } else {
-                          itemInputRef.current?.focus();
-                        }
-                      }}
+                      onClick={() => handleSelectVendor(vendor, true)}
                       className={`min-w-0 min-h-[34px] px-2 py-1 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
@@ -789,21 +871,37 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
           {/* Item Sold Description */}
           <div className="md:col-span-7 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="input-item-sold" className="block text-xs font-bold text-zinc-800">
-                Item Sold <span className="text-rose-500">*</span>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <label htmlFor="input-item-sold" className="flex items-center gap-1.5 text-xs font-bold text-zinc-800">
+                <span>{isConnorSelected ? '4-Digit Item Number' : 'Item Sold'}</span>
+                <span className="text-rose-500">*</span>
+                {isConnorSelected && (
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                    Connor: 4 digits required
+                  </span>
+                )}
               </label>
 
               <label
                 htmlFor="check-misc-sale"
-                className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-700 hover:text-zinc-950 cursor-pointer select-none bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200"
+                title={
+                  isConnorSelected
+                    ? 'Miscellaneous cannot be used when Connor is selected — enter a 4-digit number'
+                    : 'Tick to record as Miscellaneous'
+                }
+                className={`flex items-center gap-1.5 text-[11px] font-bold select-none px-2 py-0.5 rounded-md border ${
+                  isConnorSelected
+                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through opacity-70'
+                    : 'text-zinc-700 hover:text-zinc-950 cursor-pointer bg-zinc-100 border-zinc-200'
+                }`}
               >
                 <input
                   type="checkbox"
                   id="check-misc-sale"
-                  checked={isMiscellaneous}
+                  checked={isConnorSelected ? false : isMiscellaneous}
+                  disabled={isConnorSelected}
                   onChange={(e) => handleToggleMisc(e.target.checked)}
-                  className="rounded-xs text-zinc-900 focus:ring-zinc-900 cursor-pointer w-3.5 h-3.5"
+                  className="rounded-xs text-zinc-900 focus:ring-zinc-900 cursor-pointer disabled:cursor-not-allowed w-3.5 h-3.5"
                 />
                 <span>Miscellaneous</span>
               </label>
@@ -814,22 +912,47 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               <input
                 ref={itemInputRef}
                 type="text"
+                inputMode={isConnorSelected ? 'numeric' : undefined}
+                maxLength={isConnorSelected ? 4 : undefined}
+                pattern={isConnorSelected ? '[0-9]{4}' : undefined}
                 id="input-item-sold"
                 value={itemDescription}
-                disabled={isMiscellaneous}
+                disabled={!isConnorSelected && isMiscellaneous}
                 onChange={(e) => {
-                  setItemDescription(e.target.value);
+                  const nextVal = isConnorSelected
+                    ? e.target.value.replace(/\D/g, '').slice(0, 4)
+                    : e.target.value;
+                  setItemDescription(nextVal);
                   if (errors.item) setErrors((prev) => ({ ...prev, item: '' }));
                 }}
-                placeholder={isMiscellaneous ? 'Miscellaneous' : 'e.g. 151 Booster Pack, PSA 10 Pikachu, Binder...'}
-                className={`w-full pl-9 pr-3 py-2 text-xs rounded-xl border transition-all ${
-                  isMiscellaneous
+                placeholder={
+                  isConnorSelected
+                    ? 'Enter 4-digit number (e.g. 1234)'
+                    : isMiscellaneous
+                    ? 'Miscellaneous'
+                    : 'e.g. 151 Booster Pack, PSA 10 Pikachu, Binder...'
+                }
+                className={`w-full pl-9 ${isConnorSelected ? 'pr-16 font-mono font-black tracking-widest' : 'pr-3'} py-2 text-xs rounded-xl border transition-all ${
+                  !isConnorSelected && isMiscellaneous
                     ? 'bg-zinc-100 text-zinc-600 font-bold border-zinc-200 cursor-not-allowed'
                     : errors.item
                     ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
+                    : isConnorSelected && isConnorCodeValid
+                    ? 'border-emerald-400 bg-emerald-50/30 text-zinc-950 focus:ring-emerald-500/20 focus:border-emerald-600'
                     : 'border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400 focus:ring-zinc-900/10 focus:border-zinc-900'
                 }`}
               />
+              {isConnorSelected && (
+                <span
+                  className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-extrabold px-1.5 py-0.5 rounded tabular-nums ${
+                    isConnorCodeValid
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300'
+                  }`}
+                >
+                  {itemDescription.trim().length}/4{isConnorCodeValid ? ' ✓' : ''}
+                </span>
+              )}
             </div>
 
             {errors.item && <p className="text-[11px] font-semibold text-rose-600">{errors.item}</p>}
@@ -899,7 +1022,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
             {errors.amount && <p className="text-[11px] font-semibold text-rose-600">{errors.amount}</p>}
           </div>
 
-          {/* Payment Method Selector (Cash, Card, Online, Trade Out, Split) */}
+          {/* Payment Method Selector (Cash, Card, Trade Out, Split) */}
           <div className="md:col-span-7 space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-zinc-800">
@@ -910,7 +1033,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 id="btn-payment-cash"
@@ -941,36 +1064,6 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
 
               <button
                 type="button"
-                id="btn-payment-online"
-                disabled={!hasOnlineCards}
-                onClick={() => hasOnlineCards && setPaymentMode('online')}
-                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
-                  !hasOnlineCards
-                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 opacity-60 cursor-not-allowed'
-                    : paymentMode === 'online'
-                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm ring-2 ring-violet-600/25 font-black cursor-pointer'
-                    : 'bg-violet-50/70 hover:bg-violet-100 text-violet-900 border-violet-300 cursor-pointer'
-                }`}
-                title={
-                  hasOnlineCards
-                    ? 'Sold online via website, socials, or marketplace'
-                    : 'Online sales disabled: add cards in Online Cards first'
-                }
-              >
-                <Globe
-                  className={`w-4 h-4 shrink-0 ${
-                    !hasOnlineCards
-                      ? 'text-zinc-400'
-                      : paymentMode === 'online'
-                      ? 'text-violet-200'
-                      : 'text-violet-700'
-                  }`}
-                />
-                <span>{hasOnlineCards ? 'Online' : 'Online (Off)'}</span>
-              </button>
-
-              <button
-                type="button"
                 id="btn-payment-traded-out"
                 onClick={() => setPaymentMode('traded_out')}
                 className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
@@ -988,12 +1081,12 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 type="button"
                 id="btn-payment-split"
                 onClick={() => setPaymentMode('split')}
-                className={`col-span-2 sm:col-span-1 min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                className={`min-h-[44px] py-2 px-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   paymentMode === 'split'
                     ? 'bg-cyan-700 text-white border-cyan-700 shadow-sm ring-2 ring-cyan-600/25 font-black'
                     : 'bg-cyan-50/70 hover:bg-cyan-100 text-cyan-900 border-cyan-300'
                 }`}
-                title="Split payment across Cash, Card, Online, or Trade Out"
+                title="Split payment across Cash, Card, or Trade Out"
               >
                 <Split className={`w-4 h-4 shrink-0 ${paymentMode === 'split' ? 'text-cyan-200' : 'text-cyan-700'}`} />
                 <span>Split</span>
@@ -1138,221 +1231,172 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {(
                 [
                   { key: 'cash', label: 'Cash (£)', color: 'emerald' },
                   { key: 'card', label: 'Card (£)', color: 'blue' },
-                  { key: 'online', label: 'Online (£)', color: 'violet' },
                   { key: 'traded_out', label: 'Trade Out (£)', color: 'amber' },
                 ] as const
-              ).map(({ key, label }) => {
-                const isOnlineDisabled = key === 'online' && !hasOnlineCards;
-                return (
-                  <div
-                    key={key}
-                    className={`bg-white rounded-xl border p-2.5 space-y-1.5 ${
-                      isOnlineDisabled ? 'border-zinc-200 opacity-55' : 'border-cyan-200/80'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <label className="text-[11px] font-bold text-zinc-700">
-                        {isOnlineDisabled ? 'Online (Off)' : label}
-                      </label>
-                      {checkoutTargetTotal > 0 && !isOnlineDisabled && (
-                        <button
-                          type="button"
-                          onClick={() => handleFillRemainder(key)}
-                          className="text-[10px] font-extrabold text-cyan-700 hover:text-cyan-950 bg-cyan-50 hover:bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-200 cursor-pointer"
-                          title={`Put remaining balance into ${label}`}
-                        >
-                          Rem
-                        </button>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        disabled={isOnlineDisabled}
-                        value={isOnlineDisabled ? '' : splitAmounts[key]}
-                        onChange={(e) => {
-                          setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }));
-                          if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
-                        }}
-                        placeholder={isOnlineDisabled ? '0 cards' : '0.00'}
-                        className={`w-full pl-6 pr-2 py-1 text-xs font-black tabular-nums rounded-lg border focus:outline-hidden text-zinc-950 ${
-                          isOnlineDisabled
-                            ? 'border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                            : 'border-zinc-300 focus:border-cyan-600'
-                        }`}
-                      />
-                    </div>
+              ).map(({ key, label }) => (
+                <div
+                  key={key}
+                  className="bg-white rounded-xl border border-cyan-200/80 p-2.5 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-[11px] font-bold text-zinc-700">
+                      {label}
+                    </label>
+                    {checkoutTargetTotal > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleFillRemainder(key)}
+                        className="text-[10px] font-extrabold text-cyan-700 hover:text-cyan-950 bg-cyan-50 hover:bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-200 cursor-pointer"
+                        title={`Put remaining balance into ${label}`}
+                      >
+                        Rem
+                      </button>
+                    )}
                   </div>
-                );
-              })}
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1.5 text-xs font-bold text-zinc-400 pointer-events-none">£</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={splitAmounts[key]}
+                      onChange={(e) => {
+                        setSplitAmounts((prev) => ({ ...prev, [key]: e.target.value }));
+                        if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
+                      }}
+                      placeholder="0.00"
+                      className="w-full pl-6 pr-2 py-1 text-xs font-black tabular-nums rounded-lg border border-zinc-300 focus:border-cyan-600 focus:outline-hidden text-zinc-950"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
 
             {errors.split && <p className="text-[11px] font-bold text-rose-600">{errors.split}</p>}
           </div>
         )}
 
-        {/* Quick Discount & Bundle Bar */}
+        {/* Quick Discount & Bundle Dropdown */}
         <div className="rounded-2xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-black uppercase tracking-wider text-zinc-600 flex items-center gap-1.5">
-              <Percent className="w-3.5 h-3.5 text-rose-600" />
-              <span>Quick Discounts &amp; Bundle Deals</span>
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <label
+              htmlFor="select-quick-discount"
+              className="text-[11px] font-black uppercase tracking-wider text-zinc-600 flex items-center gap-1.5 shrink-0"
+            >
+              <Percent className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span>Quick Discounts &amp; Bundles</span>
+            </label>
 
-            {pricing.discountAmount > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 border border-rose-300 tabular-nums">
-                  {pricing.discountLabel}: Was {formatCurrency(pricing.rawSubtotal)} &rarr; Now{' '}
-                  {formatCurrency(pricing.finalTotal)} (-{formatCurrency(pricing.discountAmount)})
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveDiscount(null)}
-                  className="text-[11px] font-bold text-zinc-500 hover:text-rose-700 underline cursor-pointer"
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-72">
+                <select
+                  id="select-quick-discount"
+                  value={selectedDiscountDropdownValue}
+                  onChange={(e) => handleSelectQuickDiscount(e.target.value)}
+                  className="w-full appearance-none min-h-[38px] pl-3 pr-9 py-1.5 text-xs font-bold rounded-xl border border-zinc-300 bg-white hover:border-zinc-400 focus:border-zinc-900 focus:outline-hidden text-zinc-900 cursor-pointer transition-all"
                 >
-                  Clear
-                </button>
+                  <option value="none">No discount / Standard price</option>
+                  <optgroup label="Percentage Off">
+                    {QUICK_DISCOUNT_PERCENTS.map((pct) => (
+                      <option key={`pct-${pct}`} value={`pct-${pct}`} disabled={rawCheckoutSubtotal <= 0}>
+                        -{pct}% Off
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Flat £ Off">
+                    {QUICK_DISCOUNT_FLATS.map((amt) => (
+                      <option key={`flat-${amt}`} value={`flat-${amt}`} disabled={rawCheckoutSubtotal <= amt}>
+                        -£{amt} Off
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Bundle Deals">
+                    {QUICK_BUNDLE_PRESETS.map((bundle) => (
+                      <option key={`bundle-${bundle.price}`} value={`bundle-${bundle.price}`}>
+                        Bundle: {bundle.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Custom Deal">
+                    <option value="custom-flat">Custom -£ Off...</option>
+                    <option value="custom-bundle">Custom Bundle Price £...</option>
+                  </optgroup>
+                </select>
+                <ChevronDown className="w-4 h-4 text-zinc-500 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
-            )}
-          </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {QUICK_DISCOUNT_PERCENTS.map((pct) => {
-              const isSelected = activeDiscount?.kind === 'percent' && activeDiscount.value === pct;
-              return (
-                <button
-                  key={`pct-${pct}`}
-                  type="button"
-                  disabled={rawCheckoutSubtotal <= 0}
-                  onClick={() =>
-                    setActiveDiscount(isSelected ? null : { kind: 'percent', value: pct, label: `${pct}% Off` })
-                  }
-                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
-                    isSelected
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                      : 'bg-white hover:bg-rose-50 text-rose-800 border-rose-200'
-                  }`}
-                >
-                  -{pct}%
-                </button>
-              );
-            })}
-
-            {QUICK_DISCOUNT_FLATS.map((amt) => {
-              const isSelected = activeDiscount?.kind === 'flat' && activeDiscount.value === amt;
-              return (
-                <button
-                  key={`flat-${amt}`}
-                  type="button"
-                  disabled={rawCheckoutSubtotal <= amt}
-                  onClick={() =>
-                    setActiveDiscount(isSelected ? null : { kind: 'flat', value: amt, label: `-£${amt} Off` })
-                  }
-                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
-                    isSelected
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                      : 'bg-white hover:bg-amber-50 text-amber-900 border-amber-200'
-                  }`}
-                >
-                  -£{amt}
-                </button>
-              );
-            })}
-
-            <span className="h-5 w-px bg-zinc-300 mx-0.5 hidden sm:inline-block" />
-
-            {QUICK_BUNDLE_PRESETS.map((bundle) => {
-              const isSelected =
-                activeDiscount?.kind === 'bundle' && activeDiscount.targetPrice === bundle.price;
-              return (
-                <button
-                  key={bundle.label}
-                  type="button"
-                  onClick={() => {
-                    if (basketItems.length === 0 && currentFieldAmount <= 0) {
-                      if (!itemDescription.trim() && !isMiscellaneous) {
-                        setItemDescription(`Bundle (${bundle.label})`);
+              {customDealMode !== 'none' && (
+                <div className="flex items-center gap-1.5 animate-fade-in">
+                  <div className="relative flex-1 sm:flex-none">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 pointer-events-none">
+                      £
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={customDealInput}
+                      onChange={(e) => setCustomDealInput(e.target.value)}
+                      placeholder={customDealMode === 'flat' ? 'Off' : 'Total'}
+                      className="w-full sm:w-24 min-h-[38px] pl-6 pr-2 py-1 text-xs font-bold tabular-nums rounded-xl border border-zinc-300 bg-white text-zinc-900"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!parseFloat(customDealInput) || parseFloat(customDealInput) <= 0}
+                    onClick={() => {
+                      const val = parseFloat(customDealInput);
+                      if (!val || val <= 0) return;
+                      if (customDealMode === 'flat') {
+                        setActiveDiscount({ kind: 'flat', value: val, label: `-£${val.toFixed(2)} Off` });
+                      } else if (basketItems.length === 0 && currentFieldAmount <= 0) {
+                        if (!itemDescription.trim() && !isMiscellaneous) {
+                          setItemDescription(`Custom Bundle (£${val.toFixed(2)})`);
+                        }
+                        setAmount(val.toFixed(2));
+                        setActiveDiscount(null);
+                      } else {
+                        setActiveDiscount({
+                          kind: 'bundle',
+                          targetPrice: val,
+                          label: `Bundle: £${val.toFixed(2)}`,
+                        });
                       }
-                      setAmount(bundle.price.toFixed(2));
-                      setActiveDiscount(null);
-                      if (errors.item || errors.amount) {
-                        setErrors((prev) => ({ ...prev, item: '', amount: '' }));
-                      }
-                    } else {
-                      setActiveDiscount(
-                        isSelected
-                          ? null
-                          : { kind: 'bundle', targetPrice: bundle.price, label: `Bundle: ${bundle.label}` }
-                      );
-                    }
-                  }}
-                  className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-black flex items-center gap-1 cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200'
-                  }`}
-                >
-                  <Package className="w-3 h-3" />
-                  <span>{bundle.label}</span>
-                </button>
-              );
-            })}
-
-            <div className="flex items-center gap-1 ml-auto">
-              <select
-                value={customDealMode}
-                onChange={(e) => setCustomDealMode(e.target.value as 'flat' | 'bundle')}
-                className="min-h-[32px] px-2 py-1 text-[11px] font-bold rounded-lg border border-zinc-300 bg-white text-zinc-800 cursor-pointer"
-              >
-                <option value="flat">Custom -£</option>
-                <option value="bundle">Bundle £</option>
-              </select>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={customDealInput}
-                onChange={(e) => setCustomDealInput(e.target.value)}
-                placeholder="0.00"
-                className="w-16 min-h-[32px] px-2 py-1 text-[11px] font-bold tabular-nums rounded-lg border border-zinc-300 bg-white text-zinc-900"
-              />
-              <button
-                type="button"
-                disabled={!parseFloat(customDealInput) || parseFloat(customDealInput) <= 0}
-                onClick={() => {
-                  const val = parseFloat(customDealInput);
-                  if (!val || val <= 0) return;
-                  if (customDealMode === 'flat') {
-                    setActiveDiscount({ kind: 'flat', value: val, label: `-£${val.toFixed(2)} Off` });
-                  } else if (basketItems.length === 0 && currentFieldAmount <= 0) {
-                    if (!itemDescription.trim() && !isMiscellaneous) {
-                      setItemDescription(`Custom Bundle (£${val.toFixed(2)})`);
-                    }
-                    setAmount(val.toFixed(2));
-                    setActiveDiscount(null);
-                  } else {
-                    setActiveDiscount({
-                      kind: 'bundle',
-                      targetPrice: val,
-                      label: `Bundle: £${val.toFixed(2)}`,
-                    });
-                  }
-                  setCustomDealInput('');
-                }}
-                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer"
-              >
-                Apply
-              </button>
+                      setCustomDealInput('');
+                    }}
+                    className="min-h-[38px] px-3 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
             </div>
           </div>
+
+          {pricing.discountAmount > 0 && (
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-zinc-200/80">
+              <span className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 border border-rose-300 tabular-nums">
+                {pricing.discountLabel}: Was {formatCurrency(pricing.rawSubtotal)} &rarr; Now{' '}
+                {formatCurrency(pricing.finalTotal)} (-{formatCurrency(pricing.discountAmount)})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveDiscount(null);
+                  setCustomDealMode('none');
+                  setCustomDealInput('');
+                }}
+                className="text-[11px] font-bold text-zinc-500 hover:text-rose-700 underline cursor-pointer"
+              >
+                Clear Discount
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Customer Store Credit Lookup & Apply */}

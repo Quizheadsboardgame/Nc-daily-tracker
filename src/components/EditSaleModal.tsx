@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Tag, Banknote, CreditCard, ArrowLeftRight, Globe, Save, Calendar } from 'lucide-react';
 import { SaleRecord, PaymentMethod } from '../types';
 import { VendorDropdown } from './VendorDropdown';
-import { cloudDb } from '../db/cloudDatabase';
+import { cloudDb, isConnorVendor, isValidFourDigitItemNumber } from '../db/cloudDatabase';
 
 interface EditSaleModalProps {
   sale: SaleRecord | null;
@@ -52,9 +52,22 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
 
   if (!isOpen || !sale) return null;
 
+  const isConnorSelected = isConnorVendor(vendorName);
+  const isConnorCodeValid = isValidFourDigitItemNumber(itemDescription);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vendorName.trim() || (!isMiscellaneous && !itemDescription.trim()) || !amount) {
+    if (!vendorName.trim() || !amount) {
+      setError('Please select a vendor and fill in the amount.');
+      return;
+    }
+
+    if (isConnorSelected) {
+      if (isMiscellaneous || !isValidFourDigitItemNumber(itemDescription)) {
+        setError('For Connor, Miscellaneous cannot be used — enter a 4-digit number (e.g. 1234).');
+        return;
+      }
+    } else if (!isMiscellaneous && !itemDescription.trim()) {
       setError('Please select a vendor and fill in item description (or tick Miscellaneous) and amount.');
       return;
     }
@@ -65,12 +78,12 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
       return;
     }
 
-    const finalItemDescription = isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
+    const finalItemDescription = !isConnorSelected && isMiscellaneous ? 'Miscellaneous' : itemDescription.trim();
 
     onSave(sale.id, {
       salesmanName: vendorName.trim(),
       itemDescription: finalItemDescription,
-      isMiscellaneous,
+      isMiscellaneous: !isConnorSelected && isMiscellaneous,
       amount: numAmount,
       paymentMethod,
       dateKey: dateKey.trim() || sale.dateKey,
@@ -109,7 +122,16 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             <VendorDropdown
               id="edit-select-vendor"
               value={vendorName}
-              onChange={(val) => setVendorName(val)}
+              onChange={(val) => {
+                setVendorName(val);
+                if (isConnorVendor(val)) {
+                  setIsMiscellaneous(false);
+                  if (!isValidFourDigitItemNumber(itemDescription)) {
+                    setItemDescription('');
+                  }
+                }
+                setError('');
+              }}
               vendors={vendors}
               placeholder="-- Select Vendor --"
               required
@@ -117,19 +139,34 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-zinc-700">Item Sold</label>
-              <label className="flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer select-none bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                <span>{isConnorSelected ? '4-Digit Item Number' : 'Item Sold'}</span>
+                {isConnorSelected && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                    4 digits required
+                  </span>
+                )}
+              </label>
+              <label
+                className={`flex items-center gap-1.5 text-xs select-none px-2 py-0.5 rounded border ${
+                  isConnorSelected
+                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed line-through opacity-70'
+                    : 'text-zinc-600 cursor-pointer bg-zinc-100 border-zinc-200'
+                }`}
+              >
                 <input
                   type="checkbox"
-                  checked={isMiscellaneous}
+                  checked={isConnorSelected ? false : isMiscellaneous}
+                  disabled={isConnorSelected}
                   onChange={(e) => {
+                    if (isConnorSelected) return;
                     const checked = e.target.checked;
                     setIsMiscellaneous(checked);
                     if (checked) setItemDescription('Miscellaneous');
                     else if (itemDescription === 'Miscellaneous') setItemDescription('');
                   }}
-                  className="rounded text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                  className="rounded text-zinc-900 focus:ring-zinc-900 cursor-pointer disabled:cursor-not-allowed"
                 />
                 <span className="font-semibold text-[11px]">Miscellaneous</span>
               </label>
@@ -139,18 +176,44 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
               <Tag className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400 pointer-events-none" />
               <input
                 type="text"
+                inputMode={isConnorSelected ? 'numeric' : undefined}
+                maxLength={isConnorSelected ? 4 : undefined}
+                pattern={isConnorSelected ? '[0-9]{4}' : undefined}
                 id="edit-input-item"
                 value={itemDescription}
-                disabled={isMiscellaneous}
-                onChange={(e) => setItemDescription(e.target.value)}
-                placeholder={isMiscellaneous ? 'Miscellaneous' : 'Description of item'}
-                className={`w-full pl-9 pr-3 py-2 text-sm rounded-lg border ${
-                  isMiscellaneous
+                disabled={!isConnorSelected && isMiscellaneous}
+                onChange={(e) => {
+                  const nextVal = isConnorSelected
+                    ? e.target.value.replace(/\D/g, '').slice(0, 4)
+                    : e.target.value;
+                  setItemDescription(nextVal);
+                  setError('');
+                }}
+                placeholder={
+                  isConnorSelected
+                    ? 'Enter 4-digit number (e.g. 1234)'
+                    : isMiscellaneous
+                    ? 'Miscellaneous'
+                    : 'Description of item'
+                }
+                className={`w-full pl-9 ${isConnorSelected ? 'pr-16 font-mono font-bold tracking-widest' : 'pr-3'} py-2 text-sm rounded-lg border ${
+                  !isConnorSelected && isMiscellaneous
                     ? 'bg-zinc-100 text-zinc-500 border-zinc-200 cursor-not-allowed'
                     : 'border-zinc-300 bg-white text-zinc-900 focus:border-zinc-900'
                 }`}
-                required={!isMiscellaneous}
+                required={isConnorSelected || !isMiscellaneous}
               />
+              {isConnorSelected && (
+                <span
+                  className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-extrabold px-1.5 py-0.5 rounded tabular-nums ${
+                    isConnorCodeValid
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300'
+                  }`}
+                >
+                  {itemDescription.trim().length}/4{isConnorCodeValid ? ' ✓' : ''}
+                </span>
+              )}
             </div>
           </div>
 

@@ -175,7 +175,7 @@ export const SalesList: React.FC<SalesListProps> = ({
           </div>
 
           {/* Payment Filter Pills (Cash, Card, or Trade Out) */}
-          <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs w-full md:w-auto">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs w-full md:w-auto">
             <button
               type="button"
               id="filter-payment-all"
@@ -214,21 +214,9 @@ export const SalesList: React.FC<SalesListProps> = ({
             </button>
             <button
               type="button"
-              id="filter-payment-online"
-              onClick={() => onSelectPaymentFilter('online')}
-              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
-                selectedPaymentFilter === 'online'
-                  ? 'bg-violet-600 text-white shadow-xs font-bold'
-                  : 'text-zinc-600 hover:text-violet-700'
-              }`}
-            >
-              <Globe className="w-3 h-3 shrink-0" /> Online
-            </button>
-            <button
-              type="button"
               id="filter-payment-traded-out"
               onClick={() => onSelectPaymentFilter('traded_out')}
-              className={`col-span-2 sm:col-span-1 min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
+              className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                 selectedPaymentFilter === 'traded_out'
                   ? 'bg-amber-600 text-white shadow-xs font-bold'
                   : 'text-amber-800 hover:text-amber-900'
