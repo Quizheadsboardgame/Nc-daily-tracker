@@ -22,6 +22,8 @@ import {
   ShoppingCart,
   Trash2,
   Split,
+  Building2,
+  EyeOff,
 } from 'lucide-react';
 import { PaymentMethod, TradeType, BasketItemInput, SplitPaymentBreakdown } from '../types';
 import {
@@ -33,6 +35,7 @@ import {
   isValidFourDigitItemNumber,
 } from '../db/cloudDatabase';
 import { PasscodeModal } from './PasscodeModal';
+import { VendorDayCheck } from './VendorDayCheck';
 import { playSaleBeep, useCheckoutSound, useAudioUnlockStatus, testMarioSound } from '../utils/sound';
 
 interface LockedRegisterScreenProps {
@@ -49,8 +52,14 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   const { isUnlocked: isAudioActive, unlock: unlockAudio } = useAudioUnlockStatus();
   const currentDateKey = getLocalDateKey();
 
-  // Terminal Mode: 'sale' (Counter Sale) vs 'trade' (Trade In)
-  const [terminalMode, setTerminalMode] = useState<'sale' | 'trade'>('sale');
+  // Terminal Mode: 'sale' (Counter Sale) vs 'trade' (Trade In) vs 'vendor-sales' (5-tap Pokéball Vendor Portal)
+  const [terminalMode, setTerminalMode] = useState<'sale' | 'trade' | 'vendor-sales'>('sale');
+  const [isVendorSalesUnlocked, setIsVendorSalesUnlocked] = useState<boolean>(false);
+  const [activePortalVendor, setActivePortalVendor] = useState<'issac' | 'ollie'>('issac');
+  const [dbTick, setDbTick] = useState<number>(0);
+  const [pokeballTapCount, setPokeballTapCount] = useState<number>(0);
+  const pokeballTapTimestampsRef = useRef<number[]>([]);
+  const pokeballResetTimerRef = useRef<number | null>(null);
 
   // Sale form states
   const [selectedVendor, setSelectedVendor] = useState<string>('');
@@ -125,10 +134,63 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
   useEffect(() => {
     const syncDbState = () => {
       setFrequentVendors(cloudDb.getFrequentVendors(3));
+      setDbTick((prev) => prev + 1);
     };
     syncDbState();
     return cloudDb.subscribe(syncDbState);
   }, [knownVendors]);
+
+  useEffect(() => {
+    return () => {
+      if (pokeballResetTimerRef.current !== null) {
+        window.clearTimeout(pokeballResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const resolvedIssacVendor = cloudDb.resolveVendorName(['issac', 'isaac'], 'Issac');
+  const resolvedOllieVendor = cloudDb.resolveVendorName(['ollie', 'olly'], 'Ollie');
+  const activeResolvedPortalVendor =
+    activePortalVendor === 'issac' ? resolvedIssacVendor : resolvedOllieVendor;
+
+  const handlePokeballTap = () => {
+    const now = Date.now();
+    const recentTaps = [
+      ...pokeballTapTimestampsRef.current.filter((t) => now - t <= 2500),
+      now,
+    ];
+    pokeballTapTimestampsRef.current = recentTaps;
+
+    if (pokeballResetTimerRef.current !== null) {
+      window.clearTimeout(pokeballResetTimerRef.current);
+    }
+
+    if (recentTaps.length >= 5) {
+      pokeballTapTimestampsRef.current = [];
+      setPokeballTapCount(0);
+      setIsVendorSalesUnlocked(true);
+      setTerminalMode('vendor-sales');
+      setFormError(null);
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(35);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setPokeballTapCount(recentTaps.length);
+    pokeballResetTimerRef.current = window.setTimeout(() => {
+      pokeballTapTimestampsRef.current = [];
+      setPokeballTapCount(0);
+    }, 2500);
+  };
+
+  const handleHideVendorPortal = () => {
+    setIsVendorSalesUnlocked(false);
+    setTerminalMode('sale');
+    pokeballTapTimestampsRef.current = [];
+    setPokeballTapCount(0);
+  };
 
   // Close vendor dropdown on outside click
   useEffect(() => {
@@ -611,9 +673,17 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
       </header>
 
       {/* Main Terminal Body */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
-        {/* Terminal Mode Switcher: Record Sale vs Trade In */}
-        <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-inner">
+      <main
+        className={`flex-1 w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5 transition-[max-width] duration-200 ${
+          terminalMode === 'vendor-sales' && isVendorSalesUnlocked ? 'max-w-5xl' : 'max-w-3xl'
+        }`}
+      >
+        {/* Terminal Mode Switcher: Record Sale vs Trade In (+ Vendor Sales when unlocked via 5-tap Pokéball) */}
+        <div
+          className={`grid gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-inner ${
+            isVendorSalesUnlocked ? 'grid-cols-3' : 'grid-cols-2'
+          }`}
+        >
           <button
             type="button"
             id="btn-lockscreen-mode-sale"
@@ -621,14 +691,14 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               setTerminalMode('sale');
               setFormError(null);
             }}
-            className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-2.5 px-1.5 sm:px-4 rounded-xl text-[11px] sm:text-sm font-black flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer whitespace-nowrap min-w-0 ${
               terminalMode === 'sale'
                 ? 'bg-gradient-to-r from-emerald-400 to-green-400 text-zinc-950 shadow-lg shadow-emerald-500/30'
                 : 'text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/25'
             }`}
           >
-            <PlusCircle className={`w-4 h-4 shrink-0 ${terminalMode === 'sale' ? 'text-zinc-950' : 'text-emerald-400'}`} />
-            <span>Record Sale</span>
+            <PlusCircle className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${terminalMode === 'sale' ? 'text-zinc-950' : 'text-emerald-400'}`} />
+            <span className="truncate">Record Sale</span>
           </button>
 
           <button
@@ -638,15 +708,34 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
               setTerminalMode('trade');
               setFormError(null);
             }}
-            className={`min-h-[44px] py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-2.5 px-1.5 sm:px-4 rounded-xl text-[11px] sm:text-sm font-black flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer whitespace-nowrap min-w-0 ${
               terminalMode === 'trade'
                 ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-zinc-950 shadow-lg shadow-amber-500/30'
                 : 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 border border-amber-500/25'
             }`}
           >
-            <ArrowLeftRight className={`w-4 h-4 shrink-0 ${terminalMode === 'trade' ? 'text-zinc-950' : 'text-amber-400'}`} />
-            <span>Trade In</span>
+            <ArrowLeftRight className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${terminalMode === 'trade' ? 'text-zinc-950' : 'text-amber-400'}`} />
+            <span className="truncate">Trade In</span>
           </button>
+
+          {isVendorSalesUnlocked && (
+            <button
+              type="button"
+              id="btn-lockscreen-mode-vendor-sales"
+              onClick={() => {
+                setTerminalMode('vendor-sales');
+                setFormError(null);
+              }}
+              className={`min-h-[44px] py-2.5 px-1.5 sm:px-4 rounded-xl text-[11px] sm:text-sm font-black flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer whitespace-nowrap min-w-0 ${
+                terminalMode === 'vendor-sales'
+                  ? 'bg-gradient-to-r from-indigo-400 to-sky-400 text-zinc-950 shadow-lg shadow-indigo-500/30'
+                  : 'text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 border border-sky-500/25'
+              }`}
+            >
+              <Building2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${terminalMode === 'vendor-sales' ? 'text-zinc-950' : 'text-sky-400'}`} />
+              <span className="truncate">Vendor Sales</span>
+            </button>
+          )}
         </div>
 
         {/* Success Notice Toast Banner (Sale) */}
@@ -1234,6 +1323,69 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
                   : `Record & Add (${formatCurrency(currentFieldAmount)})`}
               </span>
             </button>
+
+            {/* Discreet Pokéball 5-Quick-Tap Trigger for Private Vendor Portal */}
+            <div className="pt-1 flex justify-center">
+              <button
+                type="button"
+                id="btn-pokeball-vendor-portal"
+                onClick={handlePokeballTap}
+                aria-label="Pokéball"
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-150 cursor-pointer touch-manipulation select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60 active:scale-90 ${
+                  pokeballTapCount === 0
+                    ? 'opacity-70 hover:opacity-100'
+                    : pokeballTapCount % 2 === 1
+                    ? 'opacity-100 -rotate-12 scale-105'
+                    : 'opacity-100 rotate-12 scale-105'
+                }`}
+              >
+                <svg
+                  viewBox="0 0 32 32"
+                  className="w-7 h-7 drop-shadow-sm"
+                  aria-hidden="true"
+                >
+                  {/* Top Red Dome */}
+                  <path
+                    d="M 3 16 A 13 13 0 0 1 29 16 Z"
+                    fill="#ef4444"
+                    stroke="#18181b"
+                    strokeWidth="2"
+                  />
+                  {/* Bottom White Dome */}
+                  <path
+                    d="M 29 16 A 13 13 0 0 1 3 16 Z"
+                    fill="#f4f4f5"
+                    stroke="#18181b"
+                    strokeWidth="2"
+                  />
+                  {/* Center Band */}
+                  <line
+                    x1="3"
+                    y1="16"
+                    x2="29"
+                    y2="16"
+                    stroke="#18181b"
+                    strokeWidth="2.6"
+                  />
+                  {/* Outer Center Button */}
+                  <circle
+                    cx="16"
+                    cy="16"
+                    r="4.4"
+                    fill="#f4f4f5"
+                    stroke="#18181b"
+                    strokeWidth="2.2"
+                  />
+                  {/* Inner Center Button (subtle warm glow as quick taps build) */}
+                  <circle
+                    cx="16"
+                    cy="16"
+                    r="2"
+                    fill={pokeballTapCount > 0 ? '#f87171' : '#d4d4d8'}
+                  />
+                </svg>
+              </button>
+            </div>
           </form>
         </div>
         )}
@@ -1649,6 +1801,86 @@ export const LockedRegisterScreen: React.FC<LockedRegisterScreenProps> = ({
             </button>
           </form>
         </div>
+        )}
+
+        {/* Private Vendor Sales Portal (Unlocked via 5 Quick Taps on Pokéball — Scoped Only to Issac & Ollie) */}
+        {terminalMode === 'vendor-sales' && isVendorSalesUnlocked && (
+          <div id="panel-locked-vendor-sales-portal" className="space-y-4 animate-fade-in">
+            {/* Portal Switcher Header Card: Issac & Ollie Tabs + Hide Portal Action */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
+                    Vendor Sales Portal
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Private vendor view · Only selected vendor&apos;s own sales &amp; trade-ins are shown
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  id="btn-hide-vendor-sales-portal"
+                  onClick={handleHideVendorPortal}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[40px] rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span>Hide Portal</span>
+                </button>
+              </div>
+
+              {/* 2 Dedicated Vendor Tabs: Issac & Ollie */}
+              <div
+                className="grid grid-cols-2 gap-2 p-1.5 rounded-xl bg-zinc-950 border border-zinc-800"
+                role="tablist"
+                aria-label="Vendor portals"
+              >
+                {(
+                  [
+                    { id: 'issac', label: 'Issac', resolved: resolvedIssacVendor },
+                    { id: 'ollie', label: 'Ollie', resolved: resolvedOllieVendor },
+                  ] as const
+                ).map((tab) => {
+                  const isActive = activePortalVendor === tab.id;
+                  const dotColor = cloudDb.getVendorColor(tab.resolved);
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      id={`btn-locked-portal-${tab.id}`}
+                      onClick={() => setActivePortalVendor(tab.id)}
+                      className={`min-h-[44px] px-4 py-2 rounded-lg text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                        isActive
+                          ? 'bg-white text-zinc-950 shadow-sm'
+                          : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                      }`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 ring-2 ring-white/25"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                      <span>{tab.label}&apos;s Portal</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scoped Single-Vendor Portal View */}
+            <div className="text-zinc-900">
+              <VendorDayCheck
+                key={activePortalVendor}
+                currentDateKey={currentDateKey}
+                allVendors={[activeResolvedPortalVendor]}
+                sales={cloudDb.getSalesForDay(currentDateKey)}
+                summary={cloudDb.getDailySummary(currentDateKey)}
+                lockedVendorName={activeResolvedPortalVendor}
+                refreshKey={dbTick}
+              />
+            </div>
+          </div>
         )}
       </main>
 

@@ -45,6 +45,8 @@ interface VendorDayCheckProps {
   allVendors: string[];
   sales: SaleRecord[];
   summary: DaySummary;
+  lockedVendorName?: string;
+  refreshKey?: number;
 }
 
 type PeriodViewMode = 'weekly' | 'daily';
@@ -82,7 +84,10 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   currentDateKey,
   allVendors,
   sales,
+  lockedVendorName,
+  refreshKey = 0,
 }) => {
+  const isLockedToSingleVendor = Boolean(lockedVendorName && lockedVendorName.trim());
   const {
     rememberedVendor,
     pinVendor,
@@ -90,18 +95,22 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
   } = useDeviceVendor(allVendors);
 
   const [selectedVendorName, setSelectedVendorName] = useState<string>(() => {
+    if (lockedVendorName && lockedVendorName.trim()) {
+      return lockedVendorName.trim();
+    }
     if (rememberedVendor && allVendors.includes(rememberedVendor)) {
       return rememberedVendor;
     }
     return allVendors.length > 0 ? allVendors[0] : '';
   });
 
-  // Sync automatically if user pins a vendor on this device
+  // Sync automatically if user pins a vendor on this device (disabled in single-vendor locked portal mode)
   React.useEffect(() => {
+    if (isLockedToSingleVendor) return;
     if (rememberedVendor && allVendors.includes(rememberedVendor)) {
       setSelectedVendorName(rememberedVendor);
     }
-  }, [rememberedVendor, allVendors]);
+  }, [rememberedVendor, allVendors, isLockedToSingleVendor]);
 
   // Mode: Weekly (Sunday to Saturday) vs Daily
   const [viewMode, setViewMode] = useState<PeriodViewMode>('weekly');
@@ -123,26 +132,29 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
 
   // Ensure active vendor is valid
   const activeVendor = useMemo(() => {
+    if (lockedVendorName && lockedVendorName.trim()) {
+      return lockedVendorName.trim();
+    }
     if (allVendors.includes(selectedVendorName)) {
       return selectedVendorName;
     }
     return allVendors.length > 0 ? allVendors[0] : '';
-  }, [allVendors, selectedVendorName]);
+  }, [allVendors, selectedVendorName, lockedVendorName]);
 
   const vendorColor = activeVendor ? cloudDb.getVendorColor(activeVendor) : '#2563eb';
-  const dayEventsMap = useMemo(() => cloudDb.getDayEventsMap(), [sales, currentWeek.startDateKey]);
+  const dayEventsMap = useMemo(() => cloudDb.getDayEventsMap(), [sales, currentWeek.startDateKey, refreshKey]);
 
   // Weekly data computation for the Sunday-to-Saturday week
   const weekData = useMemo(() => {
     if (!activeVendor) return null;
     return cloudDb.getVendorWeekDetails(currentWeek.startDateKey, currentWeek.endDateKey, activeVendor);
-  }, [currentWeek.startDateKey, currentWeek.endDateKey, activeVendor, sales]);
+  }, [currentWeek.startDateKey, currentWeek.endDateKey, activeVendor, sales, refreshKey]);
 
   // Daily data computation for selected single day
   const dayData = useMemo(() => {
     if (!activeVendor) return null;
     return cloudDb.getVendorDayDetails(selectedDailyDateKey, activeVendor);
-  }, [selectedDailyDateKey, activeVendor, sales]);
+  }, [selectedDailyDateKey, activeVendor, sales, refreshKey]);
 
   // Filtered sales and trades for week if user clicked a specific day in the 7-day strip
   const displayedWeekSales = useMemo(() => {
@@ -186,7 +198,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
       csvContent = cloudDb.exportWeekToCsv(currentWeek.startDateKey, currentWeek.endDateKey, activeVendor);
       filename = `vendor_${activeVendor.toLowerCase()}_week${currentWeek.weekNumber}_${currentWeek.startDateKey}_to_${currentWeek.endDateKey}.csv`;
     } else {
-      csvContent = cloudDb.exportDayToCsv(selectedDailyDateKey);
+      csvContent = cloudDb.exportDayToCsv(selectedDailyDateKey, activeVendor);
       filename = `vendor_${activeVendor.toLowerCase()}_${selectedDailyDateKey}.csv`;
     }
 
@@ -201,7 +213,7 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  if (allVendors.length === 0) {
+  if (!isLockedToSingleVendor && allVendors.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-zinc-200 p-8 text-center shadow-xs" id="vendor-portal-empty">
         <User className="w-10 h-10 text-zinc-400 mx-auto mb-3" />
@@ -293,54 +305,56 @@ export const VendorDayCheck: React.FC<VendorDayCheckProps> = ({
           </div>
         </div>
 
-        {/* Vendor Selector Pills */}
-        <div>
-          <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">
-            Select Vendor:
-          </span>
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap">
-            {allVendors.map((vendor) => {
-              const isSelected = vendor === activeVendor;
-              const color = cloudDb.getVendorColor(vendor);
-              return (
-                <button
-                  key={vendor}
-                  type="button"
-                  id={`btn-vendor-tab-${vendor.toLowerCase()}`}
-                  onClick={() => setSelectedVendorName(vendor)}
-                  className={`px-3 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition-all cursor-pointer border min-w-0 ${
-                    isSelected
-                      ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-2 ring-zinc-900/15'
-                      : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full ring-2 ring-white shrink-0 shadow-2xs"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="truncate">{vendor}</span>
-                  </span>
-                  {isSelected && (
-                    <span className="text-[10px] uppercase font-bold text-emerald-400 bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
-                      Active
+        {/* Vendor Selector Pills (hidden in private single-vendor portal mode) */}
+        {!isLockedToSingleVendor && (
+          <div>
+            <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">
+              Select Vendor:
+            </span>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap">
+              {allVendors.map((vendor) => {
+                const isSelected = vendor === activeVendor;
+                const color = cloudDb.getVendorColor(vendor);
+                return (
+                  <button
+                    key={vendor}
+                    type="button"
+                    id={`btn-vendor-tab-${vendor.toLowerCase()}`}
+                    onClick={() => setSelectedVendorName(vendor)}
+                    className={`px-3 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition-all cursor-pointer border min-w-0 ${
+                      isSelected
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm ring-2 ring-zinc-900/15'
+                        : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full ring-2 ring-white shrink-0 shadow-2xs"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="truncate">{vendor}</span>
                     </span>
-                  )}
-                </button>
-              );
-            })}
+                    {isSelected && (
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
+                        Active
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2.5">
+              <DeviceVendorBar
+                theme="light"
+                selectedVendor={activeVendor}
+                rememberedVendor={rememberedVendor}
+                onPinVendor={pinVendor}
+                onClearPinnedVendor={clearPinnedVendor}
+                onSelectVendor={(vendor) => setSelectedVendorName(vendor)}
+              />
+            </div>
           </div>
-          <div className="mt-2.5">
-            <DeviceVendorBar
-              theme="light"
-              selectedVendor={activeVendor}
-              rememberedVendor={rememberedVendor}
-              onPinVendor={pinVendor}
-              onClearPinnedVendor={clearPinnedVendor}
-              onSelectVendor={(vendor) => setSelectedVendorName(vendor)}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Period Selector Bar */}
         {viewMode === 'weekly' ? (

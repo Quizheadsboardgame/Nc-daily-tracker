@@ -71,6 +71,9 @@ export const DEFAULT_VENDOR_COLORS: Record<string, string> = {
   Roy: '#d97706', // Amber Gold
   Connor: '#dc2626', // Ruby Red
   Charlie: '#0891b2', // Teal Cyan
+  Issac: '#4f46e5', // Indigo
+  Isaac: '#4f46e5', // Indigo
+  Ollie: '#0d9488', // Teal
 };
 
 export const PRESET_VENDOR_PALETTE = [
@@ -2895,6 +2898,27 @@ class CloudSalesDatabase {
 
   // --- Vendor Portal: Independent Sales & Trade reporting combined ---
 
+  public resolveVendorName(aliases: string[], fallback: string): string {
+    const normalizedAliases = aliases.map((a) => a.trim().toLowerCase()).filter(Boolean);
+    for (const alias of normalizedAliases) {
+      const fromList = this.salesmenList.find((v) => v.trim().toLowerCase() === alias);
+      if (fromList) return fromList;
+    }
+    for (const alias of normalizedAliases) {
+      for (const sale of this.salesCache.values()) {
+        if (sale.salesmanName.trim().toLowerCase() === alias) {
+          return sale.salesmanName.trim();
+        }
+      }
+      for (const trade of this.tradesCache.values()) {
+        if (trade.vendorName.trim().toLowerCase() === alias) {
+          return trade.vendorName.trim();
+        }
+      }
+    }
+    return fallback;
+  }
+
   public getVendorDayDetails(dateKey: string, vendorName: string): VendorDayDetails {
     const allDaySales = this.getSalesForDay(dateKey);
     const cleanVendor = vendorName.trim();
@@ -5027,9 +5051,11 @@ class CloudSalesDatabase {
     ].join('\n');
   }
 
-  public exportDayToCsv(dateKey: string): string {
-    const sales = this.getSalesForDay(dateKey);
-    const recon = this.getCashReconciliationSummary(dateKey);
+  public exportDayToCsv(dateKey: string, vendorName?: string): string {
+    const filterVendor = vendorName?.trim().toLowerCase();
+    const sales = this.getSalesForDay(dateKey).filter(
+      (s) => !filterVendor || s.salesmanName.toLowerCase() === filterVendor
+    );
     const headers = [
       'Sale ID',
       'Date',
@@ -5057,6 +5083,15 @@ class CloudSalesDatabase {
       `"${(sale.notes || '').replace(/"/g, '""')}"`,
     ]);
 
+    if (filterVendor) {
+      return [
+        `# DISCLAIMER: All figures are gross totals before commission reductions`,
+        headers.join(','),
+        ...rows.map((r) => r.join(',')),
+      ].join('\n');
+    }
+
+    const recon = this.getCashReconciliationSummary(dateKey);
     const reconLines = [
       '',
       `# END-OF-DAY CASH DRAWER RECONCILIATION (${dateKey})`,
