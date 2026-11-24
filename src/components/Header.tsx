@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, ShoppingBag, RefreshCw, Lock, Volume2, VolumeX, Search, Trophy, Vault, Ticket, ChevronDown, Check, BookmarkCheck, Flame, UserCheck } from 'lucide-react';
+import { Calendar, Download, Database, PlusCircle, Users, Cloud, ArrowLeftRight, FileSpreadsheet, Building2, RefreshCw, Lock, Volume2, VolumeX, Search, Trophy, Vault, Ticket, Gift, ChevronDown, Check, BookmarkCheck, Flame, UserCheck } from 'lucide-react';
 import { getLocalDateKey, cloudDb } from '../db/cloudDatabase';
 import { useTotalSalesAuth, useCashDrawerAuth } from '../utils/auth';
 import { PasscodeModal } from './PasscodeModal';
 import { useCheckoutSound, useAudioUnlockStatus, testMarioSound, testFanfareSound } from '../utils/sound';
 
-export type AppTab = 'ledger' | 'trades' | 'holds' | 'cash-drawer' | 'store-credit' | 'search' | 'leaderboard' | 'heatmap' | 'online-cards' | 'vendor-check' | 'manage-vendors';
+export type AppTab = 'ledger' | 'trades' | 'holds' | 'cash-drawer' | 'store-credit' | 'gift-cards' | 'search' | 'leaderboard' | 'heatmap' | 'vendor-check' | 'manage-vendors';
 
 interface HeaderProps {
   currentDateKey: string;
@@ -79,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
     setIsHeaderSyncing(true);
     try {
       const res = await cloudDb.syncNow();
-      setSyncLabel(`Synced (${res.onlineCards} cards)!`);
+      setSyncLabel(`Synced (${res.sales} sales)!`);
       setTimeout(() => setSyncLabel(null), 3000);
     } catch {
       setSyncLabel('Sync failed');
@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
   const dayTradesCount = cloudDb.getTradesForDay(currentDateKey).length;
   const activeHoldsCount = cloudDb.getHoldsOverview().activeCount;
   const activeCreditCustomers = cloudDb.getStoreCreditOverview().activeCustomersCount;
-  const availableOnlineCards = cloudDb.getOnlineCardsSummary().availableCount;
+  const activeGiftCardsCount = cloudDb.getGiftCardsOverview().activeCardsCount;
 
   const tabItems: {
     id: AppTab;
@@ -135,6 +135,13 @@ export const Header: React.FC<HeaderProps> = ({
       badgeClass: 'bg-purple-400/20 text-purple-300 border border-purple-500/40',
     },
     {
+      id: 'gift-cards',
+      label: 'Gift Cards',
+      icon: <Gift className="w-4 h-4 text-rose-400 shrink-0" />,
+      badge: activeGiftCardsCount > 0 ? activeGiftCardsCount : undefined,
+      badgeClass: 'bg-rose-400/20 text-rose-300 border border-rose-500/40',
+    },
+    {
       id: 'search',
       label: 'Search Sales',
       icon: <Search className="w-4 h-4 text-sky-400 shrink-0" />,
@@ -150,13 +157,6 @@ export const Header: React.FC<HeaderProps> = ({
       icon: <Flame className="w-4 h-4 text-orange-400 shrink-0" />,
       badge: 'Owner',
       badgeClass: 'bg-orange-400/20 text-orange-300 border border-orange-500/40',
-    },
-    {
-      id: 'online-cards',
-      label: 'Online Cards',
-      icon: <ShoppingBag className="w-4 h-4 text-violet-400 shrink-0" />,
-      badge: availableOnlineCards > 0 ? `${availableOnlineCards} live` : undefined,
-      badgeClass: 'bg-violet-400/20 text-violet-300 border border-violet-500/40',
     },
     {
       id: 'vendor-check',
@@ -398,7 +398,7 @@ export const Header: React.FC<HeaderProps> = ({
                     id="btn-test-fanfare-header"
                     onClick={testFanfareSound}
                     className="inline-flex items-center justify-center gap-1 px-2.5 min-h-[40px] text-xs font-bold rounded-xl border border-amber-500/40 bg-amber-950/50 text-amber-300 hover:text-amber-200 hover:bg-amber-900/60 transition cursor-pointer whitespace-nowrap"
-                    title="Test escalating £100+ / £250+ / £500+ Fanfare, Fireworks & Sound"
+                    title="Test escalating £100+ / £250+ / £500+ / £1,000+ Nuclear Fanfare, Fireworks & Sound"
                   >
                     <span>Test 🎉</span>
                   </button>

@@ -10,6 +10,7 @@ import {
   Clock,
   SlidersHorizontal,
   Ticket,
+  Gift,
   UserCheck,
   Tag,
 } from 'lucide-react';
@@ -77,6 +78,8 @@ export const SalesList: React.FC<SalesListProps> = ({
           (s.discountLabel && s.discountLabel.toLowerCase().includes(q)) ||
           (s.notes && s.notes.toLowerCase().includes(q)) ||
           (s.onlineBarcode && s.onlineBarcode.toLowerCase().includes(q)) ||
+          (s.giftCardBarcode && s.giftCardBarcode.toLowerCase().includes(q)) ||
+          (Boolean(s.giftCardBarcode) && ('gift'.includes(q) || 'gift card'.includes(q))) ||
           (s.storeCreditCustomerName && s.storeCreditCustomerName.toLowerCase().includes(q)) ||
           (s.paymentMethod === 'online' && ('online'.includes(q) || 'web'.includes(q) || 'internet'.includes(q))) ||
           (s.paymentMethod === 'traded_out' && ('trade out'.includes(q) || 'traded out'.includes(q) || q === 'out'))
@@ -336,6 +339,15 @@ export const SalesList: React.FC<SalesListProps> = ({
                             : ''}
                         </span>
                       )}
+                      {sale.giftCardBarcode && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-900 border border-rose-300">
+                          <Gift className="w-2.5 h-2.5 text-rose-700" />
+                          Gift Card #{sale.giftCardBarcode}
+                          {typeof sale.giftCardAmount === 'number' && sale.giftCardAmount > 0
+                            ? ` (${formatCurrency(sale.giftCardAmount)})`
+                            : ''}
+                        </span>
+                      )}
                       {sale.discountAmount && sale.discountAmount > 0 && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
                           <Tag className="w-2.5 h-2.5 text-rose-600" />
@@ -507,6 +519,15 @@ export const SalesList: React.FC<SalesListProps> = ({
                             Store Credit: {sale.storeCreditCustomerName}
                             {typeof sale.storeCreditAmount === 'number' && sale.storeCreditAmount > 0
                               ? ` (${formatCurrency(sale.storeCreditAmount)})`
+                              : ''}
+                          </span>
+                        )}
+                        {sale.giftCardBarcode && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-900 border border-rose-300">
+                            <Gift className="w-2.5 h-2.5 text-rose-700" />
+                            Gift Card #{sale.giftCardBarcode}
+                            {typeof sale.giftCardAmount === 'number' && sale.giftCardAmount > 0
+                              ? ` (${formatCurrency(sale.giftCardAmount)})`
                               : ''}
                           </span>
                         )}

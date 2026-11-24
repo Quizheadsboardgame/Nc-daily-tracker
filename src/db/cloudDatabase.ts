@@ -790,6 +790,9 @@ class CloudSalesDatabase {
               storeCreditCustomerId: data.storeCreditCustomerId || undefined,
               storeCreditCustomerName: data.storeCreditCustomerName || undefined,
               storeCreditAmount: data.storeCreditAmount !== undefined && data.storeCreditAmount !== null ? Number(data.storeCreditAmount) : undefined,
+              giftCardId: data.giftCardId || undefined,
+              giftCardBarcode: data.giftCardBarcode || undefined,
+              giftCardAmount: data.giftCardAmount !== undefined && data.giftCardAmount !== null ? Number(data.giftCardAmount) : undefined,
               relatedHoldId: data.relatedHoldId || undefined,
               tradeDetails: data.tradeDetails || undefined,
               tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
@@ -1433,6 +1436,10 @@ class CloudSalesDatabase {
       customerId: string;
       amount: number;
     };
+    giftCard?: {
+      cardId: string;
+      amount: number;
+    };
   }): Promise<SaleRecord> {
     const timestamp = input.timestamp || Date.now();
     const dateKey = input.dateKey || getLocalDateKey(new Date(timestamp));
@@ -1482,6 +1489,26 @@ class CloudSalesDatabase {
       creditUsedAmount = reqPence / 100;
     }
 
+    let redeemedGiftCard: GiftCardRecord | undefined;
+    let giftCardUsedAmount: number | undefined;
+    if (input.giftCard && input.giftCard.amount > 0) {
+      redeemedGiftCard = this.giftCardsCache.get(input.giftCard.cardId);
+      if (!redeemedGiftCard) {
+        throw new Error('Selected gift card was not found.');
+      }
+      if (redeemedGiftCard.status === 'void') {
+        throw new Error(`Gift card #${redeemedGiftCard.barcode} is voided and cannot be used.`);
+      }
+      const reqPence = Math.round(input.giftCard.amount * 100);
+      const balPence = Math.round(redeemedGiftCard.balance * 100);
+      if (reqPence > balPence) {
+        throw new Error(
+          `Insufficient gift card balance on #${redeemedGiftCard.barcode} (Available: £${redeemedGiftCard.balance.toFixed(2)}).`
+        );
+      }
+      giftCardUsedAmount = reqPence / 100;
+    }
+
     const discountAmount =
       input.discountAmount && input.discountAmount > 0
         ? Math.round(Number(input.discountAmount) * 100) / 100
@@ -1496,7 +1523,18 @@ class CloudSalesDatabase {
     const creditNoteTag = creditCustomer && creditUsedAmount
       ? `Store Credit (${creditCustomer.name}: £${creditUsedAmount.toFixed(2)})`
       : '';
-    const combinedNotes = [discountTag, creditNoteTag, input.notes?.trim() || ''].filter(Boolean).join(' • ') || undefined;
+    const giftCardNoteTag = redeemedGiftCard && giftCardUsedAmount
+      ? `Gift Card (#${redeemedGiftCard.barcode}: £${giftCardUsedAmount.toFixed(2)})`
+      : '';
+    const combinedNotes = [discountTag, creditNoteTag, giftCardNoteTag, input.notes?.trim() || ''].filter(Boolean).join(' • ') || undefined;
+
+    const redemptionSummaryParts: string[] = [];
+    if (creditCustomer && creditUsedAmount) {
+      redemptionSummaryParts.push(`Store Credit (${creditCustomer.name} £${creditUsedAmount.toFixed(2)})`);
+    }
+    if (redeemedGiftCard && giftCardUsedAmount) {
+      redemptionSummaryParts.push(`Gift Card #${redeemedGiftCard.barcode} £${giftCardUsedAmount.toFixed(2)}`);
+    }
 
     const record: SaleRecord = {
       id,
@@ -1518,10 +1556,11 @@ class CloudSalesDatabase {
       storeCreditCustomerId: creditCustomer?.id,
       storeCreditCustomerName: creditCustomer?.name,
       storeCreditAmount: creditUsedAmount,
+      giftCardId: redeemedGiftCard?.id,
+      giftCardBarcode: redeemedGiftCard?.barcode,
+      giftCardAmount: giftCardUsedAmount,
       relatedHoldId: input.relatedHoldId || undefined,
-      splitSummary: creditCustomer && creditUsedAmount
-        ? `Store Credit (${creditCustomer.name} £${creditUsedAmount.toFixed(2)})`
-        : undefined,
+      splitSummary: redemptionSummaryParts.length > 0 ? redemptionSummaryParts.join(' + ') : undefined,
     };
 
     // Store in cache & notify
@@ -1538,6 +1577,18 @@ class CloudSalesDatabase {
         relatedSaleId: id,
         dateKey,
         timestamp,
+      });
+    }
+
+    // Deduct gift card balance if used
+    if (redeemedGiftCard && giftCardUsedAmount && giftCardUsedAmount > 0) {
+      await this.redeemGiftCard(redeemedGiftCard.id, {
+        amount: giftCardUsedAmount,
+        description: `Redeemed on sale: ${record.itemDescription}`,
+        vendorName: record.salesmanName,
+        recordVendorRedemptionSale: false,
+        relatedSaleId: id,
+        dateKey,
       });
     }
 
@@ -1592,6 +1643,9 @@ class CloudSalesDatabase {
         storeCreditCustomerId: record.storeCreditCustomerId || null,
         storeCreditCustomerName: record.storeCreditCustomerName || null,
         storeCreditAmount: record.storeCreditAmount || null,
+        giftCardId: record.giftCardId || null,
+        giftCardBarcode: record.giftCardBarcode || null,
+        giftCardAmount: record.giftCardAmount || null,
       });
     } catch (e) {
       console.warn('Sale saved to memory/localStorage; Firestore sync pending:', e);
@@ -1618,6 +1672,10 @@ class CloudSalesDatabase {
     };
     storeCredit?: {
       customerId: string;
+      amount: number;
+    };
+    giftCard?: {
+      cardId: string;
       amount: number;
     };
   }): Promise<SaleRecord[]> {
@@ -1721,27 +1779,60 @@ class CloudSalesDatabase {
 
     let creditCustomer: StoreCreditCustomer | undefined;
     let creditUsedAmount: number | undefined;
+    let creditReqPence = 0;
     if (input.storeCredit && input.storeCredit.amount > 0) {
       creditCustomer = this.storeCreditCustomersCache.get(input.storeCredit.customerId);
       if (!creditCustomer) {
         throw new Error('Selected customer store credit account was not found.');
       }
-      const reqPence = Math.round(input.storeCredit.amount * 100);
+      creditReqPence = Math.round(input.storeCredit.amount * 100);
       const balPence = Math.round(creditCustomer.balance * 100);
-      if (reqPence > balPence) {
+      if (creditReqPence > balPence) {
         throw new Error(
           `Insufficient store credit for ${creditCustomer.name} (Available: £${creditCustomer.balance.toFixed(2)}).`
         );
       }
-      if (reqPence > payPenceMap.traded_out) {
-        throw new Error(
-          `Store credit amount (£${(reqPence / 100).toFixed(2)}) cannot exceed the Trade Out / Credit payment leg.`
-        );
-      }
-      creditUsedAmount = reqPence / 100;
+      creditUsedAmount = creditReqPence / 100;
     }
 
-    const isSplit = activeMethods.length > 1 || Boolean(creditCustomer && creditUsedAmount);
+    let redeemedGiftCard: GiftCardRecord | undefined;
+    let giftCardUsedAmount: number | undefined;
+    let giftCardReqPence = 0;
+    if (input.giftCard && input.giftCard.amount > 0) {
+      redeemedGiftCard = this.giftCardsCache.get(input.giftCard.cardId);
+      if (!redeemedGiftCard) {
+        throw new Error('Selected gift card was not found.');
+      }
+      if (redeemedGiftCard.status === 'void') {
+        throw new Error(`Gift card #${redeemedGiftCard.barcode} is voided and cannot be used.`);
+      }
+      giftCardReqPence = Math.round(input.giftCard.amount * 100);
+      const balPence = Math.round(redeemedGiftCard.balance * 100);
+      if (giftCardReqPence > balPence) {
+        throw new Error(
+          `Insufficient gift card balance on #${redeemedGiftCard.barcode} (Available: £${redeemedGiftCard.balance.toFixed(2)}).`
+        );
+      }
+      giftCardUsedAmount = giftCardReqPence / 100;
+    }
+
+    const totalNonTillCreditPence = creditReqPence + giftCardReqPence;
+    if (totalNonTillCreditPence > payPenceMap.traded_out) {
+      throw new Error(
+        `Applied store credit / gift card total (£${(totalNonTillCreditPence / 100).toFixed(2)}) cannot exceed the Trade Out / Credit payment leg.`
+      );
+    }
+
+    const isSplit =
+      activeMethods.length > 1 ||
+      Boolean(creditCustomer && creditUsedAmount) ||
+      Boolean(redeemedGiftCard && giftCardUsedAmount);
+    const tradedOutLabel = (() => {
+      const parts: string[] = [];
+      if (creditCustomer && creditUsedAmount) parts.push(`Store Credit (${creditCustomer.name})`);
+      if (redeemedGiftCard && giftCardUsedAmount) parts.push(`Gift Card #${redeemedGiftCard.barcode}`);
+      return parts.length > 0 ? parts.join(' + ') : 'Trade Out';
+    })();
     const methodLabel = (m: PaymentMethod) =>
       m === 'cash'
         ? 'Cash'
@@ -1749,12 +1840,10 @@ class CloudSalesDatabase {
         ? 'Card'
         : m === 'online'
         ? 'Online'
-        : creditCustomer && creditUsedAmount
-        ? `Store Credit (${creditCustomer.name})`
-        : 'Trade Out';
+        : tradedOutLabel;
 
     const splitSummary =
-      activeMethods.length > 1 || (creditCustomer && creditUsedAmount)
+      isSplit
         ? activeMethods.map((m) => `${methodLabel(m)} £${(payPenceMap[m] / 100).toFixed(2)}`).join(' + ')
         : undefined;
 
@@ -1874,9 +1963,11 @@ class CloudSalesDatabase {
         const id = 'sale_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 
         const attachCreditInfo = Boolean(creditCustomer && creditUsedAmount && method === 'traded_out');
+        const attachGiftCardInfo = Boolean(redeemedGiftCard && giftCardUsedAmount && method === 'traded_out');
         const noteParts = [
           discountLabel ? `Discount: ${discountLabel}` : '',
           attachCreditInfo ? `Store Credit (${creditCustomer!.name})` : '',
+          attachGiftCardInfo ? `Gift Card (#${redeemedGiftCard!.barcode})` : '',
           splitSummary ? `Split (${splitSummary})` : '',
           basketNotePrefix,
           item.notes?.trim() || '',
@@ -1915,6 +2006,9 @@ class CloudSalesDatabase {
           storeCreditCustomerId: attachCreditInfo ? creditCustomer!.id : undefined,
           storeCreditCustomerName: attachCreditInfo ? creditCustomer!.name : undefined,
           storeCreditAmount: attachCreditInfo ? creditUsedAmount : undefined,
+          giftCardId: attachGiftCardInfo ? redeemedGiftCard!.id : undefined,
+          giftCardBarcode: attachGiftCardInfo ? redeemedGiftCard!.barcode : undefined,
+          giftCardAmount: attachGiftCardInfo ? giftCardUsedAmount : undefined,
         };
 
         this.salesCache.set(id, record);
@@ -1946,6 +2040,9 @@ class CloudSalesDatabase {
             storeCreditCustomerId: record.storeCreditCustomerId || null,
             storeCreditCustomerName: record.storeCreditCustomerName || null,
             storeCreditAmount: record.storeCreditAmount || null,
+            giftCardId: record.giftCardId || null,
+            giftCardBarcode: record.giftCardBarcode || null,
+            giftCardAmount: record.giftCardAmount || null,
           })
         );
 
@@ -1987,6 +2084,18 @@ class CloudSalesDatabase {
         relatedCheckoutGroupId: checkoutGroupId,
         dateKey,
         timestamp,
+      });
+    }
+
+    // Deduct gift card balance if used in this checkout
+    if (redeemedGiftCard && giftCardUsedAmount && giftCardUsedAmount > 0) {
+      await this.redeemGiftCard(redeemedGiftCard.id, {
+        amount: giftCardUsedAmount,
+        description: `Redeemed at checkout: ${checkoutItemSummary}`,
+        vendorName: checkoutVendorSummary,
+        recordVendorRedemptionSale: false,
+        relatedSaleId: createdRecords[0]?.id,
+        dateKey,
       });
     }
 
@@ -4848,6 +4957,9 @@ class CloudSalesDatabase {
           storeCreditCustomerId: data.storeCreditCustomerId || undefined,
           storeCreditCustomerName: data.storeCreditCustomerName || undefined,
           storeCreditAmount: data.storeCreditAmount !== undefined && data.storeCreditAmount !== null ? Number(data.storeCreditAmount) : undefined,
+          giftCardId: data.giftCardId || undefined,
+          giftCardBarcode: data.giftCardBarcode || undefined,
+          giftCardAmount: data.giftCardAmount !== undefined && data.giftCardAmount !== null ? Number(data.giftCardAmount) : undefined,
           relatedHoldId: data.relatedHoldId || undefined,
           tradeDetails: data.tradeDetails || undefined,
           tradeAcceptingVendor: data.tradeAcceptingVendor || undefined,
@@ -4983,6 +5095,62 @@ class CloudSalesDatabase {
           dateKey: data.dateKey || getLocalDateKey(new Date(data.createdAt || Date.now())),
           updatedAt: data.updatedAt || data.createdAt || Date.now(),
           completedAt: data.completedAt || undefined,
+        });
+      });
+
+      // 8. Market Gift Cards & Transactions
+      const giftCardsSnap = await getDocs(collection(db, 'gift_cards'));
+      giftCardsSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const rawStatus = (data.status || 'active').toString().toLowerCase();
+        const status: GiftCardStatus =
+          rawStatus === 'void' ? 'void' : rawStatus === 'empty' ? 'empty' : 'active';
+        this.giftCardsCache.set(docSnap.id, {
+          id: docSnap.id,
+          barcode: String(data.barcode || docSnap.id),
+          balance: Math.round((Number(data.balance) || 0) * 100) / 100,
+          initialValue: Math.round((Number(data.initialValue) || 0) * 100) / 100,
+          totalLoaded: Math.round((Number(data.totalLoaded) || 0) * 100) / 100,
+          totalRedeemed: Math.round((Number(data.totalRedeemed) || 0) * 100) / 100,
+          status,
+          recipientName: data.recipientName || undefined,
+          notes: data.notes || undefined,
+          soldPaymentMethod: data.soldPaymentMethod || undefined,
+          soldVendorName: data.soldVendorName || undefined,
+          operatorName: data.operatorName || undefined,
+          createdAt: Number(data.createdAt) || Date.now(),
+          dateKey: data.dateKey || getLocalDateKey(new Date(Number(data.createdAt) || Date.now())),
+          updatedAt: Number(data.updatedAt) || Number(data.createdAt) || Date.now(),
+          lastUsedAt: data.lastUsedAt ? Number(data.lastUsedAt) : undefined,
+        });
+      });
+
+      const giftCardTxSnap = await getDocs(collection(db, 'gift_card_transactions'));
+      giftCardTxSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const rawType = (data.type || 'adjust').toString().toLowerCase();
+        const type: GiftCardTransactionType =
+          rawType === 'activate' ||
+          rawType === 'redeem' ||
+          rawType === 'topup' ||
+          rawType === 'void'
+            ? rawType
+            : 'adjust';
+        this.giftCardTxCache.set(docSnap.id, {
+          id: docSnap.id,
+          giftCardId: String(data.giftCardId || ''),
+          barcode: String(data.barcode || ''),
+          type,
+          amount: Math.round((Number(data.amount) || 0) * 100) / 100,
+          delta: Math.round((Number(data.delta) || 0) * 100) / 100,
+          balanceAfter: Math.round((Number(data.balanceAfter) || 0) * 100) / 100,
+          paymentMethod: data.paymentMethod || undefined,
+          vendorName: data.vendorName || undefined,
+          operatorName: data.operatorName || undefined,
+          description: data.description || '',
+          relatedSaleId: data.relatedSaleId || undefined,
+          dateKey: data.dateKey || getLocalDateKey(new Date(Number(data.timestamp) || Date.now())),
+          timestamp: Number(data.timestamp) || Date.now(),
         });
       });
 
@@ -5300,6 +5468,7 @@ class CloudSalesDatabase {
       description?: string;
       vendorName?: string;
       recordVendorRedemptionSale?: boolean;
+      relatedSaleId?: string;
       dateKey?: string;
     }
   ): Promise<{ card: GiftCardRecord; transaction: GiftCardTransaction }> {
@@ -5318,7 +5487,7 @@ class CloudSalesDatabase {
     const operatorName = getDeviceOperator() || undefined;
     const newBalance = Math.max(0, Math.round((existing.balance - val) * 100) / 100);
 
-    let relatedSaleId: string | undefined;
+    let relatedSaleId: string | undefined = input.relatedSaleId;
     if (input.recordVendorRedemptionSale && input.vendorName?.trim()) {
       const saleRec = await this.insertSale({
         salesmanName: input.vendorName.trim(),

@@ -1,16 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Banknote, CreditCard, Globe, ArrowLeftRight, Sparkles, X, Volume2 } from 'lucide-react';
-import { SaleFlashEvent, subscribeToSaleFlash, getCelebrationTier } from '../utils/sound';
+import { Banknote, CreditCard, Globe, ArrowLeftRight, Sparkles, X, Volume2, AlertTriangle } from 'lucide-react';
+import {
+  SaleFlashEvent,
+  SoundTestAlertEvent,
+  subscribeToSaleFlash,
+  subscribeToSoundTestAlert,
+  getCelebrationTier,
+} from '../utils/sound';
 import { BigSaleCelebration } from './BigSaleCelebration';
+import { NuclearSaleCelebration } from './NuclearSaleCelebration';
 
 const FLASH_DURATION_MS = 3000;
 const BIG_SALE_DURATION_MS = 6500;
 const MEGA_SALE_DURATION_MS = 7500;
 const LEGENDARY_SALE_DURATION_MS = 8500;
+const NUCLEAR_SALE_DURATION_MS = 13200; // 2.6s bomb drop + detonation -> full 10.0s pure whiteout -> 0.6s fade
 const FADE_OUT_MS = 300;
+const NUCLEAR_FADE_OUT_MS = 600;
 
 export const SaleFlashBanner: React.FC = () => {
   const [activeFlash, setActiveFlash] = useState<SaleFlashEvent | null>(null);
+  const [activeSoundAlert, setActiveSoundAlert] = useState<SoundTestAlertEvent | null>(null);
   const [activeDurationMs, setActiveDurationMs] = useState<number>(FLASH_DURATION_MS);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [progressWidth, setProgressWidth] = useState<'100%' | '0%'>('100%');
@@ -50,13 +60,17 @@ export const SaleFlashBanner: React.FC = () => {
       const isBigSale = tier !== 'standard' || Boolean(event.isOver100 || (event.amount !== undefined && event.amount > 100));
       const resolvedTier = isBigSale && tier === 'standard' ? 'big' : tier;
       const duration =
-        resolvedTier === 'legendary'
+        resolvedTier === 'nuclear'
+          ? NUCLEAR_SALE_DURATION_MS
+          : resolvedTier === 'legendary'
           ? LEGENDARY_SALE_DURATION_MS
           : resolvedTier === 'mega'
           ? MEGA_SALE_DURATION_MS
           : isBigSale
           ? BIG_SALE_DURATION_MS
           : FLASH_DURATION_MS;
+
+      const fadeDuration = resolvedTier === 'nuclear' ? NUCLEAR_FADE_OUT_MS : FADE_OUT_MS;
 
       setActiveDurationMs(duration);
       setActiveFlash({ ...event, isOver100: isBigSale, celebrationTier: resolvedTier });
@@ -72,7 +86,7 @@ export const SaleFlashBanner: React.FC = () => {
 
       fadeTimerRef.current = setTimeout(() => {
         setIsFadingOut(true);
-      }, duration - FADE_OUT_MS);
+      }, duration - fadeDuration);
 
       clearTimerRef.current = setTimeout(() => {
         setActiveFlash(null);
@@ -86,17 +100,90 @@ export const SaleFlashBanner: React.FC = () => {
     };
   }, []);
 
-  if (!activeFlash) return null;
+  useEffect(() => {
+    const unsubscribeAlert = subscribeToSoundTestAlert((alertEvent) => {
+      setActiveSoundAlert(alertEvent);
+    });
+    return () => {
+      unsubscribeAlert();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeSoundAlert) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveSoundAlert(null);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [activeSoundAlert]);
+
+  const soundTestAlertOverlay = activeSoundAlert ? (
+    <div
+      id="modal-sound-test-warning"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="sound-test-warning-title"
+      onClick={() => setActiveSoundAlert(null)}
+      className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="fanfare-pop w-full max-w-md rounded-3xl bg-zinc-950 text-white border-2 border-rose-500 shadow-[0_24px_80px_-10px_rgba(244,63,94,0.65)] ring-4 ring-rose-500/25 p-6 sm:p-8 text-center space-y-5"
+      >
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8 text-rose-400" />
+        </div>
+
+        <h2
+          id="sound-test-warning-title"
+          className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight"
+        >
+          {activeSoundAlert.message}
+        </h2>
+
+        <button
+          type="button"
+          id="btn-dismiss-sound-test-warning"
+          onClick={() => setActiveSoundAlert(null)}
+          className="w-full min-h-[44px] px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-98 text-white font-black text-sm transition cursor-pointer shadow-md"
+        >
+          OK, I&apos;ll Stop
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  if (!activeFlash) return soundTestAlertOverlay;
+
+  if (activeFlash.celebrationTier === 'nuclear') {
+    return (
+      <>
+        {soundTestAlertOverlay}
+        <NuclearSaleCelebration
+          event={activeFlash}
+          durationMs={activeDurationMs}
+          isFadingOut={isFadingOut}
+          onDismiss={dismissNow}
+        />
+      </>
+    );
+  }
 
   if (activeFlash.isOver100) {
     return (
-      <BigSaleCelebration
-        event={activeFlash}
-        durationMs={activeDurationMs}
-        isFadingOut={isFadingOut}
-        progressWidth={progressWidth}
-        onDismiss={dismissNow}
-      />
+      <>
+        {soundTestAlertOverlay}
+        <BigSaleCelebration
+          event={activeFlash}
+          durationMs={activeDurationMs}
+          isFadingOut={isFadingOut}
+          progressWidth={progressWidth}
+          onDismiss={dismissNow}
+        />
+      </>
     );
   }
 
@@ -144,8 +231,10 @@ export const SaleFlashBanner: React.FC = () => {
   const itemCount = activeFlash.basketItemCount && activeFlash.basketItemCount > 1 ? activeFlash.basketItemCount : 0;
 
   return (
-    <div
-      id="sale-flash-banner"
+    <>
+      {soundTestAlertOverlay}
+      <div
+        id="sale-flash-banner"
       role="status"
       aria-live="polite"
       className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-lg pointer-events-none transition-all duration-200 ${
@@ -282,5 +371,6 @@ export const SaleFlashBanner: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };

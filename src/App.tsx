@@ -9,7 +9,6 @@ import { ManageVendorsTab } from './components/ManageVendorsTab';
 import { TradesTab } from './components/TradesTab';
 import { EditSaleModal } from './components/EditSaleModal';
 import { ManageVendorsModal } from './components/ManageSalesmenModal';
-import { OnlineCardsTab } from './components/OnlineCardsTab';
 import { SalesSearchTab } from './components/SalesSearchTab';
 import { VendorLeaderboardTab } from './components/VendorLeaderboardTab';
 import { LockedRegisterScreen } from './components/LockedRegisterScreen';
@@ -83,6 +82,7 @@ export default function App() {
     tradeItemDescription?: string;
     notes?: string;
     storeCredit?: { customerId: string; amount: number };
+    giftCard?: { cardId: string; amount: number };
   }) => {
     cloudDb.insertSale({
       ...newSale,
@@ -102,6 +102,7 @@ export default function App() {
       originalSubtotal: number;
     };
     storeCredit?: { customerId: string; amount: number };
+    giftCard?: { cardId: string; amount: number };
   }) => {
     await cloudDb.insertBasketCheckout({
       items: payload.items,
@@ -111,6 +112,7 @@ export default function App() {
       notes: payload.notes,
       discount: payload.discount,
       storeCredit: payload.storeCredit,
+      giftCard: payload.giftCard,
     });
     refreshFromDb();
   };
@@ -267,6 +269,7 @@ export default function App() {
                 onAddVendor={handleAddVendor}
                 onOpenManageVendors={() => setActiveTab('manage-vendors')}
                 onNavigateToTrades={() => setActiveTab('trades')}
+                onOpenGiftCardsTab={() => setActiveTab('gift-cards')}
               />
             </div>
 
@@ -377,17 +380,6 @@ export default function App() {
         {activeTab === 'gift-cards' && (
           <div className="animate-fade-in" id="tab-content-gift-cards">
             <GiftCardsTab
-              knownVendors={knownVendors}
-              currentDateKey={currentDateKey}
-              onNavigateToLedger={() => setActiveTab('ledger')}
-            />
-          </div>
-        )}
-
-        {/* TAB 3: Online Cards Inventory & Barcode System */}
-        {activeTab === 'online-cards' && (
-          <div className="animate-fade-in" id="tab-content-online-cards">
-            <OnlineCardsTab
               knownVendors={knownVendors}
               currentDateKey={currentDateKey}
               onNavigateToLedger={() => setActiveTab('ledger')}

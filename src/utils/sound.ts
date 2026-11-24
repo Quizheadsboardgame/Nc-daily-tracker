@@ -25,11 +25,13 @@ let marioWavBlobUrl: string | null = null;
 let fanfareWavBlobUrl: string | null = null;
 let megaFanfareWavBlobUrl: string | null = null;
 let legendaryFanfareWavBlobUrl: string | null = null;
+let nuclearBombWavBlobUrl: string | null = null;
 
-export type CelebrationTier = 'standard' | 'big' | 'mega' | 'legendary';
+export type CelebrationTier = 'standard' | 'big' | 'mega' | 'legendary' | 'nuclear';
 
 export function getCelebrationTier(amount?: number): CelebrationTier {
   if (amount === undefined || isNaN(amount) || amount <= 100) return 'standard';
+  if (amount > 1000) return 'nuclear';
   if (amount >= 500) return 'legendary';
   if (amount >= 250) return 'mega';
   return 'big';
@@ -145,6 +147,16 @@ async function preRenderSoundBlobs() {
     legendaryFanfareWavBlobUrl = URL.createObjectURL(audioBufferToWavBlob(legBuffer));
   } catch (e) {
     console.warn('Could not pre-render Legendary Fanfare sound blob:', e);
+  }
+
+  try {
+    // 5. Render Tier 4 Nuclear Bomb Audio (>£1,000, 8.8s duration)
+    const nukeOffline = new OfflineCtx(1, Math.floor(44100 * 8.8), 44100);
+    renderNuclearBombToContext(nukeOffline);
+    const nukeBuffer = await nukeOffline.startRendering();
+    nuclearBombWavBlobUrl = URL.createObjectURL(audioBufferToWavBlob(nukeBuffer));
+  } catch (e) {
+    console.warn('Could not pre-render Nuclear Bomb sound blob:', e);
   }
 }
 
@@ -836,6 +848,132 @@ function renderLegendaryFanfareToContext(ctx: BaseAudioContext) {
 }
 
 /**
+ * Tier 4 (>£1,000): Nuclear Bomb Drop, Thermonuclear Detonation & Whiteout Audio
+ * - 0.00s – 1.75s: Descending bomb drop whistle + tactical warning sweep
+ * - 1.75s – 5.60s: Massive detonation crack, sub-bass shockwave boom & roaring fireball rumble
+ * - 2.60s – 8.60s: Ethereal post-blast ringing shimmer fading across the whiteout
+ */
+function renderNuclearBombToContext(ctx: BaseAudioContext) {
+  const now = ctx.currentTime;
+  const impactTime = 1.75;
+
+  // 1. Falling Bomb Whistle (high descending pitch)
+  const whistleOsc = ctx.createOscillator();
+  const whistleGain = ctx.createGain();
+  whistleOsc.type = 'sine';
+  whistleOsc.frequency.setValueAtTime(1750, now);
+  whistleOsc.frequency.exponentialRampToValueAtTime(210, now + impactTime);
+  whistleGain.gain.setValueAtTime(0.0001, now);
+  whistleGain.gain.linearRampToValueAtTime(0.22, now + 0.12);
+  whistleGain.gain.linearRampToValueAtTime(0.32, now + impactTime - 0.08);
+  whistleGain.gain.exponentialRampToValueAtTime(0.0001, now + impactTime + 0.02);
+  whistleOsc.connect(whistleGain);
+  whistleGain.connect(ctx.destination);
+  whistleOsc.start(now);
+  whistleOsc.stop(now + impactTime + 0.03);
+
+  // Subtle harmonic air-rush whistle layer
+  const rushOsc = ctx.createOscillator();
+  const rushGain = ctx.createGain();
+  const rushFilter = ctx.createBiquadFilter();
+  rushFilter.type = 'bandpass';
+  rushFilter.frequency.setValueAtTime(1200, now);
+  rushFilter.frequency.exponentialRampToValueAtTime(300, now + impactTime);
+  rushOsc.type = 'triangle';
+  rushOsc.frequency.setValueAtTime(880, now);
+  rushOsc.frequency.exponentialRampToValueAtTime(115, now + impactTime);
+  rushGain.gain.setValueAtTime(0.0001, now);
+  rushGain.gain.linearRampToValueAtTime(0.14, now + 0.25);
+  rushGain.gain.exponentialRampToValueAtTime(0.0001, now + impactTime + 0.02);
+  rushOsc.connect(rushFilter);
+  rushFilter.connect(rushGain);
+  rushGain.connect(ctx.destination);
+  rushOsc.start(now);
+  rushOsc.stop(now + impactTime + 0.03);
+
+  // 2. Thermonuclear Detonation Impact Crack + Massive Roaring Blast
+  const blastDuration = 5.4;
+  const blastSamples = Math.max(1, Math.floor(ctx.sampleRate * blastDuration));
+  const blastBuffer = ctx.createBuffer(1, blastSamples, ctx.sampleRate);
+  const blastChannel = blastBuffer.getChannelData(0);
+  for (let i = 0; i < blastSamples; i++) {
+    const progress = i / blastSamples;
+    // Hard transient shock at start, sustained roaring tail
+    const attack = progress < 0.015 ? progress / 0.015 : 1;
+    const decay = Math.pow(1 - progress, 1.55);
+    const rumbleMod = 0.72 + 0.28 * Math.sin(progress * 95);
+    blastChannel[i] = (Math.random() * 2 - 1) * attack * decay * rumbleMod;
+  }
+
+  const blastSrc = ctx.createBufferSource();
+  blastSrc.buffer = blastBuffer;
+
+  const blastFilter = ctx.createBiquadFilter();
+  blastFilter.type = 'lowpass';
+  blastFilter.frequency.setValueAtTime(3800, now + impactTime);
+  blastFilter.frequency.exponentialRampToValueAtTime(480, now + impactTime + 1.4);
+  blastFilter.frequency.exponentialRampToValueAtTime(110, now + impactTime + blastDuration);
+
+  const blastGain = ctx.createGain();
+  blastGain.gain.setValueAtTime(0.0001, now + impactTime);
+  blastGain.gain.linearRampToValueAtTime(0.55, now + impactTime + 0.025);
+  blastGain.gain.exponentialRampToValueAtTime(0.0001, now + impactTime + blastDuration);
+
+  blastSrc.connect(blastFilter);
+  blastFilter.connect(blastGain);
+  blastGain.connect(ctx.destination);
+  blastSrc.start(now + impactTime);
+  blastSrc.stop(now + impactTime + blastDuration);
+
+  // 3. Colossal Sub-Bass Shockwave Drop (120Hz -> 24Hz)
+  const subOsc = ctx.createOscillator();
+  const subGain = ctx.createGain();
+  subOsc.type = 'sine';
+  subOsc.frequency.setValueAtTime(125, now + impactTime);
+  subOsc.frequency.exponentialRampToValueAtTime(34, now + impactTime + 0.9);
+  subOsc.frequency.exponentialRampToValueAtTime(22, now + impactTime + 3.4);
+  subGain.gain.setValueAtTime(0.0001, now + impactTime);
+  subGain.gain.linearRampToValueAtTime(0.52, now + impactTime + 0.03);
+  subGain.gain.exponentialRampToValueAtTime(0.0001, now + impactTime + 3.6);
+  subOsc.connect(subGain);
+  subGain.connect(ctx.destination);
+  subOsc.start(now + impactTime);
+  subOsc.stop(now + impactTime + 3.65);
+
+  // Secondary distorted punch layer for shockwave body
+  const punchOsc = ctx.createOscillator();
+  const punchGain = ctx.createGain();
+  const punchFilter = ctx.createBiquadFilter();
+  punchFilter.type = 'lowpass';
+  punchFilter.frequency.setValueAtTime(260, now + impactTime);
+  punchOsc.type = 'sawtooth';
+  punchOsc.frequency.setValueAtTime(85, now + impactTime);
+  punchOsc.frequency.exponentialRampToValueAtTime(28, now + impactTime + 2.2);
+  punchGain.gain.setValueAtTime(0.0001, now + impactTime);
+  punchGain.gain.linearRampToValueAtTime(0.28, now + impactTime + 0.04);
+  punchGain.gain.exponentialRampToValueAtTime(0.0001, now + impactTime + 2.5);
+  punchOsc.connect(punchFilter);
+  punchFilter.connect(punchGain);
+  punchGain.connect(ctx.destination);
+  punchOsc.start(now + impactTime);
+  punchOsc.stop(now + impactTime + 2.55);
+
+  // 4. Cinematic Flashbang / Whiteout High Ring (gentle volume, smooth fade)
+  const ringStart = impactTime + 0.65;
+  const ringOsc = ctx.createOscillator();
+  const ringGain = ctx.createGain();
+  ringOsc.type = 'sine';
+  ringOsc.frequency.setValueAtTime(2480, now + ringStart);
+  ringGain.gain.setValueAtTime(0.0001, now + ringStart);
+  ringGain.gain.linearRampToValueAtTime(0.06, now + ringStart + 0.35);
+  ringGain.gain.exponentialRampToValueAtTime(0.0001, now + ringStart + 5.8);
+  ringOsc.connect(ringGain);
+  ringGain.connect(ctx.destination);
+  ringOsc.start(now + ringStart);
+  ringOsc.stop(now + ringStart + 5.85);
+}
+
+/**
  * Public methods to play sound effects directly
  */
 export function playMarioCoinSound(ctx?: AudioContext) {
@@ -851,12 +989,15 @@ export function playMarioCoinSound(ctx?: AudioContext) {
 export function playFanfareSound(ctx?: AudioContext, tier: CelebrationTier = 'big') {
   const targetCtx = ctx || getSharedAudioContext();
   if (targetCtx && targetCtx.state === 'running') {
-    if (tier === 'legendary') renderLegendaryFanfareToContext(targetCtx);
+    if (tier === 'nuclear') renderNuclearBombToContext(targetCtx);
+    else if (tier === 'legendary') renderLegendaryFanfareToContext(targetCtx);
     else if (tier === 'mega') renderMegaFanfareToContext(targetCtx);
     else renderFanfareToContext(targetCtx);
   } else {
     const blobUrl =
-      tier === 'legendary'
+      tier === 'nuclear'
+        ? nuclearBombWavBlobUrl || legendaryFanfareWavBlobUrl || fanfareWavBlobUrl
+        : tier === 'legendary'
         ? legendaryFanfareWavBlobUrl || megaFanfareWavBlobUrl || fanfareWavBlobUrl
         : tier === 'mega'
         ? megaFanfareWavBlobUrl || fanfareWavBlobUrl
@@ -874,6 +1015,7 @@ export function playFanfareSound(ctx?: AudioContext, tier: CelebrationTier = 'bi
  * - Tier 1 Big Fanfare for > £100
  * - Tier 2 Mega Fanfare for >= £250
  * - Tier 3 Legendary Fanfare for >= £500
+ * - Tier 4 Nuclear Bomb Drop & Detonation for > £1,000
  *
  * Uses dual-engine playback (Web Audio + HTML5 Audio fallback) so sound is
  * 100% reliably heard across all phones, tablets, and computers.
@@ -885,6 +1027,8 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
 
   // Deduplicate by sale ID
   if (saleId) {
+    // Real sale occurred — reset consecutive sound test button streak
+    resetMarioTestStreak();
     if (isSaleSoundRecentlyPlayed(saleId)) {
       return;
     }
@@ -907,7 +1051,9 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
   }
 
   if (ctx && ctx.state === 'running') {
-    if (tier === 'legendary') {
+    if (tier === 'nuclear') {
+      renderNuclearBombToContext(ctx);
+    } else if (tier === 'legendary') {
       renderLegendaryFanfareToContext(ctx);
     } else if (tier === 'mega') {
       renderMegaFanfareToContext(ctx);
@@ -919,7 +1065,9 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
   } else {
     // If Web Audio is not running, play pre-rendered audio element
     const targetUrl =
-      tier === 'legendary'
+      tier === 'nuclear'
+        ? nuclearBombWavBlobUrl || legendaryFanfareWavBlobUrl || fanfareWavBlobUrl
+        : tier === 'legendary'
         ? legendaryFanfareWavBlobUrl || fanfareWavBlobUrl
         : tier === 'mega'
         ? megaFanfareWavBlobUrl || fanfareWavBlobUrl
@@ -940,10 +1088,63 @@ export function playCheckoutSound(force: boolean = false, saleId?: string, amoun
 }
 
 /**
- * Preview test sounds
+ * Preview test sounds & consecutive press tracker
  */
+let marioTestStreak = 0;
+let lastMarioTestAt = 0;
+const MARIO_TEST_STREAK_WINDOW_MS = 15000;
+
+export interface SoundTestAlertEvent {
+  id: string;
+  message: string;
+  pressCount: number;
+  timestamp: number;
+}
+
+const soundTestAlertListeners = new Set<(event: SoundTestAlertEvent) => void>();
+
+export function subscribeToSoundTestAlert(
+  listener: (event: SoundTestAlertEvent) => void
+): () => void {
+  soundTestAlertListeners.add(listener);
+  return () => {
+    soundTestAlertListeners.delete(listener);
+  };
+}
+
+function resetMarioTestStreak() {
+  marioTestStreak = 0;
+  lastMarioTestAt = 0;
+}
+
 export function testMarioSound() {
   unlockAudioContext();
+  const now = Date.now();
+  if (now - lastMarioTestAt > MARIO_TEST_STREAK_WINDOW_MS) {
+    marioTestStreak = 1;
+  } else {
+    marioTestStreak += 1;
+  }
+  lastMarioTestAt = now;
+
+  if (marioTestStreak > 3) {
+    playSaleBeep(false);
+    const alertEvent: SoundTestAlertEvent = {
+      id: `sound_test_alert_${now}`,
+      message: 'Kieron stop fucking around',
+      pressCount: marioTestStreak,
+      timestamp: now,
+    };
+    soundTestAlertListeners.forEach((listener) => {
+      try {
+        listener(alertEvent);
+      } catch {
+        // Ignore listener error
+      }
+    });
+    return;
+  }
+
   playCheckoutSound(true, undefined, 50);
 }
 
@@ -951,10 +1152,12 @@ let testFanfareCycleIdx = 0;
 
 export function testFanfareSound() {
   unlockAudioContext();
+  resetMarioTestStreak();
   const demoTiers: { amount: number; label: string; isTop: boolean }[] = [
     { amount: 125, label: 'Charizard ex SIR (Demo £100+ Tier)', isTop: false },
     { amount: 275, label: 'PSA 10 Umbreon VMAX (Demo £250+ Mega Tier)', isTop: true },
     { amount: 550, label: '1st Edition Booster Box (Demo £500+ Legendary Tier)', isTop: true },
+    { amount: 1250, label: '1st Ed Shadowless Charizard PSA 9 (Demo £1,000+ NUCLEAR Tier)', isTop: true },
   ];
   const sample = demoTiers[testFanfareCycleIdx % demoTiers.length];
   testFanfareCycleIdx += 1;

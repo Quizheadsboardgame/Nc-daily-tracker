@@ -48,6 +48,10 @@ export interface SaleRecord {
   storeCreditCustomerId?: string;
   storeCreditCustomerName?: string;
   storeCreditAmount?: number;
+  // Gift card redemption metadata
+  giftCardId?: string;
+  giftCardBarcode?: string;
+  giftCardAmount?: number;
   // Hold / layaway linkage
   relatedHoldId?: string;
   // Backward compatibility fields if legacy records exist

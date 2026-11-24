@@ -17,11 +17,12 @@ import {
   Percent,
   ChevronDown,
 } from 'lucide-react';
-import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer } from '../types';
+import { PaymentMethod, BasketItemInput, SplitPaymentBreakdown, StoreCreditCustomer, GiftCardRecord } from '../types';
 import { cloudDb, formatCurrency, isConnorVendor, isValidFourDigitItemNumber } from '../db/cloudDatabase';
 import { VendorDropdown } from './VendorDropdown';
 import { useCheckoutSound } from '../utils/sound';
 import { StoreCreditCheckoutPicker } from './StoreCreditCheckoutPicker';
+import { GiftCardCheckoutPicker } from './GiftCardCheckoutPicker';
 import {
   DiscountSelection,
   QUICK_DISCOUNT_PERCENTS,
@@ -45,6 +46,7 @@ interface NewSaleFormProps {
     paymentMethod: PaymentMethod;
     notes?: string;
     storeCredit?: { customerId: string; amount: number };
+    giftCard?: { cardId: string; amount: number };
   }) => void;
   onCheckoutBasket?: (payload: {
     items: BasketItemInput[];
@@ -56,12 +58,14 @@ interface NewSaleFormProps {
       originalSubtotal: number;
     };
     storeCredit?: { customerId: string; amount: number };
+    giftCard?: { cardId: string; amount: number };
   }) => Promise<void> | void;
   onAddVendor?: (name: string) => void;
   onAddSalesman?: (name: string) => void;
   onOpenManageVendors?: () => void;
   onOpenManageSalesmen?: () => void;
   onNavigateToTrades?: () => void;
+  onOpenGiftCardsTab?: () => void;
 }
 
 export const NewSaleForm: React.FC<NewSaleFormProps> = ({
@@ -75,6 +79,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   onOpenManageVendors,
   onOpenManageSalesmen,
   onNavigateToTrades,
+  onOpenGiftCardsTab,
 }) => {
   const knownVendors = propKnownVendors || propKnownSalesmen || [];
   const handleAddVendor = onAddVendor || onAddSalesman;
@@ -97,6 +102,10 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [storeCreditSelection, setStoreCreditSelection] = useState<{
     customer: StoreCreditCustomer;
+    amountToUse: number;
+  } | null>(null);
+  const [giftCardSelection, setGiftCardSelection] = useState<{
+    card: GiftCardRecord;
     amountToUse: number;
   } | null>(null);
   const [activeDiscount, setActiveDiscount] = useState<DiscountSelection>(null);
@@ -437,27 +446,42 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     if (errors.split) setErrors((prev) => ({ ...prev, split: '' }));
   };
 
+  const syncNonTillPaymentMode = (nextCreditAmt: number, nextGiftAmt: number) => {
+    const totalApplied = Math.round((nextCreditAmt + nextGiftAmt) * 100) / 100;
+    if (totalApplied <= 0) {
+      if (paymentMode === 'traded_out') setPaymentMode('card');
+      if (paymentMode === 'split') {
+        setSplitAmounts((prev) => ({ ...prev, traded_out: '' }));
+      }
+      return;
+    }
+
+    const total = checkoutTargetTotal;
+    if (total > 0 && totalApplied >= total - 0.004) {
+      setPaymentMode('traded_out');
+    } else {
+      setPaymentMode('split');
+      setSplitAmounts((prev) => ({
+        ...prev,
+        traded_out: totalApplied.toFixed(2),
+      }));
+    }
+  };
+
   const handleApplyStoreCredit = (
     selection: { customer: StoreCreditCustomer; amountToUse: number } | null
   ) => {
     setStoreCreditSelection(selection);
     setErrors((prev) => ({ ...prev, split: '', checkout: '' }));
+    syncNonTillPaymentMode(selection?.amountToUse || 0, giftCardSelection?.amountToUse || 0);
+  };
 
-    if (!selection) {
-      if (paymentMode === 'traded_out') setPaymentMode('card');
-      return;
-    }
-
-    const total = checkoutTargetTotal;
-    if (total > 0 && selection.amountToUse >= total - 0.004) {
-      setPaymentMode('traded_out');
-    } else if (selection.amountToUse > 0) {
-      setPaymentMode('split');
-      setSplitAmounts((prev) => ({
-        ...prev,
-        traded_out: selection.amountToUse.toFixed(2),
-      }));
-    }
+  const handleApplyGiftCard = (
+    selection: { card: GiftCardRecord; amountToUse: number } | null
+  ) => {
+    setGiftCardSelection(selection);
+    setErrors((prev) => ({ ...prev, split: '', checkout: '' }));
+    syncNonTillPaymentMode(storeCreditSelection?.amountToUse || 0, selection?.amountToUse || 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -498,11 +522,32 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
     let storeCreditPayload: { customerId: string; amount: number } | undefined;
     if (storeCreditSelection && storeCreditSelection.amountToUse > 0) {
       const creditUsed = Math.round(Math.min(storeCreditSelection.amountToUse, totalVal) * 100) / 100;
-      storeCreditPayload = {
-        customerId: storeCreditSelection.customer.id,
-        amount: creditUsed,
-      };
+      if (creditUsed > 0) {
+        storeCreditPayload = {
+          customerId: storeCreditSelection.customer.id,
+          amount: creditUsed,
+        };
+      }
     }
+
+    // Validate Gift Card if applied
+    let giftCardPayload: { cardId: string; amount: number } | undefined;
+    if (giftCardSelection && giftCardSelection.amountToUse > 0) {
+      const remainingAfterCredit = Math.max(
+        0,
+        Math.round((totalVal - (storeCreditPayload?.amount || 0)) * 100) / 100
+      );
+      const giftUsed = Math.round(Math.min(giftCardSelection.amountToUse, remainingAfterCredit) * 100) / 100;
+      if (giftUsed > 0) {
+        giftCardPayload = {
+          cardId: giftCardSelection.card.id,
+          amount: giftUsed,
+        };
+      }
+    }
+
+    const totalNonTillCredit =
+      Math.round(((storeCreditPayload?.amount || 0) + (giftCardPayload?.amount || 0)) * 100) / 100;
 
     // Validate Split Payments if split mode selected
     let payments: SplitPaymentBreakdown;
@@ -521,23 +566,29 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
         return;
       }
 
-      if (storeCreditPayload && t < storeCreditPayload.amount - 0.004) {
+      if (totalNonTillCredit > 0 && t < totalNonTillCredit - 0.004) {
+        const appliedLabels = [
+          storeCreditPayload ? 'store credit' : null,
+          giftCardPayload ? 'gift card' : null,
+        ]
+          .filter(Boolean)
+          .join(' + ');
         setErrors((prev) => ({
           ...prev,
-          split: `Trade Out / Credit leg (£${t.toFixed(2)}) must be at least £${storeCreditPayload!.amount.toFixed(2)} to match applied store credit.`,
+          split: `Trade Out / Credit / Gift leg (£${t.toFixed(2)}) must be at least £${totalNonTillCredit.toFixed(2)} to match applied ${appliedLabels}.`,
         }));
         return;
       }
 
       payments = { cash: c, card: d, online: o, traded_out: t };
     } else {
-      if (storeCreditPayload && paymentMode !== 'traded_out') {
-        // Ensure credit leg is tracked properly when partial/full store credit was applied
-        if (storeCreditPayload.amount >= totalVal - 0.004) {
+      if (totalNonTillCredit > 0 && paymentMode !== 'traded_out') {
+        // Ensure non-till credit/gift card leg is tracked properly when partial/full credit or gift card was applied
+        if (totalNonTillCredit >= totalVal - 0.004) {
           payments = { traded_out: totalVal };
         } else {
-          const rem = Math.round((totalVal - storeCreditPayload.amount) * 100) / 100;
-          payments = { traded_out: storeCreditPayload.amount, [paymentMode]: rem };
+          const rem = Math.round((totalVal - totalNonTillCredit) * 100) / 100;
+          payments = { traded_out: totalNonTillCredit, [paymentMode]: rem };
         }
       } else {
         payments = { [paymentMode]: totalVal };
@@ -549,7 +600,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       const isSinglePurePayment =
         itemsToCheckout.length === 1 &&
         paymentMode !== 'split' &&
-        (!storeCreditPayload || (paymentMode === 'traded_out' && storeCreditPayload.amount >= totalVal - 0.004));
+        (totalNonTillCredit <= 0 || (paymentMode === 'traded_out' && totalNonTillCredit >= totalVal - 0.004));
 
       if (isSinglePurePayment) {
         const single = itemsToCheckout[0];
@@ -564,6 +615,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           paymentMethod: paymentMode as PaymentMethod,
           notes: notes.trim() || undefined,
           storeCredit: storeCreditPayload,
+          giftCard: giftCardPayload,
         });
       } else if (onCheckoutBasket) {
         await onCheckoutBasket({
@@ -572,6 +624,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           notes: notes.trim() || undefined,
           discount: discountPayload,
           storeCredit: storeCreditPayload,
+          giftCard: giftCardPayload,
         });
       } else {
         await cloudDb.insertBasketCheckout({
@@ -581,18 +634,21 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           notes: notes.trim() || undefined,
           discount: discountPayload,
           storeCredit: storeCreditPayload,
+          giftCard: giftCardPayload,
         });
       }
 
       const methodSummary =
-        storeCreditPayload
+        storeCreditPayload && giftCardPayload
+          ? `GIFT CARD (#${giftCardSelection!.card.barcode}) + CREDIT`
+          : giftCardPayload
+          ? `GIFT CARD (#${giftCardSelection!.card.barcode})`
+          : storeCreditPayload
           ? `STORE CREDIT (${storeCreditSelection!.customer.name})`
           : paymentMode === 'split'
           ? 'SPLIT PAYMENT'
           : paymentMode === 'traded_out'
           ? 'TRADE OUT'
-          : paymentMode === 'online'
-          ? 'ONLINE SALE'
           : paymentMode.toUpperCase();
 
       const itemSummaryText =
@@ -609,6 +665,7 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       // Reset form & basket (keep 4-digit prompt if Connor remains selected; otherwise default back to Miscellaneous)
       setBasketItems([]);
       setStoreCreditSelection(null);
+      setGiftCardSelection(null);
       setActiveDiscount(null);
       setCustomDealMode('none');
       setCustomDealInput('');
@@ -622,7 +679,9 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
       setAmount('');
       setNotes('');
       setSplitAmounts({ cash: '', card: '', online: '', traded_out: '' });
-      if (paymentMode === 'split') setPaymentMode('card');
+      if (paymentMode === 'split' || (paymentMode === 'traded_out' && totalNonTillCredit > 0)) {
+        setPaymentMode('card');
+      }
       setErrors({});
 
       setTimeout(() => {
@@ -1236,7 +1295,11 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
                 [
                   { key: 'cash', label: 'Cash (£)', color: 'emerald' },
                   { key: 'card', label: 'Card (£)', color: 'blue' },
-                  { key: 'traded_out', label: 'Trade Out (£)', color: 'amber' },
+                  {
+                    key: 'traded_out',
+                    label: giftCardSelection || storeCreditSelection ? 'Credit / Gift / Trade (£)' : 'Trade Out (£)',
+                    color: 'amber',
+                  },
                 ] as const
               ).map(({ key, label }) => (
                 <div
@@ -1399,14 +1462,26 @@ export const NewSaleForm: React.FC<NewSaleFormProps> = ({
           )}
         </div>
 
-        {/* Customer Store Credit Lookup & Apply */}
-        <StoreCreditCheckoutPicker
-          theme="light"
-          checkoutTotal={checkoutTargetTotal}
-          selectedCustomerId={storeCreditSelection?.customer.id || null}
-          appliedAmount={storeCreditSelection?.amountToUse || 0}
-          onApplyStoreCredit={handleApplyStoreCredit}
-        />
+        {/* Customer Store Credit & Gift Card Payment Pickers */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <StoreCreditCheckoutPicker
+            theme="light"
+            checkoutTotal={checkoutTargetTotal}
+            selectedCustomerId={storeCreditSelection?.customer.id || null}
+            appliedAmount={storeCreditSelection?.amountToUse || 0}
+            onApplyStoreCredit={handleApplyStoreCredit}
+          />
+
+          <GiftCardCheckoutPicker
+            theme="light"
+            checkoutTotal={checkoutTargetTotal}
+            maxAllowedAmount={Math.max(0, checkoutTargetTotal - (storeCreditSelection?.amountToUse || 0))}
+            selectedCardId={giftCardSelection?.card.id || null}
+            appliedAmount={giftCardSelection?.amountToUse || 0}
+            onApplyGiftCard={handleApplyGiftCard}
+            onOpenGiftCardsTab={onOpenGiftCardsTab}
+          />
+        </div>
 
         {errors.checkout && (
           <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl">
